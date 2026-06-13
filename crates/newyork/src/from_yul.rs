@@ -584,8 +584,8 @@ impl YulTranslator {
             }
             FunctionName::MCopy => {
                 statements.push(Statement::MCopy {
-                    dest: arguments[0],
-                    src: arguments[1],
+                    destination: arguments[0],
+                    source: arguments[1],
                     length: arguments[2],
                 });
                 Ok(Expression::Literal {
@@ -852,7 +852,7 @@ impl YulTranslator {
 
             FunctionName::CodeCopy => {
                 statements.push(Statement::CodeCopy {
-                    dest: arguments[0],
+                    destination: arguments[0],
                     offset: arguments[1],
                     length: arguments[2],
                 });
@@ -864,7 +864,7 @@ impl YulTranslator {
             FunctionName::ExtCodeCopy => {
                 statements.push(Statement::ExtCodeCopy {
                     address: arguments[0],
-                    dest: arguments[1],
+                    destination: arguments[1],
                     offset: arguments[2],
                     length: arguments[3],
                 });
@@ -875,7 +875,7 @@ impl YulTranslator {
             }
             FunctionName::ReturnDataCopy => {
                 statements.push(Statement::ReturnDataCopy {
-                    dest: arguments[0],
+                    destination: arguments[0],
                     offset: arguments[1],
                     length: arguments[2],
                 });
@@ -886,7 +886,7 @@ impl YulTranslator {
             }
             FunctionName::CallDataCopy => {
                 statements.push(Statement::CallDataCopy {
-                    dest: arguments[0],
+                    destination: arguments[0],
                     offset: arguments[1],
                     length: arguments[2],
                 });
@@ -897,7 +897,7 @@ impl YulTranslator {
             }
             FunctionName::DataCopy => {
                 statements.push(Statement::DataCopy {
-                    dest: arguments[0],
+                    destination: arguments[0],
                     offset: arguments[1],
                     length: arguments[2],
                 });
@@ -984,18 +984,18 @@ impl YulTranslator {
 
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
-        let mut modified_vars = Vec::new();
+        let mut modified_variables = Vec::new();
 
         for (name, &then_value) in &then_scope {
             if let Some(&before_value) = scope_before.get(name) {
                 if then_value.id != before_value.id {
-                    modified_vars.push((name.clone(), before_value, then_value));
+                    modified_variables.push((name.clone(), before_value, then_value));
                     inputs.push(before_value);
                 }
             }
         }
 
-        for (name, before_value, _then_value) in &modified_vars {
+        for (name, before_value, _then_value) in &modified_variables {
             let output_id = self.ssa.fresh_id();
             outputs.push(output_id);
             self.ssa
@@ -1003,15 +1003,15 @@ impl YulTranslator {
         }
 
         let mut then_with_yields = then_region;
-        for (_, _, then_value) in &modified_vars {
+        for (_, _, then_value) in &modified_variables {
             then_with_yields.yields.push(*then_value);
         }
 
-        let else_region = if modified_vars.is_empty() {
+        let else_region = if modified_variables.is_empty() {
             None
         } else {
             let mut else_region = Region::new();
-            for (_, before_value, _) in &modified_vars {
+            for (_, before_value, _) in &modified_variables {
                 else_region.yields.push(*before_value);
             }
             Some(else_region)
@@ -1077,13 +1077,15 @@ impl YulTranslator {
             (None, None)
         };
 
-        let mut modified_vars: BTreeMap<String, Value> = BTreeMap::new();
+        let mut modified_variables: BTreeMap<String, Value> = BTreeMap::new();
 
         for case_scope in &all_scopes {
             for (name, &value) in case_scope {
                 if let Some(&before_value) = scope_before.get(name) {
                     if value.id != before_value.id {
-                        modified_vars.entry(name.clone()).or_insert(before_value);
+                        modified_variables
+                            .entry(name.clone())
+                            .or_insert(before_value);
                     }
                 }
             }
@@ -1093,20 +1095,22 @@ impl YulTranslator {
             for (name, &value) in default_scope {
                 if let Some(&before_value) = scope_before.get(name) {
                     if value.id != before_value.id {
-                        modified_vars.entry(name.clone()).or_insert(before_value);
+                        modified_variables
+                            .entry(name.clone())
+                            .or_insert(before_value);
                     }
                 }
             }
         }
 
-        let modified_names: Vec<String> = modified_vars.keys().cloned().collect();
+        let modified_names: Vec<String> = modified_variables.keys().cloned().collect();
 
         let mut inputs = Vec::new();
         let mut outputs = Vec::new();
         let mut output_names = Vec::new();
 
         for name in &modified_names {
-            if let Some(&before_value) = modified_vars.get(name) {
+            if let Some(&before_value) = modified_variables.get(name) {
                 inputs.push(before_value);
                 let output_id = self.ssa.fresh_id();
                 outputs.push(output_id);
@@ -1118,7 +1122,7 @@ impl YulTranslator {
         for (index, (case_value, mut case_region)) in cases.into_iter().enumerate() {
             let case_scope = &all_scopes[index];
             for name in &modified_names {
-                let before_value = modified_vars.get(name).copied().unwrap();
+                let before_value = modified_variables.get(name).copied().unwrap();
                 let value = case_scope.get(name).copied().unwrap_or(before_value);
                 case_region.yields.push(value);
             }
@@ -1131,7 +1135,7 @@ impl YulTranslator {
         let default_with_yields = if let Some(mut region) = default_region {
             let default_scope = default_scope.as_ref().unwrap();
             for name in &modified_names {
-                let before_value = modified_vars.get(name).copied().unwrap();
+                let before_value = modified_variables.get(name).copied().unwrap();
                 let value = default_scope.get(name).copied().unwrap_or(before_value);
                 region.yields.push(value);
             }
@@ -1139,7 +1143,7 @@ impl YulTranslator {
         } else if !modified_names.is_empty() {
             let mut region = Region::new();
             for name in &modified_names {
-                let before_value = modified_vars.get(name).copied().unwrap();
+                let before_value = modified_variables.get(name).copied().unwrap();
                 region.yields.push(before_value);
             }
             Some(region)
@@ -1219,19 +1223,21 @@ impl YulTranslator {
             }
         }
 
-        for (name, var_id) in &loop_variables {
+        for (name, variable_id) in &loop_variables {
             let value_type = initializer_scope
                 .get(name)
-                .map(|v| v.value_type)
+                .map(|value| value.value_type)
                 .unwrap_or_default();
-            self.ssa.assign(name, Value::new(*var_id, value_type));
+            self.ssa.assign(name, Value::new(*variable_id, value_type));
         }
 
         let (condition_statements, condition_expression) =
             self.translate_expression(&for_loop.condition)?;
 
-        let loop_variable_names: Vec<String> =
-            loop_variables.iter().map(|(n, _)| n.clone()).collect();
+        let loop_variable_names: Vec<String> = loop_variables
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect();
         self.loop_variable_names_stack.push(loop_variable_names);
 
         self.ssa.enter_scope();
@@ -1246,7 +1252,7 @@ impl YulTranslator {
             } else {
                 let value_type = initializer_scope
                     .get(name)
-                    .map(|v| v.value_type)
+                    .map(|value| value.value_type)
                     .unwrap_or_default();
                 body_region
                     .yields
@@ -1255,15 +1261,16 @@ impl YulTranslator {
         }
 
         self.ssa.enter_scope();
-        let mut post_input_var_ids = Vec::new();
+        let mut post_input_variable_ids = Vec::new();
         for (name, _) in loop_variables.iter() {
-            let post_var_id = self.ssa.fresh_id();
-            post_input_var_ids.push(post_var_id);
+            let post_variable_id = self.ssa.fresh_id();
+            post_input_variable_ids.push(post_variable_id);
             let value_type = initializer_scope
                 .get(name)
-                .map(|v| v.value_type)
+                .map(|value| value.value_type)
                 .unwrap_or_default();
-            self.ssa.assign(name, Value::new(post_var_id, value_type));
+            self.ssa
+                .assign(name, Value::new(post_variable_id, value_type));
         }
 
         let mut post_region = self.translate_region(&for_loop.finalizer)?;
@@ -1282,7 +1289,7 @@ impl YulTranslator {
             outputs.push(output_id);
             let value_type = initializer_scope
                 .get(name)
-                .map(|v| v.value_type)
+                .map(|value| value.value_type)
                 .unwrap_or_default();
             output_values.push((name.clone(), Value::new(output_id, value_type)));
         }
@@ -1302,7 +1309,7 @@ impl YulTranslator {
             condition_statements,
             condition: condition_expression,
             body: body_region,
-            post_input_variables: post_input_var_ids,
+            post_input_variables: post_input_variable_ids,
             post: post_region,
             outputs,
         });
@@ -1448,9 +1455,9 @@ impl YulTranslator {
                                         if let Ok(codepoint) =
                                             u32::from_str_radix(code_point_string, 16)
                                         {
-                                            if let Some(ch) = char::from_u32(codepoint) {
-                                                let mut buf = [0u8; 4];
-                                                let encoded = ch.encode_utf8(&mut buf);
+                                            if let Some(character) = char::from_u32(codepoint) {
+                                                let mut buffer = [0u8; 4];
+                                                let encoded = character.encode_utf8(&mut buffer);
                                                 for byte in encoded.bytes() {
                                                     hex.push_str(&format!("{byte:02x}"));
                                                 }
@@ -1596,7 +1603,7 @@ fn estimate_statement_size(statement: &Statement) -> usize {
         Statement::Switch { cases, default, .. } => {
             1 + cases
                 .iter()
-                .map(|c| estimate_region_size(&c.body))
+                .map(|case| estimate_region_size(&case.body))
                 .sum::<usize>()
                 + default.as_ref().map_or(0, estimate_region_size)
         }

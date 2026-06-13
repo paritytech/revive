@@ -107,50 +107,50 @@ mod tests {
     #[test]
     fn test_fresh_values() {
         let mut builder = SsaBuilder::new();
-        let v0 = builder.fresh_id();
-        let v1 = builder.fresh_id();
-        assert_eq!(v0.0, 0);
-        assert_eq!(v1.0, 1);
+        let first_id = builder.fresh_id();
+        let second_id = builder.fresh_id();
+        assert_eq!(first_id.0, 0);
+        assert_eq!(second_id.0, 1);
     }
 
     #[test]
     fn test_declare_and_lookup() {
         let mut builder = SsaBuilder::new();
-        let v = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
-        builder.declare("x", v);
-        assert_eq!(builder.lookup("x"), Some(v));
+        let value = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
+        builder.declare("x", value);
+        assert_eq!(builder.lookup("x"), Some(value));
         assert_eq!(builder.lookup("y"), None);
     }
 
     #[test]
     fn test_nested_scopes() {
         let mut builder = SsaBuilder::new();
-        let v0 = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
-        builder.declare("x", v0);
+        let outer_value = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
+        builder.declare("x", outer_value);
 
         builder.enter_scope();
-        let v1 = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
-        builder.assign("x", v1);
-        assert_eq!(builder.lookup("x"), Some(v1));
+        let inner_value = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
+        builder.assign("x", inner_value);
+        assert_eq!(builder.lookup("x"), Some(inner_value));
 
         builder.exit_scope();
-        assert_eq!(builder.lookup("x"), Some(v0));
+        assert_eq!(builder.lookup("x"), Some(outer_value));
     }
 
     #[test]
     #[should_panic(expected = "ICE: SsaBuilder::declare called for already-declared variable")]
     fn declare_twice_panics() {
         let mut builder = SsaBuilder::new();
-        let v = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
-        builder.declare("x", v);
-        builder.declare("x", v);
+        let value = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
+        builder.declare("x", value);
+        builder.declare("x", value);
     }
 
     #[test]
     #[should_panic(expected = "ICE: SsaBuilder::assign called for undeclared variable")]
     fn assign_undeclared_panics() {
         let mut builder = SsaBuilder::new();
-        let v = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
-        builder.assign("x", v);
+        let value = Value::new(builder.fresh_id(), Type::Int(BitWidth::I256));
+        builder.assign("x", value);
     }
 }

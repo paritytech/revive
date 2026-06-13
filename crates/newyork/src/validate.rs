@@ -90,8 +90,8 @@ impl Validator {
         }
     }
 
-    fn error(&mut self, err: ValidationError) {
-        self.errors.push(err);
+    fn error(&mut self, validation_error: ValidationError) {
+        self.errors.push(validation_error);
     }
 
     fn enter_scope(&mut self) {
@@ -181,14 +181,14 @@ impl Validator {
     }
 
     fn validate_block(&mut self, block: &Block, context: &str) {
-        for (i, statement) in block.statements.iter().enumerate() {
-            self.validate_statement(statement, &format!("{}[{}]", context, i));
+        for (statement_index, statement) in block.statements.iter().enumerate() {
+            self.validate_statement(statement, &format!("{}[{}]", context, statement_index));
         }
     }
 
     fn validate_region(&mut self, region: &Region, context: &str) {
-        for (i, statement) in region.statements.iter().enumerate() {
-            self.validate_statement(statement, &format!("{}[{}]", context, i));
+        for (statement_index, statement) in region.statements.iter().enumerate() {
+            self.validate_statement(statement, &format!("{}[{}]", context, statement_index));
         }
 
         for value in &region.yields {
@@ -216,44 +216,40 @@ impl Validator {
                 }
             }
 
-            Statement::MStore {
-                offset, value: v, ..
-            } => {
+            Statement::MStore { offset, value, .. } => {
                 self.use_value(offset, context);
-                self.use_value(v, context);
+                self.use_value(value, context);
             }
 
-            Statement::MStore8 {
-                offset, value: v, ..
-            } => {
+            Statement::MStore8 { offset, value, .. } => {
                 self.use_value(offset, context);
-                self.use_value(v, context);
+                self.use_value(value, context);
             }
 
-            Statement::MCopy { dest, src, length } => {
-                self.use_value(dest, context);
-                self.use_value(src, context);
+            Statement::MCopy {
+                destination,
+                source,
+                length,
+            } => {
+                self.use_value(destination, context);
+                self.use_value(source, context);
                 self.use_value(length, context);
             }
 
-            Statement::SStore { key, value: v, .. } => {
+            Statement::SStore { key, value, .. } => {
                 self.use_value(key, context);
-                self.use_value(v, context);
+                self.use_value(value, context);
             }
 
-            Statement::TStore { key, value: v } => {
+            Statement::TStore { key, value } => {
                 self.use_value(key, context);
-                self.use_value(v, context);
+                self.use_value(value, context);
             }
 
-            Statement::MappingSStore {
-                key,
-                slot,
-                value: v,
-            } => {
+            Statement::MappingSStore { key, slot, value } => {
                 self.use_value(key, context);
                 self.use_value(slot, context);
-                self.use_value(v, context);
+                self.use_value(value, context);
             }
 
             Statement::If {
@@ -264,8 +260,8 @@ impl Validator {
                 outputs,
             } => {
                 self.use_value(condition, context);
-                for v in inputs {
-                    self.use_value(v, context);
+                for input in inputs {
+                    self.use_value(input, context);
                 }
 
                 self.enter_scope();
@@ -312,19 +308,19 @@ impl Validator {
                 outputs,
             } => {
                 self.use_value(scrutinee, context);
-                for v in inputs {
-                    self.use_value(v, context);
+                for input in inputs {
+                    self.use_value(input, context);
                 }
 
-                for (i, case) in cases.iter().enumerate() {
+                for (case_index, case) in cases.iter().enumerate() {
                     self.enter_scope();
-                    self.validate_region(&case.body, &format!("{} case[{}]", context, i));
+                    self.validate_region(&case.body, &format!("{} case[{}]", context, case_index));
 
                     if outputs.len() != case.body.yields.len() {
                         self.error(ValidationError::YieldCountMismatch {
                             expected: outputs.len(),
                             actual: case.body.yields.len(),
-                            location: format!("{} case[{}]", context, i),
+                            location: format!("{} case[{}]", context, case_index),
                         });
                     }
                     self.exit_scope();
@@ -365,8 +361,8 @@ impl Validator {
                 post,
                 outputs,
             } => {
-                for v in initial_values {
-                    self.use_value(v, context);
+                for initial_value in initial_values {
+                    self.use_value(initial_value, context);
                 }
 
                 if loop_variables.len() != initial_values.len() {
@@ -392,8 +388,13 @@ impl Validator {
                     self.define(*id);
                 }
 
-                for (i, statement) in condition_statements.iter().enumerate() {
-                    self.validate_statement(statement, &format!("{} cond_stmt[{}]", context, i));
+                for (condition_statement_index, statement) in
+                    condition_statements.iter().enumerate()
+                {
+                    self.validate_statement(
+                        statement,
+                        &format!("{} cond_stmt[{}]", context, condition_statement_index),
+                    );
                 }
 
                 self.validate_expression(condition, &format!("{} condition", context));
@@ -439,14 +440,14 @@ impl Validator {
             }
 
             Statement::Break { values } | Statement::Continue { values } => {
-                for v in values {
-                    self.use_value(v, context);
+                for value in values {
+                    self.use_value(value, context);
                 }
             }
 
             Statement::Leave { return_values } => {
-                for v in return_values {
-                    self.use_value(v, context);
+                for return_value in return_values {
+                    self.use_value(return_value, context);
                 }
             }
 
@@ -483,8 +484,8 @@ impl Validator {
             } => {
                 self.use_value(gas, context);
                 self.use_value(address, context);
-                if let Some(v) = value {
-                    self.use_value(v, context);
+                if let Some(call_value) = value {
+                    self.use_value(call_value, context);
                 }
                 self.use_value(args_offset, context);
                 self.use_value(args_length, context);
@@ -504,8 +505,8 @@ impl Validator {
                 self.use_value(value, context);
                 self.use_value(offset, context);
                 self.use_value(length, context);
-                if let Some(s) = salt {
-                    self.use_value(s, context);
+                if let Some(salt) = salt {
+                    self.use_value(salt, context);
                 }
                 self.define(*result);
             }
@@ -517,59 +518,59 @@ impl Validator {
             } => {
                 self.use_value(offset, context);
                 self.use_value(length, context);
-                for t in topics {
-                    self.use_value(t, context);
+                for topic in topics {
+                    self.use_value(topic, context);
                 }
             }
 
             Statement::CodeCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                self.use_value(dest, context);
+                self.use_value(destination, context);
                 self.use_value(offset, context);
                 self.use_value(length, context);
             }
 
             Statement::ExtCodeCopy {
                 address,
-                dest,
+                destination,
                 offset,
                 length,
             } => {
                 self.use_value(address, context);
-                self.use_value(dest, context);
+                self.use_value(destination, context);
                 self.use_value(offset, context);
                 self.use_value(length, context);
             }
 
             Statement::ReturnDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                self.use_value(dest, context);
+                self.use_value(destination, context);
                 self.use_value(offset, context);
                 self.use_value(length, context);
             }
 
             Statement::DataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                self.use_value(dest, context);
+                self.use_value(destination, context);
                 self.use_value(offset, context);
                 self.use_value(length, context);
             }
 
             Statement::CallDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                self.use_value(dest, context);
+                self.use_value(destination, context);
                 self.use_value(offset, context);
                 self.use_value(length, context);
             }
@@ -771,7 +772,7 @@ mod tests {
         let errors = result.unwrap_err();
         assert!(errors
             .iter()
-            .any(|e| matches!(e, ValidationError::UseBeforeDef(0, _))));
+            .any(|error| matches!(error, ValidationError::UseBeforeDef(0, _))));
     }
 
     #[test]
@@ -811,7 +812,7 @@ mod tests {
         let errors = result.unwrap_err();
         assert!(errors
             .iter()
-            .any(|e| matches!(e, ValidationError::YieldCountMismatch { .. })));
+            .any(|error| matches!(error, ValidationError::YieldCountMismatch { .. })));
     }
 
     #[test]
@@ -881,6 +882,6 @@ mod tests {
         let errors = result.unwrap_err();
         assert!(errors
             .iter()
-            .any(|e| matches!(e, ValidationError::FunctionError(_))));
+            .any(|error| matches!(error, ValidationError::FunctionError(_))));
     }
 }

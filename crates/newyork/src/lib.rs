@@ -313,9 +313,9 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
     let _fuzzy_dedup_count2 = simplify::deduplicate_functions_fuzzy(object);
 
     for subobject in &mut object.subobjects {
-        let (sub_inline, sub_mem_opt) = optimize_object_tree(subobject);
-        inline_results += sub_inline;
-        mem_opt_results += sub_mem_opt;
+        let (subobject_inline_results, subobject_mem_opt_results) = optimize_object_tree(subobject);
+        inline_results += subobject_inline_results;
+        mem_opt_results += subobject_mem_opt_results;
     }
 
     (inline_results, mem_opt_results)

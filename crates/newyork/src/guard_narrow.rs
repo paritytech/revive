@@ -87,18 +87,18 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
 /// `and(add(size, 31), not(31))` wraps to 0, so EVM leaves the free pointer unchanged and does
 /// not revert — but the assertion would trap. See [`is_allocator_function`].
 fn narrow_allocator_param_types(object: &mut Object, noreturn: &std::collections::BTreeSet<u32>) {
-    let mut narrow_params: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
+    let mut narrow_parameters: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
 
     for (function_id, function) in &object.functions {
         if is_allocator_function(function, noreturn) {
-            narrow_params.insert(function_id.0, vec![0]);
+            narrow_parameters.insert(function_id.0, vec![0]);
         }
     }
 
-    for (function_id, indices) in narrow_params {
+    for (function_id, indices) in narrow_parameters {
         if let Some(function) = object.functions.get_mut(&FunctionId(function_id)) {
-            for i in indices {
-                if let Some((_, value_type)) = function.parameters.get_mut(i) {
+            for index in indices {
+                if let Some((_, value_type)) = function.parameters.get_mut(index) {
                     *value_type = Type::Int(BitWidth::I64);
                 }
             }
@@ -149,9 +149,13 @@ fn has_allocator_shape(
     for statement in &block.statements {
         if let Statement::Let { bindings, value } = statement {
             if bindings.len() == 1 {
-                let bid = bindings[0].0;
-                if let Expression::Literal { value: lit_val, .. } = value {
-                    constants.insert(bid, lit_val.clone());
+                let binding_id = bindings[0].0;
+                if let Expression::Literal {
+                    value: literal_value,
+                    ..
+                } = value
+                {
+                    constants.insert(binding_id, literal_value.clone());
                 }
                 if let Expression::Binary {
                     operation,
@@ -161,25 +165,25 @@ fn has_allocator_shape(
                 {
                     match operation {
                         BinaryOperation::Add => {
-                            add_results.insert(bid, (lhs.id.0, rhs.id.0));
+                            add_results.insert(binding_id, (lhs.id.0, rhs.id.0));
                         }
                         BinaryOperation::And => {
                             if let Some(mask) = constants.get(&rhs.id.0) {
-                                and_results.insert(bid, (lhs.id.0, mask.clone()));
+                                and_results.insert(binding_id, (lhs.id.0, mask.clone()));
                             } else if let Some(mask) = constants.get(&lhs.id.0) {
-                                and_results.insert(bid, (rhs.id.0, mask.clone()));
+                                and_results.insert(binding_id, (rhs.id.0, mask.clone()));
                             }
                         }
                         BinaryOperation::Or => {
-                            or_results.insert(bid, (lhs.id.0, rhs.id.0));
+                            or_results.insert(binding_id, (lhs.id.0, rhs.id.0));
                         }
                         BinaryOperation::Gt => {
-                            if let Some(c) = constants.get(&rhs.id.0) {
-                                gt_const_checks.insert(bid, (lhs.id.0, c.clone()));
+                            if let Some(constant) = constants.get(&rhs.id.0) {
+                                gt_const_checks.insert(binding_id, (lhs.id.0, constant.clone()));
                             }
                         }
                         BinaryOperation::Lt => {
-                            lt_against_addend.insert(bid, (lhs.id.0, rhs.id.0));
+                            lt_against_addend.insert(binding_id, (lhs.id.0, rhs.id.0));
                         }
                         _ => {}
                     }
@@ -187,8 +191,8 @@ fn has_allocator_shape(
             }
         }
         if let Statement::MStore { offset, value, .. } = statement {
-            if let Some(off) = constants.get(&offset.id.0) {
-                if !off.is_zero() && *off == BigUint::from(0x40u32) {
+            if let Some(offset_constant) = constants.get(&offset.id.0) {
+                if !offset_constant.is_zero() && *offset_constant == BigUint::from(0x40u32) {
                     fmp_store_value = Some(value.id.0);
                 }
             }
@@ -210,7 +214,7 @@ fn has_allocator_shape(
     };
 
     let sum_id = match and_results.get(&fmp_value) {
-        Some((orig, _mask)) => *orig,
+        Some((original, _mask)) => *original,
         None => fmp_value,
     };
 
@@ -225,22 +229,22 @@ fn has_allocator_shape(
     let uint64_max: BigUint = (BigUint::from(1u32) << 64) - 1u32;
     let gt_ids: std::collections::BTreeSet<u32> = gt_const_checks
         .iter()
-        .filter(|(_, (value, c))| *value == sum_id && *c == uint64_max)
-        .map(|(bid, _)| *bid)
+        .filter(|(_, (value, constant))| *value == sum_id && *constant == uint64_max)
+        .map(|(binding_id, _)| *binding_id)
         .collect();
     let lt_ids: std::collections::BTreeSet<u32> = lt_against_addend
         .iter()
         .filter(|(_, (sum, addend))| *sum == sum_id && *addend == p0.0)
-        .map(|(bid, _)| *bid)
+        .map(|(binding_id, _)| *binding_id)
         .collect();
     if gt_ids.is_empty() || lt_ids.is_empty() {
         return false;
     }
 
-    or_results.iter().any(|(or_id, (a, b))| {
+    or_results.iter().any(|(or_id, (left, right))| {
         reverting_if_conditions.contains(or_id)
-            && ((gt_ids.contains(a) && lt_ids.contains(b))
-                || (gt_ids.contains(b) && lt_ids.contains(a)))
+            && ((gt_ids.contains(left) && lt_ids.contains(right))
+                || (gt_ids.contains(right) && lt_ids.contains(left)))
     })
 }
 
@@ -249,9 +253,9 @@ fn has_allocator_shape(
 /// Stricter than [`region_terminates`]: it is used to confirm an allocator's overflow guard
 /// actually reverts on a wide value, so narrowing its pointer parameter matches EVM.
 fn region_reverts(region: &Region, noreturn: &std::collections::BTreeSet<u32>) -> bool {
-    region.statements.iter().any(|s| {
+    region.statements.iter().any(|statement| {
         if matches!(
-            s,
+            statement,
             Statement::Revert { .. }
                 | Statement::Invalid
                 | Statement::PanicRevert { .. }
@@ -260,7 +264,7 @@ fn region_reverts(region: &Region, noreturn: &std::collections::BTreeSet<u32>) -
         ) {
             return true;
         }
-        if let Statement::Expression(Expression::Call { function, .. }) = s {
+        if let Statement::Expression(Expression::Call { function, .. }) = statement {
             if noreturn.contains(&function.0) {
                 return true;
             }
@@ -367,9 +371,9 @@ fn detect_validator_mask(
     let statements = &block.statements;
 
     let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
-    let mut and_defs: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new();
-    let mut eq_mask_defs: BTreeMap<u32, BigUint> = BTreeMap::new();
-    let mut iszero_eq_defs: BTreeMap<u32, BigUint> = BTreeMap::new();
+    let mut and_definitions: BTreeMap<u32, (u32, BigUint)> = BTreeMap::new();
+    let mut eq_mask_definitions: BTreeMap<u32, BigUint> = BTreeMap::new();
+    let mut iszero_eq_definitions: BTreeMap<u32, BigUint> = BTreeMap::new();
 
     for statement in statements {
         if let Statement::Let {
@@ -380,13 +384,14 @@ fn detect_validator_mask(
             if bindings.len() != 1 {
                 continue;
             }
-            let bid = bindings[0].0;
+            let binding_id = bindings[0].0;
 
             if let Expression::Literal {
-                value: ref lit_val, ..
+                value: ref literal_value,
+                ..
             } = value
             {
-                constants.insert(bid, lit_val.clone());
+                constants.insert(binding_id, literal_value.clone());
             }
 
             if let Expression::Binary {
@@ -395,17 +400,17 @@ fn detect_validator_mask(
                 ref rhs,
             } = value
             {
-                let (val_id, mask_id) = (lhs.id.0, rhs.id.0);
-                if val_id == parameter_id.0 {
+                let (value_id, mask_id) = (lhs.id.0, rhs.id.0);
+                if value_id == parameter_id.0 {
                     if let Some(mask) = constants.get(&mask_id) {
                         if is_wide_boundary_mask(mask) {
-                            and_defs.insert(bid, (val_id, mask.clone()));
+                            and_definitions.insert(binding_id, (value_id, mask.clone()));
                         }
                     }
                 } else if mask_id == parameter_id.0 {
-                    if let Some(mask) = constants.get(&val_id) {
+                    if let Some(mask) = constants.get(&value_id) {
                         if is_wide_boundary_mask(mask) {
-                            and_defs.insert(bid, (mask_id, mask.clone()));
+                            and_definitions.insert(binding_id, (mask_id, mask.clone()));
                         }
                     }
                 }
@@ -417,13 +422,13 @@ fn detect_validator_mask(
                 ref rhs,
             } = value
             {
-                if let Some((orig_id, ref mask)) = and_defs.get(&rhs.id.0) {
-                    if *orig_id == lhs.id.0 {
-                        eq_mask_defs.insert(bid, mask.clone());
+                if let Some((original_id, ref mask)) = and_definitions.get(&rhs.id.0) {
+                    if *original_id == lhs.id.0 {
+                        eq_mask_definitions.insert(binding_id, mask.clone());
                     }
-                } else if let Some((orig_id, ref mask)) = and_defs.get(&lhs.id.0) {
-                    if *orig_id == rhs.id.0 {
-                        eq_mask_defs.insert(bid, mask.clone());
+                } else if let Some((original_id, ref mask)) = and_definitions.get(&lhs.id.0) {
+                    if *original_id == rhs.id.0 {
+                        eq_mask_definitions.insert(binding_id, mask.clone());
                     }
                 }
             }
@@ -433,8 +438,8 @@ fn detect_validator_mask(
                 ref operand,
             } = value
             {
-                if let Some(mask) = eq_mask_defs.get(&operand.id.0) {
-                    iszero_eq_defs.insert(bid, mask.clone());
+                if let Some(mask) = eq_mask_definitions.get(&operand.id.0) {
+                    iszero_eq_definitions.insert(binding_id, mask.clone());
                 }
             }
         }
@@ -449,7 +454,7 @@ fn detect_validator_mask(
         {
             if else_region.is_none() && outputs.is_empty() && region_reverts(then_region, noreturn)
             {
-                if let Some(mask) = iszero_eq_defs.get(&condition.id.0) {
+                if let Some(mask) = iszero_eq_definitions.get(&condition.id.0) {
                     return Some(mask.clone());
                 }
             }
@@ -474,18 +479,18 @@ fn narrow_block(
     }
 
     let statements = std::mem::take(&mut block.statements);
-    let mut new_stmts = Vec::with_capacity(statements.len() + 16);
+    let mut new_statements = Vec::with_capacity(statements.len() + 16);
 
     let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
-    let mut gt_defs: BTreeMap<u32, (Value, BigUint)> = BTreeMap::new();
-    let mut and_defs: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
-    let mut eq_mask_defs: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
-    let mut iszero_eq_defs: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
-    let mut or_defs: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
-    let mut add_defs: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
-    let mut lt_defs: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
-    let mut lt_const_defs: BTreeMap<u32, (Value, BigUint)> = BTreeMap::new();
-    let mut iszero_lt_defs: BTreeMap<u32, (Value, BigUint)> = BTreeMap::new();
+    let mut gt_definitions: BTreeMap<u32, (Value, BigUint)> = BTreeMap::new();
+    let mut and_definitions: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
+    let mut eq_mask_definitions: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
+    let mut iszero_eq_definitions: BTreeMap<u32, (u32, ValueId)> = BTreeMap::new();
+    let mut or_definitions: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+    let mut add_definitions: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+    let mut lt_definitions: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
+    let mut lt_const_definitions: BTreeMap<u32, (Value, BigUint)> = BTreeMap::new();
+    let mut iszero_lt_definitions: BTreeMap<u32, (Value, BigUint)> = BTreeMap::new();
     let mut replacements: BTreeMap<u32, ValueId> = BTreeMap::new();
 
     for statement in statements {
@@ -501,13 +506,14 @@ fn narrow_block(
         } = statement
         {
             if bindings.len() == 1 {
-                let bid = bindings[0].0;
+                let binding_id = bindings[0].0;
 
                 if let Expression::Literal {
-                    value: ref lit_val, ..
+                    value: ref literal_value,
+                    ..
                 } = value
                 {
-                    constants.insert(bid, lit_val.clone());
+                    constants.insert(binding_id, literal_value.clone());
                 }
 
                 if let Expression::Binary {
@@ -523,7 +529,7 @@ fn narrow_block(
                                 id: resolve_id(lhs.id, &replacements),
                                 value_type: lhs.value_type,
                             };
-                            gt_defs.insert(bid, (guarded, mask.clone()));
+                            gt_definitions.insert(binding_id, (guarded, mask.clone()));
                         }
                     }
                 }
@@ -538,11 +544,11 @@ fn narrow_block(
                     let rhs_id = resolve_id(rhs.id, &replacements);
                     if let Some(mask) = constants.get(&rhs_id.0) {
                         if is_wide_boundary_mask(mask) {
-                            and_defs.insert(bid, (lhs_id.0, ValueId(bid)));
+                            and_definitions.insert(binding_id, (lhs_id.0, ValueId(binding_id)));
                         }
                     } else if let Some(mask) = constants.get(&lhs_id.0) {
                         if is_wide_boundary_mask(mask) {
-                            and_defs.insert(bid, (rhs_id.0, ValueId(bid)));
+                            and_definitions.insert(binding_id, (rhs_id.0, ValueId(binding_id)));
                         }
                     }
                 }
@@ -555,13 +561,15 @@ fn narrow_block(
                 {
                     let lhs_id = resolve_id(lhs.id, &replacements);
                     let rhs_id = resolve_id(rhs.id, &replacements);
-                    if let Some(&(orig_id, and_val_id)) = and_defs.get(&rhs_id.0) {
-                        if orig_id == lhs_id.0 {
-                            eq_mask_defs.insert(bid, (orig_id, and_val_id));
+                    if let Some(&(original_id, and_value_id)) = and_definitions.get(&rhs_id.0) {
+                        if original_id == lhs_id.0 {
+                            eq_mask_definitions.insert(binding_id, (original_id, and_value_id));
                         }
-                    } else if let Some(&(orig_id, and_val_id)) = and_defs.get(&lhs_id.0) {
-                        if orig_id == rhs_id.0 {
-                            eq_mask_defs.insert(bid, (orig_id, and_val_id));
+                    } else if let Some(&(original_id, and_value_id)) =
+                        and_definitions.get(&lhs_id.0)
+                    {
+                        if original_id == rhs_id.0 {
+                            eq_mask_definitions.insert(binding_id, (original_id, and_value_id));
                         }
                     }
                 }
@@ -571,9 +579,11 @@ fn narrow_block(
                     ref operand,
                 } = value
                 {
-                    let op_id = resolve_id(operand.id, &replacements);
-                    if let Some(&(orig_id, and_val_id)) = eq_mask_defs.get(&op_id.0) {
-                        iszero_eq_defs.insert(bid, (orig_id, and_val_id));
+                    let operand_id = resolve_id(operand.id, &replacements);
+                    if let Some(&(original_id, and_value_id)) =
+                        eq_mask_definitions.get(&operand_id.0)
+                    {
+                        iszero_eq_definitions.insert(binding_id, (original_id, and_value_id));
                     }
                 }
 
@@ -585,7 +595,7 @@ fn narrow_block(
                 {
                     let lhs_id = resolve_id(lhs.id, &replacements);
                     let rhs_id = resolve_id(rhs.id, &replacements);
-                    or_defs.insert(bid, (lhs_id.0, rhs_id.0));
+                    or_definitions.insert(binding_id, (lhs_id.0, rhs_id.0));
                 }
 
                 if let Expression::Binary {
@@ -596,7 +606,7 @@ fn narrow_block(
                 {
                     let lhs_id = resolve_id(lhs.id, &replacements);
                     let rhs_id = resolve_id(rhs.id, &replacements);
-                    add_defs.insert(bid, (lhs_id.0, rhs_id.0));
+                    add_definitions.insert(binding_id, (lhs_id.0, rhs_id.0));
                 }
 
                 if let Expression::Binary {
@@ -607,19 +617,23 @@ fn narrow_block(
                 {
                     let lhs_id = resolve_id(lhs.id, &replacements);
                     let rhs_id = resolve_id(rhs.id, &replacements);
-                    lt_defs.insert(bid, (lhs_id.0, rhs_id.0));
+                    lt_definitions.insert(binding_id, (lhs_id.0, rhs_id.0));
 
-                    if let Some(k) = constants.get(&rhs_id.0) {
-                        let k_minus_one = if k.is_zero() { BigUint::ZERO } else { k - 1u32 };
-                        if !k.is_zero() && (k & &k_minus_one) == BigUint::ZERO {
-                            lt_const_defs.insert(
-                                bid,
+                    if let Some(bound) = constants.get(&rhs_id.0) {
+                        let bound_minus_one = if bound.is_zero() {
+                            BigUint::ZERO
+                        } else {
+                            bound - 1u32
+                        };
+                        if !bound.is_zero() && (bound & &bound_minus_one) == BigUint::ZERO {
+                            lt_const_definitions.insert(
+                                binding_id,
                                 (
                                     Value {
                                         id: lhs_id,
                                         value_type: lhs.value_type,
                                     },
-                                    k_minus_one,
+                                    bound_minus_one,
                                 ),
                             );
                         }
@@ -637,10 +651,10 @@ fn narrow_block(
             } = statement
             {
                 if bindings.len() == 1 {
-                    let bid = bindings[0].0;
-                    let op_id = resolve_id(operand.id, &replacements);
-                    if let Some((value, mask)) = lt_const_defs.get(&op_id.0) {
-                        iszero_lt_defs.insert(bid, (*value, mask.clone()));
+                    let binding_id = bindings[0].0;
+                    let operand_id = resolve_id(operand.id, &replacements);
+                    if let Some((value, mask)) = lt_const_definitions.get(&operand_id.0) {
+                        iszero_lt_definitions.insert(binding_id, (*value, mask.clone()));
                     }
                 }
             }
@@ -654,7 +668,7 @@ fn narrow_block(
             ..
         } = statement
         {
-            let cond_id = resolve_id(condition.id, &replacements);
+            let condition_id = resolve_id(condition.id, &replacements);
             if else_region.is_none()
                 && outputs.is_empty()
                 && region_terminates(then_region, noreturn)
@@ -662,21 +676,23 @@ fn narrow_block(
                 let mut gt_guards: Vec<(Value, BigUint)> = Vec::new();
                 let mut iszero_eq_guards: Vec<(u32, ValueId)> = Vec::new();
                 let mut lt_overflows: Vec<(u32, u32)> = Vec::new();
-                let mut visit = vec![cond_id.0];
+                let mut visit = vec![condition_id.0];
                 let mut seen: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
                 while let Some(id) = visit.pop() {
                     if !seen.insert(id) {
                         continue;
                     }
-                    if let Some((guarded, mask)) = gt_defs.get(&id) {
+                    if let Some((guarded, mask)) = gt_definitions.get(&id) {
                         gt_guards.push((*guarded, mask.clone()));
-                    } else if let Some(&(orig_id, and_val_id)) = iszero_eq_defs.get(&id) {
-                        iszero_eq_guards.push((orig_id, and_val_id));
-                    } else if let Some(&(sum_id, addend_id)) = lt_defs.get(&id) {
+                    } else if let Some(&(original_id, and_value_id)) =
+                        iszero_eq_definitions.get(&id)
+                    {
+                        iszero_eq_guards.push((original_id, and_value_id));
+                    } else if let Some(&(sum_id, addend_id)) = lt_definitions.get(&id) {
                         lt_overflows.push((sum_id, addend_id));
-                    } else if let Some((value, mask)) = iszero_lt_defs.get(&id) {
+                    } else if let Some((value, mask)) = iszero_lt_definitions.get(&id) {
                         gt_guards.push((*value, mask.clone()));
-                    } else if let Some(&(lhs_id, rhs_id)) = or_defs.get(&id) {
+                    } else if let Some(&(lhs_id, rhs_id)) = or_definitions.get(&id) {
                         visit.push(lhs_id);
                         visit.push(rhs_id);
                     }
@@ -684,27 +700,30 @@ fn narrow_block(
 
                 let mut extra_gt_guards: Vec<(Value, BigUint)> = Vec::new();
                 for (sum_id, addend_id) in &lt_overflows {
-                    let Some(&(add_lhs, add_rhs)) = add_defs.get(sum_id) else {
+                    let Some(&(add_lhs, add_rhs)) = add_definitions.get(sum_id) else {
                         continue;
                     };
-                    let Some((_, mask)) = gt_guards.iter().find(|(g, _)| g.id.0 == *sum_id) else {
+                    let Some((_, mask)) = gt_guards
+                        .iter()
+                        .find(|(guarded, _)| guarded.id.0 == *sum_id)
+                    else {
                         continue;
                     };
                     if *addend_id != add_lhs && *addend_id != add_rhs {
                         continue;
                     }
-                    let i256_ty = Type::Int(BitWidth::I256);
+                    let i256_type = Type::Int(BitWidth::I256);
                     extra_gt_guards.push((
                         Value {
                             id: ValueId(add_lhs),
-                            value_type: i256_ty,
+                            value_type: i256_type,
                         },
                         mask.clone(),
                     ));
                     extra_gt_guards.push((
                         Value {
                             id: ValueId(add_rhs),
-                            value_type: i256_ty,
+                            value_type: i256_type,
                         },
                         mask.clone(),
                     ));
@@ -712,10 +731,10 @@ fn narrow_block(
                 gt_guards.extend(extra_gt_guards);
 
                 if !gt_guards.is_empty() || !iszero_eq_guards.is_empty() {
-                    new_stmts.push(statement);
+                    new_statements.push(statement);
 
-                    for (guarded_val, mask) in gt_guards {
-                        if replacements.contains_key(&guarded_val.id.0) {
+                    for (guarded_value, mask) in gt_guards {
+                        if replacements.contains_key(&guarded_value.id.0) {
                             continue;
                         }
                         let mask_id = ValueId(*next_id);
@@ -723,28 +742,28 @@ fn narrow_block(
                         let narrow_id = ValueId(*next_id);
                         *next_id += 1;
 
-                        new_stmts.push(Statement::Let {
+                        new_statements.push(Statement::Let {
                             bindings: vec![mask_id],
                             value: Expression::Literal {
                                 value: mask,
                                 value_type: Type::Int(BitWidth::I256),
                             },
                         });
-                        new_stmts.push(Statement::Let {
+                        new_statements.push(Statement::Let {
                             bindings: vec![narrow_id],
                             value: Expression::Binary {
                                 operation: BinaryOperation::And,
-                                lhs: guarded_val,
+                                lhs: guarded_value,
                                 rhs: Value::int(mask_id),
                             },
                         });
 
-                        replacements.insert(guarded_val.id.0, narrow_id);
+                        replacements.insert(guarded_value.id.0, narrow_id);
                         statistics.guards_narrowed += 1;
                     }
 
-                    for (orig_id, and_val_id) in iszero_eq_guards {
-                        replacements.entry(orig_id).or_insert(and_val_id);
+                    for (original_id, and_value_id) in iszero_eq_guards {
+                        replacements.entry(original_id).or_insert(and_value_id);
                         statistics.guards_narrowed += 1;
                     }
 
@@ -760,18 +779,18 @@ fn narrow_block(
         {
             if arguments.len() == 1 {
                 if let Some(mask) = validators.get(&function.0) {
-                    let arg_id = resolve_id(arguments[0].id, &replacements);
-                    if let std::collections::btree_map::Entry::Vacant(e) =
-                        replacements.entry(arg_id.0)
+                    let argument_id = resolve_id(arguments[0].id, &replacements);
+                    if let std::collections::btree_map::Entry::Vacant(vacant_entry) =
+                        replacements.entry(argument_id.0)
                     {
                         let mask_id = ValueId(*next_id);
                         *next_id += 1;
                         let narrow_id = ValueId(*next_id);
                         *next_id += 1;
 
-                        new_stmts.push(statement);
+                        new_statements.push(statement);
 
-                        new_stmts.push(Statement::Let {
+                        new_statements.push(Statement::Let {
                             bindings: vec![mask_id],
                             value: Expression::Literal {
                                 value: mask.clone(),
@@ -779,19 +798,19 @@ fn narrow_block(
                             },
                         });
 
-                        new_stmts.push(Statement::Let {
+                        new_statements.push(Statement::Let {
                             bindings: vec![narrow_id],
                             value: Expression::Binary {
                                 operation: BinaryOperation::And,
                                 lhs: Value {
-                                    id: arg_id,
+                                    id: argument_id,
                                     value_type: Type::Int(BitWidth::I256),
                                 },
                                 rhs: Value::int(mask_id),
                             },
                         });
 
-                        e.insert(narrow_id);
+                        vacant_entry.insert(narrow_id);
                         statistics.guards_narrowed += 1;
                         continue;
                     }
@@ -799,10 +818,10 @@ fn narrow_block(
             }
         }
 
-        new_stmts.push(statement);
+        new_statements.push(statement);
     }
 
-    block.statements = new_stmts;
+    block.statements = new_statements;
     replacements
 }
 
@@ -839,11 +858,17 @@ fn narrow_stmt_regions(
             post,
             ..
         } => {
-            let mut cond_block = Block {
+            let mut condition_block = Block {
                 statements: std::mem::take(condition_statements),
             };
-            narrow_block(&mut cond_block, next_id, statistics, validators, noreturn);
-            *condition_statements = cond_block.statements;
+            narrow_block(
+                &mut condition_block,
+                next_id,
+                statistics,
+                validators,
+                noreturn,
+            );
+            *condition_statements = condition_block.statements;
 
             narrow_region(body, next_id, statistics, validators, noreturn);
             narrow_region(post, next_id, statistics, validators, noreturn);
@@ -910,9 +935,9 @@ fn is_wide_boundary_mask(value: &BigUint) -> bool {
 /// After the simplifier's DCE pass, dead code after unreachable calls has
 /// been eliminated, so a trailing call with no yields is a reliable indicator.
 fn region_terminates(region: &Region, noreturn: &std::collections::BTreeSet<u32>) -> bool {
-    region.statements.iter().any(|s| {
+    region.statements.iter().any(|statement| {
         if matches!(
-            s,
+            statement,
             Statement::Revert { .. }
                 | Statement::Return { .. }
                 | Statement::Invalid
@@ -925,7 +950,7 @@ fn region_terminates(region: &Region, noreturn: &std::collections::BTreeSet<u32>
         ) {
             return true;
         }
-        if let Statement::Expression(Expression::Call { function, .. }) = s {
+        if let Statement::Expression(Expression::Call { function, .. }) = statement {
             if noreturn.contains(&function.0) {
                 return true;
             }
@@ -1107,9 +1132,9 @@ mod tests {
     /// True if any top-level `Let` binds `and(target, _)` / `and(_, target)` — the artifact of the
     /// (removed) unsound size-parameter mask.
     fn body_masks(statements: &[Statement], target: ValueId) -> bool {
-        statements.iter().any(|s| {
+        statements.iter().any(|statement| {
             matches!(
-                s,
+                statement,
                 Statement::Let {
                     value: Expression::Binary { operation: BinaryOperation::And, lhs, rhs },
                     ..
@@ -1162,7 +1187,7 @@ mod tests {
     /// Builds a single-parameter validator `fn(v) { if iszero(eq(v, and(v, u64max))) { fail } }`.
     /// `fail` reverts (panics) or merely `leave`s, depending on `reverts`.
     fn validator_function(reverts: bool) -> Function {
-        let param = ValueId(0);
+        let parameter = ValueId(0);
         let mask = ValueId(1);
         let masked = ValueId(2);
         let eq_check = ValueId(3);
@@ -1178,7 +1203,7 @@ mod tests {
         };
 
         let mut function = Function::new(FunctionId(0), "validator".to_string());
-        function.parameters = vec![(param, Type::Int(BitWidth::I256))];
+        function.parameters = vec![(parameter, Type::Int(BitWidth::I256))];
         function.body = Block {
             statements: vec![
                 Statement::Let {
@@ -1192,7 +1217,7 @@ mod tests {
                     bindings: vec![masked],
                     value: Expression::Binary {
                         operation: BinaryOperation::And,
-                        lhs: Value::int(param),
+                        lhs: Value::int(parameter),
                         rhs: Value::int(mask),
                     },
                 },
@@ -1200,7 +1225,7 @@ mod tests {
                     bindings: vec![eq_check],
                     value: Expression::Binary {
                         operation: BinaryOperation::Eq,
-                        lhs: Value::int(param),
+                        lhs: Value::int(parameter),
                         rhs: Value::int(masked),
                     },
                 },

@@ -225,8 +225,8 @@ impl<'a> Printer<'a> {
         self.write_indent();
         let _ = write!(self.output, "function {}(", function.name);
 
-        for (i, (id, value_type)) in function.parameters.iter().enumerate() {
-            if i > 0 {
+        for (index, (id, value_type)) in function.parameters.iter().enumerate() {
+            if index > 0 {
                 self.output.push_str(", ");
             }
             self.write_value_id(*id);
@@ -239,13 +239,13 @@ impl<'a> Printer<'a> {
 
         if !function.returns.is_empty() {
             self.output.push_str(" -> (");
-            for (i, (id, value_type)) in function
+            for (index, (id, value_type)) in function
                 .return_values_initial
                 .iter()
                 .zip(function.returns.iter())
                 .enumerate()
             {
-                if i > 0 {
+                if index > 0 {
                     self.output.push_str(", ");
                 }
                 self.write_value_id(*id);
@@ -274,8 +274,8 @@ impl<'a> Printer<'a> {
         if function.return_values != function.return_values_initial {
             self.write_indent();
             self.output.push_str("// final return values: ");
-            for (i, id) in function.return_values.iter().enumerate() {
-                if i > 0 {
+            for (index, id) in function.return_values.iter().enumerate() {
+                if index > 0 {
                     self.output.push_str(", ");
                 }
                 self.write_value_id(*id);
@@ -302,8 +302,8 @@ impl<'a> Printer<'a> {
         if !region.yields.is_empty() {
             self.write_indent();
             self.output.push_str("yield ");
-            for (i, value) in region.yields.iter().enumerate() {
-                if i > 0 {
+            for (index, value) in region.yields.iter().enumerate() {
+                if index > 0 {
                     self.output.push_str(", ");
                 }
                 self.write_value(value);
@@ -317,8 +317,8 @@ impl<'a> Printer<'a> {
             Statement::Let { bindings, value } => {
                 self.write_indent();
                 self.output.push_str("let ");
-                for (i, id) in bindings.iter().enumerate() {
-                    if i > 0 {
+                for (index, id) in bindings.iter().enumerate() {
+                    if index > 0 {
                         self.output.push_str(", ");
                     }
                     self.write_binding_id(*id);
@@ -362,12 +362,16 @@ impl<'a> Printer<'a> {
                 self.write_newline();
             }
 
-            Statement::MCopy { dest, src, length } => {
+            Statement::MCopy {
+                destination,
+                source,
+                length,
+            } => {
                 self.write_indent();
                 self.output.push_str("mcopy(");
-                self.write_value(dest);
+                self.write_value(destination);
                 self.output.push_str(", ");
-                self.write_value(src);
+                self.write_value(source);
                 self.output.push_str(", ");
                 self.write_value(length);
                 self.output.push(')');
@@ -426,8 +430,8 @@ impl<'a> Printer<'a> {
 
                 if !outputs.is_empty() {
                     self.output.push_str("let ");
-                    for (i, id) in outputs.iter().enumerate() {
-                        if i > 0 {
+                    for (index, id) in outputs.iter().enumerate() {
+                        if index > 0 {
                             self.output.push_str(", ");
                         }
                         self.write_binding_id(*id);
@@ -440,11 +444,11 @@ impl<'a> Printer<'a> {
 
                 if !inputs.is_empty() {
                     self.output.push_str(" [");
-                    for (i, v) in inputs.iter().enumerate() {
-                        if i > 0 {
+                    for (index, input) in inputs.iter().enumerate() {
+                        if index > 0 {
                             self.output.push_str(", ");
                         }
-                        self.write_value(v);
+                        self.write_value(input);
                     }
                     self.output.push(']');
                 }
@@ -484,8 +488,8 @@ impl<'a> Printer<'a> {
 
                 if !outputs.is_empty() {
                     self.output.push_str("let ");
-                    for (i, id) in outputs.iter().enumerate() {
-                        if i > 0 {
+                    for (index, id) in outputs.iter().enumerate() {
+                        if index > 0 {
                             self.output.push_str(", ");
                         }
                         self.write_binding_id(*id);
@@ -498,11 +502,11 @@ impl<'a> Printer<'a> {
 
                 if !inputs.is_empty() {
                     self.output.push_str(" [");
-                    for (i, v) in inputs.iter().enumerate() {
-                        if i > 0 {
+                    for (index, input) in inputs.iter().enumerate() {
+                        if index > 0 {
                             self.output.push_str(", ");
                         }
-                        self.write_value(v);
+                        self.write_value(input);
                     }
                     self.output.push(']');
                 }
@@ -541,8 +545,8 @@ impl<'a> Printer<'a> {
 
                 if !outputs.is_empty() {
                     self.output.push_str("let ");
-                    for (i, id) in outputs.iter().enumerate() {
-                        if i > 0 {
+                    for (index, id) in outputs.iter().enumerate() {
+                        if index > 0 {
                             self.output.push_str(", ");
                         }
                         self.write_binding_id(*id);
@@ -552,15 +556,15 @@ impl<'a> Printer<'a> {
 
                 self.output.push_str("for { ");
 
-                for (i, (init, variable)) in
+                for (index, (initial_value, variable)) in
                     initial_values.iter().zip(loop_variables.iter()).enumerate()
                 {
-                    if i > 0 {
+                    if index > 0 {
                         self.output.push_str(", ");
                     }
                     self.write_binding_id(*variable);
                     self.output.push_str(" := ");
-                    self.write_value(init);
+                    self.write_value(initial_value);
                 }
 
                 self.output.push_str(" }");
@@ -586,8 +590,8 @@ impl<'a> Printer<'a> {
                 self.output.push_str("post");
                 if !post_input_variables.is_empty() {
                     self.output.push_str(" (");
-                    for (i, id) in post_input_variables.iter().enumerate() {
-                        if i > 0 {
+                    for (index, id) in post_input_variables.iter().enumerate() {
+                        if index > 0 {
                             self.output.push_str(", ");
                         }
                         self.write_binding_id(*id);
@@ -695,8 +699,8 @@ impl<'a> Printer<'a> {
                     "custom_error_revert(0x{}, [",
                     selector_bytes.to_str_radix(16)
                 );
-                for (i, argument) in arguments.iter().enumerate() {
-                    if i > 0 {
+                for (index, argument) in arguments.iter().enumerate() {
+                    if index > 0 {
                         self.output.push_str(", ");
                     }
                     self.write_value(argument);
@@ -778,9 +782,9 @@ impl<'a> Printer<'a> {
                 self.write_value(offset);
                 self.output.push_str(", ");
                 self.write_value(length);
-                if let Some(s) = salt {
+                if let Some(salt_value) = salt {
                     self.output.push_str(", ");
-                    self.write_value(s);
+                    self.write_value(salt_value);
                 }
                 self.output.push(')');
                 self.write_newline();
@@ -805,13 +809,13 @@ impl<'a> Printer<'a> {
             }
 
             Statement::CodeCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
                 self.write_indent();
                 self.output.push_str("codecopy(");
-                self.write_value(dest);
+                self.write_value(destination);
                 self.output.push_str(", ");
                 self.write_value(offset);
                 self.output.push_str(", ");
@@ -822,7 +826,7 @@ impl<'a> Printer<'a> {
 
             Statement::ExtCodeCopy {
                 address,
-                dest,
+                destination,
                 offset,
                 length,
             } => {
@@ -830,7 +834,7 @@ impl<'a> Printer<'a> {
                 self.output.push_str("extcodecopy(");
                 self.write_value(address);
                 self.output.push_str(", ");
-                self.write_value(dest);
+                self.write_value(destination);
                 self.output.push_str(", ");
                 self.write_value(offset);
                 self.output.push_str(", ");
@@ -840,13 +844,13 @@ impl<'a> Printer<'a> {
             }
 
             Statement::ReturnDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
                 self.write_indent();
                 self.output.push_str("returndatacopy(");
-                self.write_value(dest);
+                self.write_value(destination);
                 self.output.push_str(", ");
                 self.write_value(offset);
                 self.output.push_str(", ");
@@ -856,13 +860,13 @@ impl<'a> Printer<'a> {
             }
 
             Statement::DataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
                 self.write_indent();
                 self.output.push_str("datacopy(");
-                self.write_value(dest);
+                self.write_value(destination);
                 self.output.push_str(", ");
                 self.write_value(offset);
                 self.output.push_str(", ");
@@ -872,13 +876,13 @@ impl<'a> Printer<'a> {
             }
 
             Statement::CallDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
                 self.write_indent();
                 self.output.push_str("calldatacopy(");
-                self.write_value(dest);
+                self.write_value(destination);
                 self.output.push_str(", ");
                 self.write_value(offset);
                 self.output.push_str(", ");
@@ -1076,8 +1080,8 @@ impl<'a> Printer<'a> {
                     let _ = write!(self.output, "func_{}", function.0);
                 }
                 self.output.push('(');
-                for (i, argument) in arguments.iter().enumerate() {
-                    if i > 0 {
+                for (index, argument) in arguments.iter().enumerate() {
+                    if index > 0 {
                         self.output.push_str(", ");
                     }
                     self.write_value(argument);
@@ -1161,8 +1165,8 @@ impl<'a> Printer<'a> {
             return;
         }
         self.output.push_str(" [");
-        for (i, value) in values.iter().enumerate() {
-            if i > 0 {
+        for (index, value) in values.iter().enumerate() {
+            if index > 0 {
                 self.output.push_str(", ");
             }
             self.write_value(value);
@@ -1215,8 +1219,8 @@ impl<'a> Printer<'a> {
 
     fn write_type(&mut self, value_type: Type) {
         match value_type {
-            Type::Int(w) => {
-                let _ = write!(self.output, "i{}", w.bits());
+            Type::Int(width) => {
+                let _ = write!(self.output, "i{}", width.bits());
             }
             Type::Ptr(space) => {
                 let space_name = match space {
@@ -1312,29 +1316,29 @@ pub fn print_expression(expression: &Expression) -> String {
 
 /// Implement Display for Object using the printer.
 impl fmt::Display for Object {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", print_object(self))
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", print_object(self))
     }
 }
 
 /// Implement Display for Function using the printer.
 impl fmt::Display for Function {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", print_function(self))
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", print_function(self))
     }
 }
 
 /// Implement Display for Statement using the printer.
 impl fmt::Display for Statement {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", print_statement(self))
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", print_statement(self))
     }
 }
 
 /// Implement Display for Expression using the printer.
 impl fmt::Display for Expression {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", print_expression(self))
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}", print_expression(self))
     }
 }
 

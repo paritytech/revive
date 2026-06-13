@@ -220,10 +220,18 @@ impl MemoryOptimizer {
                     });
                 }
 
-                Statement::MCopy { dest, src, length } => {
+                Statement::MCopy {
+                    destination,
+                    source,
+                    length,
+                } => {
                     self.memory_state.clear();
                     self.pending_stores.clear();
-                    processed.push(Statement::MCopy { dest, src, length });
+                    processed.push(Statement::MCopy {
+                        destination,
+                        source,
+                        length,
+                    });
                 }
 
                 Statement::Let { bindings, value } => {
@@ -262,16 +270,16 @@ impl MemoryOptimizer {
                     let then_memory = self.memory_state.clone();
                     let then_constants = self.constant_values.clone();
 
-                    let else_region = if let Some(mut er) = else_region {
+                    let else_region = if let Some(mut else_branch) = else_region {
                         self.memory_state = pre_branch_memory;
                         self.constant_values = pre_branch_constants;
-                        self.optimize_region(&mut er);
+                        self.optimize_region(&mut else_branch);
 
                         self.memory_state =
                             Self::intersect_memory_state(&then_memory, &self.memory_state);
                         self.constant_values =
                             Self::intersect_constants(&then_constants, &self.constant_values);
-                        Some(er)
+                        Some(else_branch)
                     } else {
                         self.memory_state =
                             Self::intersect_memory_state(&then_memory, &pre_branch_memory);
@@ -311,13 +319,13 @@ impl MemoryOptimizer {
                         exit_constants.push(self.constant_values.clone());
                     }
 
-                    let default = if let Some(mut d) = default {
+                    let default = if let Some(mut default_region) = default {
                         self.memory_state = pre_branch_memory;
                         self.constant_values = pre_branch_constants;
-                        self.optimize_region(&mut d);
+                        self.optimize_region(&mut default_region);
                         exit_memories.push(self.memory_state.clone());
                         exit_constants.push(self.constant_values.clone());
-                        Some(d)
+                        Some(default_region)
                     } else {
                         exit_memories.push(pre_branch_memory);
                         exit_constants.push(pre_branch_constants);
@@ -405,31 +413,31 @@ impl MemoryOptimizer {
                 }
 
                 Statement::CodeCopy {
-                    ref dest,
+                    ref destination,
                     ref length,
                     ..
                 }
                 | Statement::ExtCodeCopy {
-                    ref dest,
+                    ref destination,
                     ref length,
                     ..
                 }
                 | Statement::ReturnDataCopy {
-                    ref dest,
+                    ref destination,
                     ref length,
                     ..
                 }
                 | Statement::DataCopy {
-                    ref dest,
+                    ref destination,
                     ref length,
                     ..
                 }
                 | Statement::CallDataCopy {
-                    ref dest,
+                    ref destination,
                     ref length,
                     ..
                 } => {
-                    self.invalidate_state_for_copy(dest, length);
+                    self.invalidate_state_for_copy(destination, length);
                     processed.push(statement);
                 }
 
@@ -492,12 +500,12 @@ impl MemoryOptimizer {
     /// Must run before [`Self::invalidate_state_overlapping_store`], which drops the
     /// matching `pending_stores` entry that this dead-store check relies on.
     fn eliminate_dead_store_at(&mut self, static_offset: u64, index: usize) {
-        if let Some(&prev_idx) = self.pending_stores.get(&static_offset) {
-            self.dead_store_indices.insert(prev_idx);
+        if let Some(&previous_index) = self.pending_stores.get(&static_offset) {
+            self.dead_store_indices.insert(previous_index);
             self.statistics.stores_eliminated += 1;
             log::trace!(
                 "Dead store at index {} (offset {}) - overwritten at index {}",
-                prev_idx,
+                previous_index,
                 static_offset,
                 index
             );
@@ -522,9 +530,9 @@ impl MemoryOptimizer {
             let tracked_end = tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
             tracked_end <= static_offset || tracked.offset >= new_end
         });
-        self.pending_stores.retain(|&k, _| {
-            let prev_end = k.saturating_add(BYTE_LENGTH_WORD as u64);
-            prev_end <= static_offset || k >= new_end
+        self.pending_stores.retain(|&pending_offset, _| {
+            let pending_end = pending_offset.saturating_add(BYTE_LENGTH_WORD as u64);
+            pending_end <= static_offset || pending_offset >= new_end
         });
     }
 
@@ -541,39 +549,39 @@ impl MemoryOptimizer {
             let tracked_end = tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
             tracked.offset > static_offset || tracked_end <= static_offset
         });
-        self.pending_stores.retain(|&k, _| {
-            let prev_end = k.saturating_add(BYTE_LENGTH_WORD as u64);
-            k > static_offset || prev_end <= static_offset
+        self.pending_stores.retain(|&pending_offset, _| {
+            let pending_end = pending_offset.saturating_add(BYTE_LENGTH_WORD as u64);
+            pending_offset > static_offset || pending_end <= static_offset
         });
     }
 
-    /// Invalidates tracked state overlapping the range written by a `*copy(dest, _, length)`.
+    /// Invalidates tracked state overlapping the range written by a `*copy(destination, _, length)`.
     ///
-    /// A `*copy(dest, _, length)` writes `length` bytes at `[dest, dest + length)`. Any
+    /// A `*copy(destination, _, length)` writes `length` bytes at `[destination, destination + length)`. Any
     /// tracked entry whose own 32-byte write range overlaps that range must be
     /// invalidated — otherwise a later `mload` at the still-cached exact tracked offset
     /// would forward the pre-overwrite value while actual memory has been overwritten by
     /// the copy. Three cases are handled, in priority order:
     ///
-    /// 1. `length == Some(0)`: zero-byte copy is a no-op regardless of whether `dest` is
+    /// 1. `length == Some(0)`: zero-byte copy is a no-op regardless of whether `destination` is
     ///    known — nothing to invalidate.
-    /// 2. `dest == Some(start)` and `length == Some(size)` with `size > 0`: known write
+    /// 2. `destination == Some(start)` and `length == Some(size)` with `size > 0`: known write
     ///    range, retain only entries that don't overlap.
-    /// 3. anything else (dynamic dest with nonzero or unknown length, dynamic length with
-    ///    known dest): conservatively clear all tracking.
-    fn invalidate_state_for_copy(&mut self, dest: &Value, length: &Value) {
+    /// 3. anything else (dynamic destination with nonzero or unknown length, dynamic length with
+    ///    known destination): conservatively clear all tracking.
+    fn invalidate_state_for_copy(&mut self, destination: &Value, length: &Value) {
         let copy_length = self.try_get_static_offset(length);
-        let copy_dest = self.try_get_static_offset(dest);
+        let copy_destination = self.try_get_static_offset(destination);
         if matches!(copy_length, Some(0)) {
-        } else if let (Some(start), Some(size)) = (copy_dest, copy_length) {
+        } else if let (Some(start), Some(size)) = (copy_destination, copy_length) {
             let end = start.saturating_add(size);
             self.memory_state.retain(|_, tracked| {
                 let tracked_end = tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
                 tracked_end <= start || tracked.offset >= end
             });
-            self.pending_stores.retain(|&k, _| {
-                let prev_end = k.saturating_add(BYTE_LENGTH_WORD as u64);
-                prev_end <= start || k >= end
+            self.pending_stores.retain(|&pending_offset, _| {
+                let pending_end = pending_offset.saturating_add(BYTE_LENGTH_WORD as u64);
+                pending_end <= start || pending_offset >= end
             });
         } else {
             self.memory_state.clear();
@@ -668,12 +676,12 @@ impl MemoryOptimizer {
                 if tracked0.offset == 0 && tracked32.offset == BYTE_LENGTH_WORD as u64 {
                     let word0 = tracked0.stored_value;
                     let word1 = tracked32.stored_value;
-                    if let Some(&idx0) = self.pending_stores.get(&0) {
-                        self.dead_store_indices.insert(idx0);
+                    if let Some(&index0) = self.pending_stores.get(&0) {
+                        self.dead_store_indices.insert(index0);
                         self.statistics.stores_eliminated += 1;
                     }
-                    if let Some(&idx32) = self.pending_stores.get(&(BYTE_LENGTH_WORD as u64)) {
-                        self.dead_store_indices.insert(idx32);
+                    if let Some(&index32) = self.pending_stores.get(&(BYTE_LENGTH_WORD as u64)) {
+                        self.dead_store_indices.insert(index32);
                         self.statistics.stores_eliminated += 1;
                     }
                     self.statistics.keccak_pairs_fused += 1;
@@ -688,8 +696,8 @@ impl MemoryOptimizer {
             if let Some(tracked0) = self.memory_state.get(&0) {
                 if tracked0.offset == 0 {
                     let word0 = tracked0.stored_value;
-                    if let Some(&idx0) = self.pending_stores.get(&0) {
-                        self.dead_store_indices.insert(idx0);
+                    if let Some(&index0) = self.pending_stores.get(&0) {
+                        self.dead_store_indices.insert(index0);
                         self.statistics.stores_eliminated += 1;
                     }
                     self.statistics.keccak_singles_fused += 1;
@@ -706,14 +714,16 @@ impl MemoryOptimizer {
 
     /// Intersects two memory states: keeps entries present in both with the same stored value ID.
     fn intersect_memory_state(
-        a: &BTreeMap<u64, TrackedValue>,
-        b: &BTreeMap<u64, TrackedValue>,
+        first: &BTreeMap<u64, TrackedValue>,
+        second: &BTreeMap<u64, TrackedValue>,
     ) -> BTreeMap<u64, TrackedValue> {
         let mut result = BTreeMap::new();
-        for (offset, val_a) in a {
-            if let Some(val_b) = b.get(offset) {
-                if val_a.stored_value.id == val_b.stored_value.id && val_a.offset == val_b.offset {
-                    result.insert(*offset, val_a.clone());
+        for (offset, first_value) in first {
+            if let Some(second_value) = second.get(offset) {
+                if first_value.stored_value.id == second_value.stored_value.id
+                    && first_value.offset == second_value.offset
+                {
+                    result.insert(*offset, first_value.clone());
                 }
             }
         }
@@ -722,14 +732,14 @@ impl MemoryOptimizer {
 
     /// Intersects two constant value maps: keeps entries present in both with the same value.
     fn intersect_constants(
-        a: &BTreeMap<u32, BigUint>,
-        b: &BTreeMap<u32, BigUint>,
+        first: &BTreeMap<u32, BigUint>,
+        second: &BTreeMap<u32, BigUint>,
     ) -> BTreeMap<u32, BigUint> {
         let mut result = BTreeMap::new();
-        for (id, val_a) in a {
-            if let Some(val_b) = b.get(id) {
-                if val_a == val_b {
-                    result.insert(*id, val_a.clone());
+        for (id, first_value) in first {
+            if let Some(second_value) = second.get(id) {
+                if first_value == second_value {
+                    result.insert(*id, first_value.clone());
                 }
             }
         }
@@ -756,8 +766,8 @@ impl MemoryOptimizer {
             return BTreeMap::new();
         }
         let mut result = constants[0].clone();
-        for c in &constants[1..] {
-            result = Self::intersect_constants(&result, c);
+        for constant_map in &constants[1..] {
+            result = Self::intersect_constants(&result, constant_map);
         }
         result
     }
@@ -765,8 +775,8 @@ impl MemoryOptimizer {
     /// Tries to extract a static offset from a Value.
     /// Looks up the value ID in the constant_values map.
     fn try_get_static_offset(&self, value: &Value) -> Option<u64> {
-        self.constant_values.get(&value.id.0).and_then(|big| {
-            let digits = big.to_u64_digits();
+        self.constant_values.get(&value.id.0).and_then(|constant| {
+            let digits = constant.to_u64_digits();
             if digits.is_empty() {
                 Some(0)
             } else if digits.len() == 1 {
@@ -787,40 +797,40 @@ impl MemoryOptimizer {
                 lhs,
                 rhs,
             } => {
-                let l = self.constant_values.get(&lhs.id.0)?;
-                let r = self.constant_values.get(&rhs.id.0)?;
+                let left = self.constant_values.get(&lhs.id.0)?;
+                let right = self.constant_values.get(&rhs.id.0)?;
                 match operation {
-                    BinaryOperation::Add => Some(l + r),
+                    BinaryOperation::Add => Some(left + right),
                     BinaryOperation::Sub => {
-                        if l >= r {
-                            Some(l - r)
+                        if left >= right {
+                            Some(left - right)
                         } else {
                             None
                         }
                     }
-                    BinaryOperation::Mul => Some(l * r),
+                    BinaryOperation::Mul => Some(left * right),
                     BinaryOperation::Div => {
-                        if r.is_zero() {
+                        if right.is_zero() {
                             None
                         } else {
-                            Some(l / r)
+                            Some(left / right)
                         }
                     }
-                    BinaryOperation::And => Some(l & r),
-                    BinaryOperation::Or => Some(l | r),
-                    BinaryOperation::Xor => Some(l ^ r),
+                    BinaryOperation::And => Some(left & right),
+                    BinaryOperation::Or => Some(left | right),
+                    BinaryOperation::Xor => Some(left ^ right),
                     BinaryOperation::Shl => {
-                        let shift = r.to_u32_digits().first().copied().unwrap_or(0);
+                        let shift = right.to_u32_digits().first().copied().unwrap_or(0);
                         if shift < 256 {
-                            Some(l << shift as usize)
+                            Some(left << shift as usize)
                         } else {
                             Some(BigUint::from(0u32))
                         }
                     }
                     BinaryOperation::Shr => {
-                        let shift = r.to_u32_digits().first().copied().unwrap_or(0);
+                        let shift = right.to_u32_digits().first().copied().unwrap_or(0);
                         if shift < 256 {
-                            Some(l >> shift as usize)
+                            Some(left >> shift as usize)
                         } else {
                             Some(BigUint::from(0u32))
                         }
@@ -892,12 +902,12 @@ impl FmpPropagation {
         let mut direct_writers = BTreeSet::new();
         let mut callers: BTreeMap<FunctionId, Vec<FunctionId>> = BTreeMap::new();
 
-        for (fid, function) in &object.functions {
+        for (function_id, function) in &object.functions {
             if Self::statements_write_fmp(&function.body.statements) {
-                direct_writers.insert(*fid);
+                direct_writers.insert(*function_id);
             }
             Self::collect_callees(&function.body.statements, &mut |callee| {
-                callers.entry(callee).or_default().push(*fid);
+                callers.entry(callee).or_default().push(*function_id);
             });
         }
 
@@ -905,8 +915,8 @@ impl FmpPropagation {
 
         let mut writers = direct_writers.clone();
         let mut worklist: Vec<FunctionId> = direct_writers.into_iter().collect();
-        while let Some(fid) = worklist.pop() {
-            if let Some(caller_list) = callers.get(&fid) {
+        while let Some(function_id) = worklist.pop() {
+            if let Some(caller_list) = callers.get(&function_id) {
                 for caller in caller_list {
                     if writers.insert(*caller) {
                         worklist.push(*caller);
@@ -920,11 +930,11 @@ impl FmpPropagation {
 
     /// Collects all function IDs called in a statement list, recursing through
     /// nested regions and `For::condition_statements`.
-    fn collect_callees(statements: &[Statement], cb: &mut dyn FnMut(FunctionId)) {
+    fn collect_callees(statements: &[Statement], callback: &mut dyn FnMut(FunctionId)) {
         for_each_statement(statements, &mut |statement| {
             if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
                 if let Expression::Call { function, .. } = value {
-                    cb(*function);
+                    callback(*function);
                 }
             }
         });
@@ -1018,8 +1028,8 @@ impl FmpPropagation {
                     let final_value = new_value.unwrap_or(value);
 
                     if bindings.len() == 1 {
-                        if let Some(c) = Self::eval_const(&constants, &final_value) {
-                            constants.insert(bindings[0].0, c);
+                        if let Some(constant) = Self::eval_const(&constants, &final_value) {
+                            constants.insert(bindings[0].0, constant);
                         }
                     }
 
@@ -1045,13 +1055,13 @@ impl FmpPropagation {
                     self.propagate_region(&mut then_region, fmp_value.clone());
                     let then_writes = self.region_modifies_fmp(&then_region.statements);
 
-                    let else_region = if let Some(mut er) = else_region {
-                        self.propagate_region(&mut er, fmp_value.clone());
-                        let else_writes = self.region_modifies_fmp(&er.statements);
+                    let else_region = if let Some(mut else_branch) = else_region {
+                        self.propagate_region(&mut else_branch, fmp_value.clone());
+                        let else_writes = self.region_modifies_fmp(&else_branch.statements);
                         if then_writes || else_writes {
                             fmp_value = None;
                         }
-                        Some(er)
+                        Some(else_branch)
                     } else {
                         if then_writes {
                             fmp_value = None;
@@ -1084,12 +1094,12 @@ impl FmpPropagation {
                         }
                     }
 
-                    let default = if let Some(mut d) = default {
-                        self.propagate_region(&mut d, fmp_value.clone());
-                        if self.region_modifies_fmp(&d.statements) {
+                    let default = if let Some(mut default_region) = default {
+                        self.propagate_region(&mut default_region, fmp_value.clone());
+                        if self.region_modifies_fmp(&default_region.statements) {
                             any_writes = true;
                         }
-                        Some(d)
+                        Some(default_region)
                     } else {
                         None
                     };
@@ -1147,39 +1157,47 @@ impl FmpPropagation {
                     });
                 }
 
-                Statement::MCopy { dest, src, length } => {
-                    if Self::write_may_cover_fmp(&constants, &dest, &length) {
+                Statement::MCopy {
+                    destination,
+                    source,
+                    length,
+                } => {
+                    if Self::write_may_cover_fmp(&constants, &destination, &length) {
                         fmp_value = None;
                     }
-                    result.push(Statement::MCopy { dest, src, length });
+                    result.push(Statement::MCopy {
+                        destination,
+                        source,
+                        length,
+                    });
                 }
 
                 Statement::CallDataCopy {
-                    ref dest,
+                    ref destination,
                     ref length,
                     ..
                 }
                 | Statement::CodeCopy {
-                    ref dest,
+                    ref destination,
                     ref length,
                     ..
                 }
                 | Statement::ExtCodeCopy {
-                    ref dest,
+                    ref destination,
                     ref length,
                     ..
                 }
                 | Statement::ReturnDataCopy {
-                    ref dest,
+                    ref destination,
                     ref length,
                     ..
                 }
                 | Statement::DataCopy {
-                    ref dest,
+                    ref destination,
                     ref length,
                     ..
                 } => {
-                    if Self::write_may_cover_fmp(&constants, dest, length) {
+                    if Self::write_may_cover_fmp(&constants, destination, length) {
                         fmp_value = None;
                     }
                     result.push(statement);
@@ -1216,22 +1234,22 @@ impl FmpPropagation {
         result
     }
 
-    /// Whether a memory write of `length` bytes starting at `dest` could overlap the
+    /// Whether a memory write of `length` bytes starting at `destination` could overlap the
     /// free-memory-pointer slot `[0x40, 0x60)`. Conservative: an unresolved destination,
     /// or an unresolved length from a destination below `0x60`, is treated as possibly
     /// covering it. A destination provably `>= 0x60` only writes upward and cannot reach
     /// the slot (so FMP-relative copies to `>= 0x80`, as Solidity emits, never invalidate).
     fn write_may_cover_fmp(
         constants: &BTreeMap<u32, BigUint>,
-        dest: &Value,
+        destination: &Value,
         length: &Value,
     ) -> bool {
         const FMP_SLOT_START: u64 = 0x40;
         const FMP_SLOT_END: u64 = 0x60;
-        match Self::resolve_offset(constants, dest) {
-            Some(d) if d >= FMP_SLOT_END => false,
-            Some(d) => match Self::resolve_offset(constants, length) {
-                Some(l) => d.saturating_add(l) > FMP_SLOT_START,
+        match Self::resolve_offset(constants, destination) {
+            Some(start) if start >= FMP_SLOT_END => false,
+            Some(start) => match Self::resolve_offset(constants, length) {
+                Some(size) => start.saturating_add(size) > FMP_SLOT_START,
                 None => true,
             },
             None => true,
@@ -1303,8 +1321,8 @@ impl FmpPropagation {
 
     /// Resolves a Value to a constant offset if known.
     fn resolve_offset(constants: &BTreeMap<u32, BigUint>, value: &Value) -> Option<u64> {
-        constants.get(&value.id.0).and_then(|big| {
-            let digits = big.to_u64_digits();
+        constants.get(&value.id.0).and_then(|constant| {
+            let digits = constant.to_u64_digits();
             if digits.is_empty() {
                 Some(0)
             } else if digits.len() == 1 {
@@ -1330,19 +1348,19 @@ impl FmpPropagation {
                 lhs,
                 rhs,
             } => {
-                let l = constants.get(&lhs.id.0)?;
-                let r = constants.get(&rhs.id.0)?;
+                let left = constants.get(&lhs.id.0)?;
+                let right = constants.get(&rhs.id.0)?;
                 match operation {
-                    BinaryOperation::Add => Some(l + r),
+                    BinaryOperation::Add => Some(left + right),
                     BinaryOperation::Sub => {
-                        if l >= r {
-                            Some(l - r)
+                        if left >= right {
+                            Some(left - right)
                         } else {
                             None
                         }
                     }
-                    BinaryOperation::And => Some(l & r),
-                    BinaryOperation::Or => Some(l | r),
+                    BinaryOperation::And => Some(left & right),
+                    BinaryOperation::Or => Some(left | right),
                     _ => None,
                 }
             }
@@ -1367,7 +1385,7 @@ mod tests {
     fn test_load_after_store_elimination() {
         use crate::ir::{MemoryRegion, Object};
 
-        let mut opt = MemoryOptimizer::new();
+        let mut optimizer = MemoryOptimizer::new();
 
         let offset_id = ValueId(1);
         let value_id = ValueId(2);
@@ -1419,7 +1437,7 @@ mod tests {
             data: BTreeMap::new(),
         };
 
-        let statistics = opt.optimize_object(&mut object);
+        let statistics = optimizer.optimize_object(&mut object);
 
         assert_eq!(statistics.loads_eliminated, 1);
 
@@ -1438,7 +1456,7 @@ mod tests {
     fn test_constant_propagation_through_add() {
         use crate::ir::{MemoryRegion, Object};
 
-        let mut opt = MemoryOptimizer::new();
+        let mut optimizer = MemoryOptimizer::new();
 
         let base_id = ValueId(1);
         let offset_id = ValueId(2);
@@ -1505,22 +1523,24 @@ mod tests {
             data: BTreeMap::new(),
         };
 
-        let _stats = opt.optimize_object(&mut object);
+        let _statistics = optimizer.optimize_object(&mut object);
     }
 
     #[test]
     fn test_zero_offset_handling() {
-        let mut opt = MemoryOptimizer::new();
+        let mut optimizer = MemoryOptimizer::new();
 
         let zero_id = ValueId(1);
-        opt.constant_values.insert(zero_id.0, BigUint::from(0u32));
+        optimizer
+            .constant_values
+            .insert(zero_id.0, BigUint::from(0u32));
 
         let value = Value {
             id: zero_id,
             value_type: Type::Int(BitWidth::I256),
         };
 
-        let offset = opt.try_get_static_offset(&value);
+        let offset = optimizer.try_get_static_offset(&value);
         assert_eq!(offset, Some(0));
     }
 
@@ -1528,7 +1548,7 @@ mod tests {
     fn test_dead_store_elimination() {
         use crate::ir::{MemoryRegion, Object};
 
-        let mut opt = MemoryOptimizer::new();
+        let mut optimizer = MemoryOptimizer::new();
 
         let offset_id = ValueId(1);
         let value1_id = ValueId(2);
@@ -1588,7 +1608,7 @@ mod tests {
             data: BTreeMap::new(),
         };
 
-        let statistics = opt.optimize_object(&mut object);
+        let statistics = optimizer.optimize_object(&mut object);
 
         assert_eq!(statistics.stores_eliminated, 1);
 
@@ -1605,7 +1625,7 @@ mod tests {
     fn test_no_dead_store_when_read() {
         use crate::ir::{MemoryRegion, Object};
 
-        let mut opt = MemoryOptimizer::new();
+        let mut optimizer = MemoryOptimizer::new();
 
         let offset_id = ValueId(1);
         let value1_id = ValueId(2);
@@ -1676,7 +1696,7 @@ mod tests {
             data: BTreeMap::new(),
         };
 
-        let statistics = opt.optimize_object(&mut object);
+        let statistics = optimizer.optimize_object(&mut object);
 
         assert_eq!(statistics.stores_eliminated, 0);
 
@@ -1690,9 +1710,9 @@ mod tests {
         use crate::ir::{MemoryRegion, Object};
         use num::BigUint;
 
-        let v1 = make_value(1);
-        let v2 = make_value(2);
-        let v3_id = ValueId(3);
+        let fmp_stored = make_value(1);
+        let fmp_offset = make_value(2);
+        let load_result = ValueId(3);
 
         let statements = vec![
             Statement::Let {
@@ -1710,14 +1730,14 @@ mod tests {
                 },
             },
             Statement::MStore {
-                offset: v2,
-                value: v1,
+                offset: fmp_offset,
+                value: fmp_stored,
                 region: MemoryRegion::FreePointerSlot,
             },
             Statement::Let {
-                bindings: vec![v3_id],
+                bindings: vec![load_result],
                 value: Expression::MLoad {
-                    offset: v2,
+                    offset: fmp_offset,
                     region: MemoryRegion::FreePointerSlot,
                 },
             },
@@ -1738,8 +1758,11 @@ mod tests {
 
         if let Statement::Let { value, .. } = &object.code.statements[3] {
             match value {
-                Expression::Literal { value: v, .. } => {
-                    assert_eq!(*v, BigUint::from(0x80u64), "FMP should be 0x80");
+                Expression::Literal {
+                    value: literal_value,
+                    ..
+                } => {
+                    assert_eq!(*literal_value, BigUint::from(0x80u64), "FMP should be 0x80");
                 }
                 other => panic!("Expected Literal, got {:?}", other),
             }

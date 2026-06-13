@@ -102,7 +102,7 @@ pub enum UseContext {
     MemoryValue,
     /// Used as a storage key or value, or as a `keccak256`/mapping hash-input word that
     /// derives a storage slot (256-bit required). Unlike `FunctionArg`, this demand never
-    /// resolves through `fn_arg_demand`, so a value that is *also* passed to a narrowed
+    /// resolves through `fn_argument_demand`, so a value that is *also* passed to a narrowed
     /// parameter is not truncated at its definition — truncating a hash input would compute
     /// the slot over the wrong bits and corrupt storage.
     StorageAccess,
@@ -151,9 +151,9 @@ pub struct TypeInference {
     function_returns: BTreeMap<u32, Vec<ValueId>>,
     /// Per-value refined function-argument demand: the widest narrowed parameter width
     /// across all call sites where this value is passed as an argument.
-    /// Set by `refine_demands_from_params` after parameter narrowing.
+    /// Set by `refine_demands_from_parameters` after parameter narrowing.
     /// When present, overrides UseContext::FunctionArg (I256) in `use_demand_width`.
-    fn_arg_demand: BTreeMap<u32, BitWidth>,
+    fn_argument_demand: BTreeMap<u32, BitWidth>,
     /// Known constant values (from Literal expressions), used for shift-amount
     /// analysis in forward inference. Only stores values that fit in u64.
     known_constants: BTreeMap<u32, u64>,
@@ -170,21 +170,21 @@ pub struct TypeInference {
     /// Values that have at least one *unconditional* use narrowing their `max_width`
     /// below I256 — a memory offset/length consumed on every path through the function,
     /// not guarded by an `if`/`switch` branch or a loop body.
-    /// [`Self::narrow_function_params`] narrows a parameter only when it is in this set:
+    /// [`Self::narrow_function_parameters`] narrows a parameter only when it is in this set:
     /// the call boundary inserts an unconditional checked truncation, which matches EVM
     /// only when an out-of-range argument would also have trapped in the original. A use
     /// reached only conditionally (e.g. `if lt(x,100){mstore(x,0)}`) does not justify it —
     /// EVM skips the store for `x >= 100`, so the boundary truncation would trap spuriously.
     unconditionally_narrowed: BTreeSet<u32>,
     /// Values passed as a call argument on an unconditional path. When such a value is
-    /// narrowed only because it flows into a narrowed callee parameter (via [`Self::fn_arg_demand`]
+    /// narrowed only because it flows into a narrowed callee parameter (via [`Self::fn_argument_demand`]
     /// in [`Self::apply_backward_constraints`]), the callee's own call-boundary checked
     /// truncation already traps for out-of-range values, so the value is added to
     /// [`Self::unconditionally_narrowed`] — narrowing it is sound for the same reason.
-    unconditional_call_arg: BTreeSet<u32>,
+    unconditional_call_argument: BTreeSet<u32>,
     /// Walk state for [`Self::collect_uses_block`]: false while recursing into a
     /// conditionally-executed region (`if`/`switch` branch, loop body). Gates insertion
-    /// into [`Self::unconditionally_narrowed`] and [`Self::unconditional_call_arg`].
+    /// into [`Self::unconditionally_narrowed`] and [`Self::unconditional_call_argument`].
     in_unconditional_context: bool,
     /// When set, a `FreePointerSlot` `mload` (the FMP at 0x40) forward-infers to I256 instead
     /// of I32. The I32 width is only sound when the FMP holds a Solidity-allocator pointer
@@ -205,11 +205,11 @@ impl TypeInference {
             uses: BTreeMap::new(),
             changed: false,
             function_returns: BTreeMap::new(),
-            fn_arg_demand: BTreeMap::new(),
+            fn_argument_demand: BTreeMap::new(),
             known_constants: BTreeMap::new(),
             full_width_operands: BTreeSet::new(),
             unconditionally_narrowed: BTreeSet::new(),
-            unconditional_call_arg: BTreeSet::new(),
+            unconditional_call_argument: BTreeSet::new(),
             in_unconditional_context: true,
             fmp_could_be_unbounded: false,
             sub_inferences: Vec::new(),
@@ -244,8 +244,8 @@ impl TypeInference {
     ///
     /// Every `UseContext` variant returns I256 from `max_width_needed`, so the
     /// only path that yields a result below I256 is `UseContext::FunctionArg`
-    /// when `fn_arg_demand` carries a refined width for the value (populated
-    /// by `refine_demands_from_params` after parameter narrowing). In
+    /// when `fn_argument_demand` carries a refined width for the value (populated
+    /// by `refine_demands_from_parameters` after parameter narrowing). In
     /// particular, `MemoryOffset` deliberately stays at I256 — see the
     /// `MemoryOffset` arm of `max_width_needed` for why narrowing offsets
     /// here would bypass the use-site bounds check.
@@ -255,14 +255,14 @@ impl TypeInference {
                 return BitWidth::I256;
             }
             let mut widest_needed = BitWidth::I1;
-            for use_ctx in uses {
-                let needed = match use_ctx {
+            for use_context in uses {
+                let needed = match use_context {
                     UseContext::FunctionArg => self
-                        .fn_arg_demand
+                        .fn_argument_demand
                         .get(&id.0)
                         .copied()
                         .unwrap_or(BitWidth::I256),
-                    _ => use_ctx.max_width_needed(),
+                    _ => use_context.max_width_needed(),
                 };
                 if needed > widest_needed {
                     widest_needed = needed;
@@ -405,21 +405,21 @@ impl TypeInference {
     /// Apply backward constraints based on collected uses.
     ///
     /// A value's `max_width` only drops below I256 here when every one of its uses is a
-    /// `FunctionArg` whose narrowed callee-parameter demand (via [`Self::fn_arg_demand`]) is
+    /// `FunctionArg` whose narrowed callee-parameter demand (via [`Self::fn_argument_demand`]) is
     /// below I256 — every other use context demands I256. Such a value flows exclusively into
     /// narrowed parameters, so an unconditional call to one of them already truncates it (with
     /// a trap) at the call boundary; that makes it [`Self::unconditionally_narrowed`] too.
     fn apply_backward_constraints(&mut self) {
         for (id, uses) in &self.uses {
             let mut widest_needed = BitWidth::I1;
-            for use_ctx in uses {
-                let needed = match use_ctx {
+            for use_context in uses {
+                let needed = match use_context {
                     UseContext::FunctionArg => self
-                        .fn_arg_demand
+                        .fn_argument_demand
                         .get(id)
                         .copied()
                         .unwrap_or(BitWidth::I256),
-                    _ => use_ctx.max_width_needed(),
+                    _ => use_context.max_width_needed(),
                 };
                 if needed > widest_needed {
                     widest_needed = needed;
@@ -430,7 +430,7 @@ impl TypeInference {
                 let mut constraint = self.constraints.get(id).copied().unwrap_or_default();
                 constraint.narrow_max_to(widest_needed);
                 self.constraints.insert(*id, constraint);
-                if self.unconditional_call_arg.contains(id) {
+                if self.unconditional_call_argument.contains(id) {
                     self.unconditionally_narrowed.insert(*id);
                 }
             }
@@ -439,7 +439,7 @@ impl TypeInference {
 
     /// Computes the widest backward demand excluding "transparent-for-parameters" uses.
     ///
-    /// Used by `narrow_function_params` to determine if only Comparison/Arithmetic
+    /// Used by `narrow_function_parameters` to determine if only Comparison/Arithmetic
     /// uses block parameter narrowing. Returns I256 if no uses recorded or
     /// any truly width-requiring use needs I256.
     ///
@@ -452,17 +452,17 @@ impl TypeInference {
                 return BitWidth::I256;
             }
             let mut widest = BitWidth::I1;
-            for use_ctx in uses {
-                if matches!(use_ctx, UseContext::Comparison) {
+            for use_context in uses {
+                if matches!(use_context, UseContext::Comparison) {
                     continue;
                 }
-                let needed = match use_ctx {
+                let needed = match use_context {
                     UseContext::FunctionArg => self
-                        .fn_arg_demand
+                        .fn_argument_demand
                         .get(&id.0)
                         .copied()
                         .unwrap_or(BitWidth::I256),
-                    _ => use_ctx.max_width_needed(),
+                    _ => use_context.max_width_needed(),
                 };
                 if needed > widest {
                     widest = needed;
@@ -535,9 +535,9 @@ impl TypeInference {
                     | BinaryOperation::And,
             } => {
                 let mut changed = false;
-                for use_ctx in result_uses {
-                    changed |= self.record_use_if_new(lhs.id, *use_ctx);
-                    changed |= self.record_use_if_new(rhs.id, *use_ctx);
+                for use_context in result_uses {
+                    changed |= self.record_use_if_new(lhs.id, *use_context);
+                    changed |= self.record_use_if_new(rhs.id, *use_context);
                 }
                 changed
             }
@@ -547,8 +547,8 @@ impl TypeInference {
                 ..
             } => {
                 let mut changed = false;
-                for use_ctx in result_uses {
-                    changed |= self.record_use_if_new(rhs.id, *use_ctx);
+                for use_context in result_uses {
+                    changed |= self.record_use_if_new(rhs.id, *use_context);
                 }
                 changed
             }
@@ -557,15 +557,15 @@ impl TypeInference {
                 operation: UnaryOperation::Not,
             } => {
                 let mut changed = false;
-                for use_ctx in result_uses {
-                    changed |= self.record_use_if_new(operand.id, *use_ctx);
+                for use_context in result_uses {
+                    changed |= self.record_use_if_new(operand.id, *use_context);
                 }
                 changed
             }
             Expression::Var(id) => {
                 let mut changed = false;
-                for use_ctx in result_uses {
-                    changed |= self.record_use_if_new(*id, *use_ctx);
+                for use_context in result_uses {
+                    changed |= self.record_use_if_new(*id, *use_context);
                 }
                 changed
             }
@@ -610,7 +610,7 @@ impl TypeInference {
     /// argument (with a trap) unconditionally at each call site.
     ///
     /// Returns true if any parameter was narrowed.
-    pub fn narrow_function_params(&self, object: &mut Object) -> bool {
+    pub fn narrow_function_parameters(&self, object: &mut Object) -> bool {
         let mut changed = false;
         for function in object.functions.values_mut() {
             for (parameter_id, parameter_type) in &mut function.parameters {
@@ -635,8 +635,10 @@ impl TypeInference {
             }
         }
 
-        for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
-            changed |= sub_inf.narrow_function_params(subobject);
+        for (subobject, sub_inference) in
+            object.subobjects.iter_mut().zip(self.sub_inferences.iter())
+        {
+            changed |= sub_inference.narrow_function_parameters(subobject);
         }
         changed
     }
@@ -647,14 +649,14 @@ impl TypeInference {
     /// min_width of each argument. If every caller passes an argument that
     /// provably fits in fewer than 256 bits, the parameter can be narrowed.
     ///
-    /// This is the "forward" complement to the demand-based `narrow_function_params`:
-    /// - `narrow_function_params`: narrows based on how values are USED inside the function
-    /// - `narrow_function_params_from_callers`: narrows based on what callers PROVIDE
+    /// This is the "forward" complement to the demand-based `narrow_function_parameters`:
+    /// - `narrow_function_parameters`: narrows based on how values are USED inside the function
+    /// - `narrow_function_parameters_from_callers`: narrows based on what callers PROVIDE
     ///
     /// Key use case: after guard_narrow inserts `and(value, 2^160-1)` for address
     /// validation, the call-site argument has min_width=I160. This pass detects
     /// that ALL callers provide I160 values and narrows the parameter to I160.
-    pub fn narrow_function_params_from_callers(&self, object: &mut Object) -> bool {
+    pub fn narrow_function_parameters_from_callers(&self, object: &mut Object) -> bool {
         let mut argument_widths: BTreeMap<(u32, usize), BitWidth> = BTreeMap::new();
         let mut called_functions: BTreeSet<u32> = BTreeSet::new();
 
@@ -676,11 +678,11 @@ impl TypeInference {
             if !called_functions.contains(&function_id.0) {
                 continue;
             }
-            for (i, (_, parameter_type)) in function.parameters.iter_mut().enumerate() {
+            for (index, (_, parameter_type)) in function.parameters.iter_mut().enumerate() {
                 if !matches!(parameter_type, Type::Int(BitWidth::I256)) {
                     continue;
                 }
-                if let Some(&width) = argument_widths.get(&(function_id.0, i)) {
+                if let Some(&width) = argument_widths.get(&(function_id.0, index)) {
                     if width < BitWidth::I256 {
                         let clamped = width.max(BitWidth::I32);
                         *parameter_type = Type::Int(clamped);
@@ -690,8 +692,10 @@ impl TypeInference {
             }
         }
 
-        for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
-            changed |= sub_inf.narrow_function_params_from_callers(subobject);
+        for (subobject, sub_inference) in
+            object.subobjects.iter_mut().zip(self.sub_inferences.iter())
+        {
+            changed |= sub_inference.narrow_function_parameters_from_callers(subobject);
         }
         changed
     }
@@ -723,11 +727,13 @@ impl TypeInference {
             };
             if let Some((fid, arguments)) = call {
                 called_functions.insert(fid.0);
-                for (i, argument) in arguments.iter().enumerate() {
-                    let arg_width = self.get(argument.id).min_width;
-                    let entry = argument_widths.entry((fid.0, i)).or_insert(arg_width);
-                    if arg_width > *entry {
-                        *entry = arg_width;
+                for (index, argument) in arguments.iter().enumerate() {
+                    let argument_width = self.get(argument.id).min_width;
+                    let entry = argument_widths
+                        .entry((fid.0, index))
+                        .or_insert(argument_width);
+                    if argument_width > *entry {
+                        *entry = argument_width;
                     }
                 }
             }
@@ -760,27 +766,27 @@ impl TypeInference {
             let num_returns = function.returns.len();
 
             let mut return_path_ids: Vec<Vec<ValueId>> = vec![Vec::new(); num_returns];
-            for (i, slot) in return_path_ids.iter_mut().enumerate() {
-                if let Some(id) = function.return_values.get(i) {
+            for (index, slot) in return_path_ids.iter_mut().enumerate() {
+                if let Some(id) = function.return_values.get(index) {
                     slot.push(*id);
                 }
             }
             crate::ir::for_each_statement(&function.body.statements, &mut |statement| {
                 if let Statement::Leave { return_values } = statement {
-                    for (i, value) in return_values.iter().enumerate() {
-                        if let Some(slot) = return_path_ids.get_mut(i) {
+                    for (index, value) in return_values.iter().enumerate() {
+                        if let Some(slot) = return_path_ids.get_mut(index) {
                             slot.push(value.id);
                         }
                     }
                 }
             });
 
-            for (i, ret_ty) in function.returns.iter_mut().enumerate() {
+            for (index, ret_ty) in function.returns.iter_mut().enumerate() {
                 if !matches!(ret_ty, Type::Int(BitWidth::I256)) {
                     continue;
                 }
 
-                let ids = &return_path_ids[i];
+                let ids = &return_path_ids[index];
                 if ids.is_empty() {
                     continue;
                 }
@@ -802,8 +808,10 @@ impl TypeInference {
             }
         }
 
-        for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
-            changed |= sub_inf.narrow_function_returns(subobject);
+        for (subobject, sub_inference) in
+            object.subobjects.iter_mut().zip(self.sub_inferences.iter())
+        {
+            changed |= sub_inference.narrow_function_returns(subobject);
         }
         changed
     }
@@ -836,17 +844,17 @@ impl TypeInference {
         let mut changed = false;
         for function in object.functions.values_mut() {
             let demands = match return_demands.get(&function.id.0) {
-                Some(d) => d,
+                Some(widths) => widths,
                 None => continue,
             };
 
-            for (i, ret_ty) in function.returns.iter_mut().enumerate() {
+            for (index, ret_ty) in function.returns.iter_mut().enumerate() {
                 if !matches!(ret_ty, Type::Int(BitWidth::I256)) {
                     continue;
                 }
 
-                let demand = match demands.get(i) {
-                    Some(d) => *d,
+                let demand = match demands.get(index) {
+                    Some(width) => *width,
                     None => continue,
                 };
 
@@ -858,8 +866,10 @@ impl TypeInference {
             }
         }
 
-        for (subobject, sub_inf) in object.subobjects.iter_mut().zip(self.sub_inferences.iter()) {
-            changed |= sub_inf.narrow_function_returns_from_demand(subobject);
+        for (subobject, sub_inference) in
+            object.subobjects.iter_mut().zip(self.sub_inferences.iter())
+        {
+            changed |= sub_inference.narrow_function_returns_from_demand(subobject);
         }
         changed
     }
@@ -878,13 +888,13 @@ impl TypeInference {
                 value: Expression::Call { function, .. },
             } = statement
             {
-                for (i, binding_id) in bindings.iter().enumerate() {
+                for (index, binding_id) in bindings.iter().enumerate() {
                     let demand = self.use_demand_width(*binding_id);
                     let entry = demands.entry(function.0).or_default();
-                    while entry.len() <= i {
+                    while entry.len() <= index {
                         entry.push(BitWidth::I1);
                     }
-                    entry[i] = entry[i].max(demand);
+                    entry[index] = entry[index].max(demand);
                 }
             }
         });
@@ -892,7 +902,7 @@ impl TypeInference {
 
     /// Refines demand widths based on narrowed function parameter types.
     ///
-    /// After `narrow_function_params` has narrowed function parameter types,
+    /// After `narrow_function_parameters` has narrowed function parameter types,
     /// this method re-examines all call sites and updates use demands for
     /// arguments. If a parameter was narrowed from I256 to I64, the argument
     /// only needs I64, not I256.
@@ -901,7 +911,7 @@ impl TypeInference {
     /// narrowed-parameter functions and used as memory offsets, it can be
     /// fully narrowed to I64 even though it was originally classified as
     /// FunctionArg (which defaults to I256).
-    pub fn refine_demands_from_params(&mut self, object: &Object) {
+    pub fn refine_demands_from_parameters(&mut self, object: &Object) {
         let parameter_widths: BTreeMap<u32, Vec<BitWidth>> = object
             .functions
             .iter()
@@ -927,8 +937,10 @@ impl TypeInference {
 
         self.apply_backward_constraints();
 
-        for (subobject, sub_inf) in object.subobjects.iter().zip(self.sub_inferences.iter_mut()) {
-            sub_inf.refine_demands_from_params(subobject);
+        for (subobject, sub_inference) in
+            object.subobjects.iter().zip(self.sub_inferences.iter_mut())
+        {
+            sub_inference.refine_demands_from_parameters(subobject);
         }
     }
 
@@ -960,7 +972,7 @@ impl TypeInference {
             if let Some(widths) = parameter_widths.get(&function.0) {
                 for (argument, parameter_width) in arguments.iter().zip(widths.iter()) {
                     let entry = self
-                        .fn_arg_demand
+                        .fn_argument_demand
                         .entry(argument.id.0)
                         .or_insert(BitWidth::I1);
                     *entry = (*entry).max(*parameter_width);
@@ -968,7 +980,7 @@ impl TypeInference {
             } else {
                 for argument in arguments {
                     let entry = self
-                        .fn_arg_demand
+                        .fn_argument_demand
                         .entry(argument.id.0)
                         .or_insert(BitWidth::I1);
                     *entry = BitWidth::I256;
@@ -1071,8 +1083,13 @@ impl TypeInference {
     /// intact (it saturates and the host zero-fills). Narrowing it would truncate the offset at
     /// its definition / the call boundary and read the wrong source (or trap) instead of
     /// zero-filling.
-    fn record_zero_filling_copy_uses(&mut self, dest: &Value, offset: &Value, length: &Value) {
-        self.record_memory_offset_use(dest);
+    fn record_zero_filling_copy_uses(
+        &mut self,
+        destination: &Value,
+        offset: &Value,
+        length: &Value,
+    ) {
+        self.record_memory_offset_use(destination);
         self.record_memory_offset_use(length);
         self.record_use(offset.id, UseContext::MemoryOffset);
         self.full_width_operands.insert(offset.id.0);
@@ -1081,8 +1098,8 @@ impl TypeInference {
     /// Records the operand uses of a copy that reverts on an out-of-range source
     /// (`returndatacopy`; `extcodecopy` is unsupported). All three operands narrow to i64 — the
     /// use-site checked truncation traps on an out-of-range source, matching EVM's revert.
-    fn record_reverting_copy_uses(&mut self, dest: &Value, offset: &Value, length: &Value) {
-        self.record_memory_offset_use(dest);
+    fn record_reverting_copy_uses(&mut self, destination: &Value, offset: &Value, length: &Value) {
+        self.record_memory_offset_use(destination);
         self.record_memory_offset_use(offset);
         self.record_memory_offset_use(length);
     }
@@ -1183,49 +1200,53 @@ impl TypeInference {
             }
 
             Statement::CallDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             }
             | Statement::CodeCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                self.record_zero_filling_copy_uses(dest, offset, length);
+                self.record_zero_filling_copy_uses(destination, offset, length);
             }
 
             Statement::ExtCodeCopy {
-                dest,
+                destination,
                 offset,
                 length,
                 ..
             }
             | Statement::ReturnDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                self.record_reverting_copy_uses(dest, offset, length);
+                self.record_reverting_copy_uses(destination, offset, length);
             }
 
             Statement::DataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                self.record_use(dest.id, UseContext::MemoryOffset);
-                self.narrow_from_use(dest.id, BitWidth::I64);
+                self.record_use(destination.id, UseContext::MemoryOffset);
+                self.narrow_from_use(destination.id, BitWidth::I64);
                 self.record_use(offset.id, UseContext::MemoryValue);
                 self.record_use(length.id, UseContext::MemoryOffset);
                 self.narrow_from_use(length.id, BitWidth::I64);
             }
 
-            Statement::MCopy { dest, src, length } => {
-                self.record_use(dest.id, UseContext::MemoryOffset);
-                self.narrow_from_use(dest.id, BitWidth::I64);
-                self.record_use(src.id, UseContext::MemoryOffset);
-                self.narrow_from_use(src.id, BitWidth::I64);
+            Statement::MCopy {
+                destination,
+                source,
+                length,
+            } => {
+                self.record_use(destination.id, UseContext::MemoryOffset);
+                self.narrow_from_use(destination.id, BitWidth::I64);
+                self.record_use(source.id, UseContext::MemoryOffset);
+                self.narrow_from_use(source.id, BitWidth::I64);
                 self.record_use(length.id, UseContext::MemoryOffset);
                 self.narrow_from_use(length.id, BitWidth::I64);
             }
@@ -1366,7 +1387,7 @@ impl TypeInference {
                 for argument in arguments {
                     self.record_use(argument.id, UseContext::FunctionArg);
                     if self.in_unconditional_context {
-                        self.unconditional_call_arg.insert(argument.id.0);
+                        self.unconditional_call_argument.insert(argument.id.0);
                     }
                 }
             }
@@ -1396,8 +1417,8 @@ impl TypeInference {
     /// only from region yields under-estimates the forward width, and codegen then bare-truncates
     /// the live value where the output feeds a memory offset or comparison.
     fn widen_outputs_from_fallthrough_inputs(&mut self, inputs: &[Value], outputs: &[ValueId]) {
-        for (input_val, output) in inputs.iter().zip(outputs.iter()) {
-            let input_constraint = self.get(input_val.id);
+        for (input_value, output) in inputs.iter().zip(outputs.iter()) {
+            let input_constraint = self.get(input_value.id);
             self.widen(*output, input_constraint.min_width);
         }
     }
@@ -1407,9 +1428,9 @@ impl TypeInference {
         match statement {
             Statement::Let { bindings, value } => {
                 if let Expression::Literal { value: literal, .. } = value {
-                    if let Some(v) = literal.to_u64() {
+                    if let Some(constant_value) = literal.to_u64() {
                         if bindings.len() == 1 {
-                            self.known_constants.insert(bindings[0].0, v);
+                            self.known_constants.insert(bindings[0].0, constant_value);
                         }
                     }
                 }
@@ -1459,8 +1480,8 @@ impl TypeInference {
                 }
 
                 for region in std::iter::once(then_region).chain(else_region.as_ref()) {
-                    for (yield_val, output) in region.yields.iter().zip(outputs.iter()) {
-                        let yield_constraint = self.get(yield_val.id);
+                    for (yield_value, output) in region.yields.iter().zip(outputs.iter()) {
+                        let yield_constraint = self.get(yield_value.id);
                         self.widen(*output, yield_constraint.min_width);
                     }
                 }
@@ -1480,15 +1501,15 @@ impl TypeInference {
                 self.widen(scrutinee.id, BitWidth::I64);
                 for case in cases {
                     self.infer_region_forward(&case.body);
-                    for (yield_val, output) in case.body.yields.iter().zip(outputs.iter()) {
-                        let yield_constraint = self.get(yield_val.id);
+                    for (yield_value, output) in case.body.yields.iter().zip(outputs.iter()) {
+                        let yield_constraint = self.get(yield_value.id);
                         self.widen(*output, yield_constraint.min_width);
                     }
                 }
                 if let Some(default) = default {
                     self.infer_region_forward(default);
-                    for (yield_val, output) in default.yields.iter().zip(outputs.iter()) {
-                        let yield_constraint = self.get(yield_val.id);
+                    for (yield_value, output) in default.yields.iter().zip(outputs.iter()) {
+                        let yield_constraint = self.get(yield_value.id);
                         self.widen(*output, yield_constraint.min_width);
                     }
                 } else {
@@ -1506,11 +1527,11 @@ impl TypeInference {
                 outputs,
                 ..
             } => {
-                for loop_var in loop_variables {
-                    self.widen(*loop_var, BitWidth::I256);
+                for loop_variable in loop_variables {
+                    self.widen(*loop_variable, BitWidth::I256);
                 }
-                for post_var in post_input_variables {
-                    self.widen(*post_var, BitWidth::I256);
+                for post_variable in post_input_variables {
+                    self.widen(*post_variable, BitWidth::I256);
                 }
                 for output in outputs {
                     self.widen(*output, BitWidth::I256);
@@ -1519,8 +1540,8 @@ impl TypeInference {
                 for statement in condition_statements {
                     self.infer_statement_forward(statement);
                 }
-                let cond_width = self.infer_expression_width(condition);
-                let _ = cond_width;
+                let condition_width = self.infer_expression_width(condition);
+                let _ = condition_width;
 
                 self.infer_region_forward(body);
                 self.infer_region_forward(post);
@@ -1584,39 +1605,43 @@ impl TypeInference {
             }
 
             Statement::CodeCopy {
-                dest,
+                destination,
                 offset,
                 length,
             }
             | Statement::ExtCodeCopy {
-                dest,
+                destination,
                 offset,
                 length,
                 ..
             }
             | Statement::ReturnDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             }
             | Statement::DataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             }
             | Statement::CallDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                self.widen(dest.id, BitWidth::I64);
+                self.widen(destination.id, BitWidth::I64);
                 self.widen(offset.id, BitWidth::I64);
                 self.widen(length.id, BitWidth::I64);
             }
 
-            Statement::MCopy { dest, src, length } => {
-                self.widen(dest.id, BitWidth::I64);
-                self.widen(src.id, BitWidth::I64);
+            Statement::MCopy {
+                destination,
+                source,
+                length,
+            } => {
+                self.widen(destination.id, BitWidth::I64);
+                self.widen(source.id, BitWidth::I64);
                 self.widen(length.id, BitWidth::I64);
             }
 
@@ -1910,8 +1935,8 @@ pub(crate) fn narrow_signatures_to_fixed_point(
     mut type_info: TypeInference,
 ) -> TypeInference {
     for _ in 0..PARAM_NARROW_ITERATIONS {
-        let mut changed = type_info.narrow_function_params(ir_object);
-        changed |= type_info.narrow_function_params_from_callers(ir_object);
+        let mut changed = type_info.narrow_function_parameters(ir_object);
+        changed |= type_info.narrow_function_parameters_from_callers(ir_object);
         changed |= type_info.narrow_function_returns(ir_object);
         changed |= type_info.narrow_function_returns_from_demand(ir_object);
         if !changed {
@@ -1919,7 +1944,7 @@ pub(crate) fn narrow_signatures_to_fixed_point(
         }
         type_info = TypeInference::new();
         type_info.infer_object_tree(ir_object);
-        type_info.refine_demands_from_params(ir_object);
+        type_info.refine_demands_from_parameters(ir_object);
     }
     type_info
 }
@@ -1973,15 +1998,15 @@ mod tests {
 
     #[test]
     fn test_constraint_join() {
-        let c1 = TypeConstraint::with_width(BitWidth::I32);
-        let c2 = TypeConstraint::signed(BitWidth::I64);
-        let joined = c1.join(&c2);
+        let first_constraint = TypeConstraint::with_width(BitWidth::I32);
+        let second_constraint = TypeConstraint::signed(BitWidth::I64);
+        let joined = first_constraint.join(&second_constraint);
         assert_eq!(joined.min_width, BitWidth::I64);
         assert!(joined.is_signed);
     }
 
     /// `keccak256`/mapping hash-input operands must demand `StorageAccess`, not
-    /// `FunctionArg` (which resolves through `fn_arg_demand`).
+    /// `FunctionArg` (which resolves through `fn_argument_demand`).
     #[test]
     fn hash_input_operands_demand_storage_access_not_function_arg() {
         let word0 = crate::ir::Value::new(ValueId(0), Type::Int(BitWidth::I256));
@@ -2014,7 +2039,7 @@ mod tests {
             word1: crate::ir::Value::new(ValueId(1), Type::Int(BitWidth::I256)),
         });
         inference.record_use(key, UseContext::FunctionArg);
-        inference.fn_arg_demand.insert(key.0, BitWidth::I64);
+        inference.fn_argument_demand.insert(key.0, BitWidth::I64);
 
         inference.apply_backward_constraints();
 

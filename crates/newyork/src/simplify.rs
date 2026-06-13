@@ -109,10 +109,10 @@ pub struct Simplifier {
     copies: BTreeMap<u32, ValueId>,
     /// Maps ValueId → (UnaryOperation, operand ValueId) for unary expression tracking.
     /// Used to simplify patterns like not(not(x)) → x.
-    unary_defs: BTreeMap<u32, (UnaryOperation, ValueId)>,
+    unary_definitions: BTreeMap<u32, (UnaryOperation, ValueId)>,
     /// Maps ValueId → (BinaryOperation, lhs ValueId, rhs ValueId) for binary
     /// expression tracking. Used to simplify patterns like `sub(add(x, y), x) → y`.
-    binary_defs: BTreeMap<u32, (BinaryOperation, ValueId, ValueId)>,
+    binary_definitions: BTreeMap<u32, (BinaryOperation, ValueId, ValueId)>,
     /// Counter for fresh value IDs when creating new bindings (strength reduction).
     next_value_id: ValueId,
     /// CSE cache for pure environment reads (calldatasize, caller, etc.).
@@ -136,8 +136,8 @@ impl Simplifier {
         Simplifier {
             constants: BTreeMap::new(),
             copies: BTreeMap::new(),
-            unary_defs: BTreeMap::new(),
-            binary_defs: BTreeMap::new(),
+            unary_definitions: BTreeMap::new(),
+            binary_definitions: BTreeMap::new(),
             next_value_id: ValueId(0),
             env_reads: BTreeMap::new(),
             statistics: SimplifyResults::default(),
@@ -151,8 +151,8 @@ impl Simplifier {
 
     /// Resolves the memory region for a value if its offset is a known constant.
     fn resolve_region(&self, value: &Value) -> MemoryRegion {
-        if let Some(addr) = self.constants.get(&value.id.0) {
-            MemoryRegion::from_address(addr)
+        if let Some(address) = self.constants.get(&value.id.0) {
+            MemoryRegion::from_address(address)
         } else {
             MemoryRegion::Unknown
         }
@@ -164,12 +164,12 @@ impl Simplifier {
 
         self.simplify_block(&mut object.code);
         self.statistics.dead_bindings_removed +=
-            eliminate_dead_code_in_stmts(&mut object.code.statements, &BTreeSet::new());
+            eliminate_dead_code_in_statements(&mut object.code.statements, &BTreeSet::new());
 
         for function in object.functions.values_mut() {
             self.constants.clear();
             self.copies.clear();
-            self.unary_defs.clear();
+            self.unary_definitions.clear();
             self.env_reads.clear();
             function.body.statements =
                 self.simplify_statements(std::mem::take(&mut function.body.statements));
@@ -177,11 +177,11 @@ impl Simplifier {
             Self::reconcile_dangling_return_values(function);
 
             let mut extra_used = BTreeSet::new();
-            for ret_id in &function.return_values {
-                extra_used.insert(ret_id.0);
+            for return_value_id in &function.return_values {
+                extra_used.insert(return_value_id.0);
             }
             self.statistics.dead_bindings_removed +=
-                eliminate_dead_code_in_stmts(&mut function.body.statements, &extra_used);
+                eliminate_dead_code_in_statements(&mut function.body.statements, &extra_used);
         }
 
         std::mem::take(&mut self.statistics)
@@ -211,9 +211,9 @@ impl Simplifier {
                 defined_ids.insert(id.0);
             });
         });
-        for (i, return_value) in function.return_values.iter_mut().enumerate() {
+        for (index, return_value) in function.return_values.iter_mut().enumerate() {
             if !defined_ids.contains(&return_value.0) {
-                if let Some(initial) = function.return_values_initial.get(i) {
+                if let Some(initial) = function.return_values_initial.get(index) {
                     *return_value = *initial;
                 }
             }
@@ -271,11 +271,11 @@ impl Simplifier {
                     if let Expression::Literal { ref value, .. } = simplified_expr {
                         self.constants.insert(bindings[0].0, value.clone());
                     }
-                    if let Expression::Var(src_id) = &simplified_expr {
-                        let resolved = self.resolve_copy(*src_id);
+                    if let Expression::Var(source_id) = &simplified_expr {
+                        let resolved = self.resolve_copy(*source_id);
                         self.copies.insert(bindings[0].0, resolved);
-                        if let Some(c) = self.constants.get(&resolved.0).cloned() {
-                            self.constants.insert(bindings[0].0, c);
+                        if let Some(constant) = self.constants.get(&resolved.0).cloned() {
+                            self.constants.insert(bindings[0].0, constant);
                         }
                     }
 
@@ -284,7 +284,7 @@ impl Simplifier {
                     }
 
                     if let Expression::Unary { operation, operand } = &simplified_expr {
-                        self.unary_defs
+                        self.unary_definitions
                             .insert(bindings[0].0, (*operation, operand.id));
                     }
 
@@ -294,7 +294,7 @@ impl Simplifier {
                         rhs,
                     } = &simplified_expr
                     {
-                        self.binary_defs
+                        self.binary_definitions
                             .insert(bindings[0].0, (*operation, lhs.id, rhs.id));
                     }
                 }
@@ -349,21 +349,22 @@ impl Simplifier {
                 outputs,
             } => {
                 let condition = self.resolve_value(condition);
-                let cond_val = self.try_get_const(&condition);
+                let condition_value = self.try_get_const(&condition);
 
-                if let Some(cond_const) = cond_val {
-                    let is_true = !cond_const.is_zero();
+                if let Some(condition_const) = condition_value {
+                    let is_true = !condition_const.is_zero();
                     self.statistics.branches_eliminated += 1;
 
                     if is_true {
                         let then_region = self.simplify_region(then_region);
                         let mut result = Vec::new();
                         result.extend(then_region.statements);
-                        for (output_id, yield_val) in outputs.iter().zip(then_region.yields.iter())
+                        for (output_id, yield_value) in
+                            outputs.iter().zip(then_region.yields.iter())
                         {
                             result.push(Statement::Let {
                                 bindings: vec![*output_id],
-                                value: Expression::Var(yield_val.id),
+                                value: Expression::Var(yield_value.id),
                             });
                         }
                         return result;
@@ -371,32 +372,37 @@ impl Simplifier {
                         let else_region = self.simplify_region(else_region);
                         let mut result = Vec::new();
                         result.extend(else_region.statements);
-                        for (output_id, yield_val) in outputs.iter().zip(else_region.yields.iter())
+                        for (output_id, yield_value) in
+                            outputs.iter().zip(else_region.yields.iter())
                         {
                             result.push(Statement::Let {
                                 bindings: vec![*output_id],
-                                value: Expression::Var(yield_val.id),
+                                value: Expression::Var(yield_value.id),
                             });
                         }
                         return result;
                     } else {
-                        let inputs: Vec<Value> =
-                            inputs.into_iter().map(|v| self.resolve_value(v)).collect();
+                        let inputs: Vec<Value> = inputs
+                            .into_iter()
+                            .map(|input| self.resolve_value(input))
+                            .collect();
                         let mut result = vec![];
-                        for (output_id, input_val) in outputs.iter().zip(inputs.iter()) {
+                        for (output_id, input_value) in outputs.iter().zip(inputs.iter()) {
                             result.push(Statement::Let {
                                 bindings: vec![*output_id],
-                                value: Expression::Var(input_val.id),
+                                value: Expression::Var(input_value.id),
                             });
                         }
                         return result;
                     }
                 }
 
-                let inputs: Vec<Value> =
-                    inputs.into_iter().map(|v| self.resolve_value(v)).collect();
+                let inputs: Vec<Value> = inputs
+                    .into_iter()
+                    .map(|input| self.resolve_value(input))
+                    .collect();
                 let then_region = self.simplify_region(then_region);
-                let else_region = else_region.map(|r| self.simplify_region(r));
+                let else_region = else_region.map(|region| self.simplify_region(region));
 
                 vec![Statement::If {
                     condition,
@@ -415,23 +421,26 @@ impl Simplifier {
                 outputs,
             } => {
                 let scrutinee = self.resolve_value(scrutinee);
-                let scrut_val = self.try_get_const(&scrutinee);
+                let scrutinee_value = self.try_get_const(&scrutinee);
 
-                if let Some(scrut_const) = scrut_val {
-                    let matching_case = cases.into_iter().find(|c| c.value == scrut_const);
+                if let Some(scrutinee_const) = scrutinee_value {
+                    let matching_case =
+                        cases.into_iter().find(|case| case.value == scrutinee_const);
 
                     let taken_region = if let Some(case) = matching_case {
                         self.simplify_region(case.body)
                     } else if let Some(default_region) = default {
                         self.simplify_region(default_region)
                     } else {
-                        let inputs: Vec<Value> =
-                            inputs.into_iter().map(|v| self.resolve_value(v)).collect();
+                        let inputs: Vec<Value> = inputs
+                            .into_iter()
+                            .map(|input| self.resolve_value(input))
+                            .collect();
                         let mut result = vec![];
-                        for (output_id, input_val) in outputs.iter().zip(inputs.iter()) {
+                        for (output_id, input_value) in outputs.iter().zip(inputs.iter()) {
                             result.push(Statement::Let {
                                 bindings: vec![*output_id],
-                                value: Expression::Var(input_val.id),
+                                value: Expression::Var(input_value.id),
                             });
                         }
                         self.statistics.branches_eliminated += 1;
@@ -440,66 +449,73 @@ impl Simplifier {
 
                     let mut result = Vec::new();
                     result.extend(taken_region.statements);
-                    for (output_id, yield_val) in outputs.iter().zip(taken_region.yields.iter()) {
+                    for (output_id, yield_value) in outputs.iter().zip(taken_region.yields.iter()) {
                         result.push(Statement::Let {
                             bindings: vec![*output_id],
-                            value: Expression::Var(yield_val.id),
+                            value: Expression::Var(yield_value.id),
                         });
                     }
                     self.statistics.branches_eliminated += 1;
                     return result;
                 }
 
-                let inputs: Vec<Value> =
-                    inputs.into_iter().map(|v| self.resolve_value(v)).collect();
+                let inputs: Vec<Value> = inputs
+                    .into_iter()
+                    .map(|input| self.resolve_value(input))
+                    .collect();
                 let mut cases: Vec<SwitchCase> = cases
                     .into_iter()
-                    .map(|c| SwitchCase {
-                        value: c.value,
-                        body: self.simplify_region(c.body),
+                    .map(|case| SwitchCase {
+                        value: case.value,
+                        body: self.simplify_region(case.body),
                     })
                     .collect();
-                let mut default = default.map(|r| self.simplify_region(r));
+                let mut default = default.map(|region| self.simplify_region(region));
 
                 let mut hoisted = Vec::new();
                 if !cases.is_empty() {
                     if callvalue_check_fully_hoistable(&cases, &default) {
-                        let hoisted_cv = callvalue_binding_id(&cases[0].body.statements);
+                        let hoisted_callvalue = callvalue_binding_id(&cases[0].body.statements);
                         hoisted.push(cases[0].body.statements[0].clone());
                         hoisted.push(cases[0].body.statements[1].clone());
                         for case in &mut cases {
-                            drain_callvalue_prefix(&mut case.body.statements, hoisted_cv);
+                            drain_callvalue_prefix(&mut case.body.statements, hoisted_callvalue);
                         }
-                        if let Some(ref mut d) = default {
-                            drain_callvalue_prefix(&mut d.statements, hoisted_cv);
+                        if let Some(ref mut default_region) = default {
+                            drain_callvalue_prefix(
+                                &mut default_region.statements,
+                                hoisted_callvalue,
+                            );
                         }
                     } else {
                         const PARTIAL_HOIST_THRESHOLD: usize = 3;
                         let callvalue_case_count = cases
                             .iter()
-                            .filter(|c| starts_with_callvalue_let(&c.body.statements))
+                            .filter(|case| starts_with_callvalue_let(&case.body.statements))
                             .count();
-                        let default_has_cv = default
-                            .as_ref()
-                            .is_some_and(|d| starts_with_callvalue_let(&d.statements));
-                        let total_cv = callvalue_case_count + if default_has_cv { 1 } else { 0 };
+                        let default_has_callvalue =
+                            default.as_ref().is_some_and(|default_region| {
+                                starts_with_callvalue_let(&default_region.statements)
+                            });
+                        let total_callvalue_count =
+                            callvalue_case_count + if default_has_callvalue { 1 } else { 0 };
 
-                        if total_cv >= PARTIAL_HOIST_THRESHOLD {
-                            let hoisted_cv_id = self.fresh_id();
+                        if total_callvalue_count >= PARTIAL_HOIST_THRESHOLD {
+                            let hoisted_callvalue_id = self.fresh_id();
                             hoisted.push(Statement::Let {
-                                bindings: vec![hoisted_cv_id],
+                                bindings: vec![hoisted_callvalue_id],
                                 value: Expression::CallValue,
                             });
                             for case in &mut cases {
                                 replace_leading_callvalue_with_var(
                                     &mut case.body.statements,
-                                    hoisted_cv_id,
+                                    hoisted_callvalue_id,
                                 );
                             }
-                            if let Some(ref mut d) = default {
+                            if let Some(ref mut default_region) = default {
                                 replace_leading_callvalue_with_var(
-                                    &mut d.statements,
-                                    hoisted_cv_id,
+                                    &mut default_region.statements,
+                                    hoisted_callvalue_id,
                                 );
                             }
                         }
@@ -528,7 +544,7 @@ impl Simplifier {
             } => {
                 let initial_values: Vec<Value> = initial_values
                     .into_iter()
-                    .map(|v| self.resolve_value(v))
+                    .map(|value| self.resolve_value(value))
                     .collect();
 
                 let saved_constants = self.constants.clone();
@@ -609,7 +625,7 @@ impl Simplifier {
         let yields: Vec<Value> = region
             .yields
             .into_iter()
-            .map(|v| self.resolve_value(v))
+            .map(|yielded_value| self.resolve_value(yielded_value))
             .collect();
         let yielded = yields_as_used(&yields);
 
@@ -641,11 +657,11 @@ impl Simplifier {
             } => {
                 let lhs = self.resolve_value(lhs);
                 let rhs = self.resolve_value(rhs);
-                let lhs_val = self.try_get_const(&lhs);
-                let rhs_val = self.try_get_const(&rhs);
+                let lhs_value = self.try_get_const(&lhs);
+                let rhs_value = self.try_get_const(&rhs);
 
-                if let (Some(a), Some(b)) = (&lhs_val, &rhs_val) {
-                    if let Some(result) = fold_binary(operation, a, b) {
+                if let (Some(lhs_constant), Some(rhs_constant)) = (&lhs_value, &rhs_value) {
+                    if let Some(result) = fold_binary(operation, lhs_constant, rhs_constant) {
                         self.statistics.constants_folded += 1;
                         return Expression::Literal {
                             value: result,
@@ -654,14 +670,15 @@ impl Simplifier {
                     }
                 }
 
-                if let Some(simplified) = simplify_binary(operation, &lhs, &rhs, &lhs_val, &rhs_val)
+                if let Some(simplified) =
+                    simplify_binary(operation, &lhs, &rhs, &lhs_value, &rhs_value)
                 {
                     self.statistics.identities_simplified += 1;
                     return simplified;
                 }
 
                 if operation == BinaryOperation::Sub {
-                    if let Some(&(lhs_op, lhs_a, lhs_b)) = self.binary_defs.get(&lhs.id.0) {
+                    if let Some(&(lhs_op, lhs_a, lhs_b)) = self.binary_definitions.get(&lhs.id.0) {
                         if lhs_op == BinaryOperation::Add {
                             let resolved_a = self.resolve_copy(lhs_a);
                             let resolved_b = self.resolve_copy(lhs_b);
@@ -677,7 +694,7 @@ impl Simplifier {
                     }
                 }
                 if operation == BinaryOperation::Add {
-                    if let Some(&(lhs_op, lhs_a, lhs_b)) = self.binary_defs.get(&lhs.id.0) {
+                    if let Some(&(lhs_op, lhs_a, lhs_b)) = self.binary_definitions.get(&lhs.id.0) {
                         if lhs_op == BinaryOperation::Sub {
                             let resolved_a = self.resolve_copy(lhs_a);
                             let resolved_b = self.resolve_copy(lhs_b);
@@ -687,7 +704,7 @@ impl Simplifier {
                             }
                         }
                     }
-                    if let Some(&(rhs_op, rhs_a, rhs_b)) = self.binary_defs.get(&rhs.id.0) {
+                    if let Some(&(rhs_op, rhs_a, rhs_b)) = self.binary_definitions.get(&rhs.id.0) {
                         if rhs_op == BinaryOperation::Sub {
                             let resolved_a = self.resolve_copy(rhs_a);
                             let resolved_b = self.resolve_copy(rhs_b);
@@ -708,10 +725,10 @@ impl Simplifier {
 
             Expression::Unary { operation, operand } => {
                 let operand = self.resolve_value(operand);
-                let operand_val = self.try_get_const(&operand);
+                let operand_value = self.try_get_const(&operand);
 
-                if let Some(c) = &operand_val {
-                    if let Some(result) = fold_unary(operation, c) {
+                if let Some(constant) = &operand_value {
+                    if let Some(result) = fold_unary(operation, constant) {
                         self.statistics.constants_folded += 1;
                         return Expression::Literal {
                             value: result,
@@ -721,7 +738,9 @@ impl Simplifier {
                 }
 
                 if operation == UnaryOperation::Not {
-                    if let Some((UnaryOperation::Not, inner)) = self.unary_defs.get(&operand.id.0) {
+                    if let Some((UnaryOperation::Not, inner)) =
+                        self.unary_definitions.get(&operand.id.0)
+                    {
                         self.statistics.identities_simplified += 1;
                         return Expression::Var(*inner);
                     }
@@ -734,12 +753,16 @@ impl Simplifier {
                 let a = self.resolve_value(a);
                 let b = self.resolve_value(b);
                 let n = self.resolve_value(n);
-                let a_val = self.try_get_const(&a);
-                let b_val = self.try_get_const(&b);
-                let n_val = self.try_get_const(&n);
+                let a_value = self.try_get_const(&a);
+                let b_value = self.try_get_const(&b);
+                let n_value = self.try_get_const(&n);
 
-                if let (Some(av), Some(bv), Some(nv)) = (&a_val, &b_val, &n_val) {
-                    if let Some(result) = fold_ternary(operation, av, bv, nv) {
+                if let (Some(a_constant), Some(b_constant), Some(n_constant)) =
+                    (&a_value, &b_value, &n_value)
+                {
+                    if let Some(result) =
+                        fold_ternary(operation, a_constant, b_constant, n_constant)
+                    {
                         self.statistics.constants_folded += 1;
                         return Expression::Literal {
                             value: result,
@@ -784,8 +807,8 @@ impl Simplifier {
 
             Expression::Keccak256Single { word0 } => {
                 let word0 = self.resolve_value(word0);
-                if let Some(c) = self.try_get_const(&word0) {
-                    let result = fold_keccak256_single(&c);
+                if let Some(constant) = self.try_get_const(&word0) {
+                    let result = fold_keccak256_single(&constant);
                     self.statistics.constants_folded += 1;
                     Expression::Literal {
                         value: result,
@@ -799,10 +822,10 @@ impl Simplifier {
             Expression::Keccak256Pair { word0, word1 } => {
                 let word0 = self.resolve_value(word0);
                 let word1 = self.resolve_value(word1);
-                if let (Some(c0), Some(c1)) =
+                if let (Some(constant0), Some(constant1)) =
                     (self.try_get_const(&word0), self.try_get_const(&word1))
                 {
-                    let result = fold_keccak256_pair(&c0, &c1);
+                    let result = fold_keccak256_pair(&constant0, &constant1);
                     self.statistics.constants_folded += 1;
                     Expression::Literal {
                         value: result,
@@ -883,11 +906,11 @@ impl Simplifier {
         let helper_id = self.fresh_id();
         self.constants.insert(helper_id.0, const_value.clone());
         self.statistics.identities_simplified += 1;
-        let helper_val = Value::int(helper_id);
+        let helper_value = Value::int(helper_id);
         let (lhs, rhs) = if helper_on_lhs {
-            (helper_val, other_operand)
+            (helper_value, other_operand)
         } else {
-            (other_operand, helper_val)
+            (other_operand, helper_value)
         };
         vec![
             Statement::Let {
@@ -925,45 +948,46 @@ impl Simplifier {
             } => (*operation, *lhs, *rhs),
             _ => return None,
         };
-        let lhs_val = self.try_get_const(&lhs);
-        let rhs_val = self.try_get_const(&rhs);
-        let in_range = |k: u32| (1..256).contains(&k);
+        let lhs_value = self.try_get_const(&lhs);
+        let rhs_value = self.try_get_const(&rhs);
+        let in_range = |exponent: u32| (1..256).contains(&exponent);
 
         match operation {
             BinaryOperation::Mul => {
-                let (k, value) = if let Some(k) = rhs_val.as_ref().and_then(log2_exact) {
-                    (k, lhs)
-                } else if let Some(k) = lhs_val.as_ref().and_then(log2_exact) {
-                    (k, rhs)
-                } else {
-                    return None;
-                };
-                in_range(k).then(|| {
+                let (exponent, value) =
+                    if let Some(exponent) = rhs_value.as_ref().and_then(log2_exact) {
+                        (exponent, lhs)
+                    } else if let Some(exponent) = lhs_value.as_ref().and_then(log2_exact) {
+                        (exponent, rhs)
+                    } else {
+                        return None;
+                    };
+                in_range(exponent).then(|| {
                     self.emit_strength_reduce(
                         bindings,
                         BinaryOperation::Shl,
-                        BigUint::from(k),
+                        BigUint::from(exponent),
                         true,
                         value,
                     )
                 })
             }
             BinaryOperation::Div => {
-                let k = rhs_val.as_ref().and_then(log2_exact)?;
-                in_range(k).then(|| {
+                let exponent = rhs_value.as_ref().and_then(log2_exact)?;
+                in_range(exponent).then(|| {
                     self.emit_strength_reduce(
                         bindings,
                         BinaryOperation::Shr,
-                        BigUint::from(k),
+                        BigUint::from(exponent),
                         true,
                         lhs,
                     )
                 })
             }
             BinaryOperation::Mod => {
-                let k = rhs_val.as_ref().and_then(log2_exact)?;
-                in_range(k).then(|| {
-                    let mask = (BigUint::one() << k) - BigUint::one();
+                let exponent = rhs_value.as_ref().and_then(log2_exact)?;
+                in_range(exponent).then(|| {
+                    let mask = (BigUint::one() << exponent) - BigUint::one();
                     self.emit_strength_reduce(bindings, BinaryOperation::And, mask, false, lhs)
                 })
             }
@@ -988,7 +1012,7 @@ impl Simplifier {
 /// statements themselves — an enclosing region's resolved `yields`. A pure binding inside the
 /// collapsed window may define such a value; truncating it would leave the yield dangling and fail
 /// SSA validation, so each is re-bound to zero before the [`Statement::PanicRevert`] (the binding is
-/// dead — the panic diverges — but dominates the yield, mirroring `eliminate_dead_code_in_stmts`).
+/// dead — the panic diverges — but dominates the yield, mirroring `eliminate_dead_code_in_statements`).
 fn outline_panic_patterns(
     statements: Vec<Statement>,
     scope_constants: &BTreeMap<u32, BigUint>,
@@ -996,7 +1020,7 @@ fn outline_panic_patterns(
 ) -> Vec<Statement> {
     let has_revert = statements
         .iter()
-        .any(|s| matches!(s, Statement::Revert { .. }));
+        .any(|statement| matches!(statement, Statement::Revert { .. }));
     if !has_revert {
         return statements;
     }
@@ -1081,19 +1105,19 @@ fn find_panic_pattern_backwards(
         return None;
     }
 
-    let mut mstore4_idx = None;
+    let mut mstore4_index = None;
     let mut error_code = None;
     let search_limit = len.saturating_sub(10);
 
-    for j in (search_limit..len).rev() {
-        match &statements[j] {
+    for statement_index in (search_limit..len).rev() {
+        match &statements[statement_index] {
             Statement::MStore { offset, value, .. } => {
                 if is_const_value(offset.id, 4, constants) {
-                    if let Some(code_val) = constants.get(&value.id.0) {
-                        if code_val.bits() <= 8 {
+                    if let Some(code_value) = constants.get(&value.id.0) {
+                        if code_value.bits() <= 8 {
                             let code_u8 =
-                                code_val.to_u64_digits().first().copied().unwrap_or(0) as u8;
-                            mstore4_idx = Some(j);
+                                code_value.to_u64_digits().first().copied().unwrap_or(0) as u8;
+                            mstore4_index = Some(statement_index);
                             error_code = Some(code_u8);
                             break;
                         }
@@ -1105,24 +1129,28 @@ fn find_panic_pattern_backwards(
         }
     }
 
-    let mstore4_idx = mstore4_idx?;
+    let mstore4_index = mstore4_index?;
     let error_code = error_code?;
 
-    let search_limit2 = mstore4_idx.saturating_sub(10);
-    for j in (search_limit2..mstore4_idx).rev() {
-        match &statements[j] {
+    let search_limit2 = mstore4_index.saturating_sub(10);
+    for statement_index in (search_limit2..mstore4_index).rev() {
+        match &statements[statement_index] {
             Statement::MStore { offset, value, .. } => {
                 if is_const_value(offset.id, 0, constants) {
-                    if let Some(sel_val) = constants.get(&value.id.0) {
-                        let sel_hex = format!("{sel_val:064x}");
-                        if sel_hex == revive_common::PANIC_UINT256_SELECTOR_WORD_HEX
-                            && statements[j..]
+                    if let Some(selector_value) = constants.get(&value.id.0) {
+                        let selector_hex = format!("{selector_value:064x}");
+                        if selector_hex == revive_common::PANIC_UINT256_SELECTOR_WORD_HEX
+                            && statements[statement_index..]
                                 .iter()
-                                .all(|s| panic_window_droppable(s, constants))
-                            && !any_mstore_to_offset(&statements[j + 1..], 0, constants)
-                            && !any_mstore_to_offset(&statements[mstore4_idx + 1..], 4, constants)
+                                .all(|statement| panic_window_droppable(statement, constants))
+                            && !any_mstore_to_offset(
+                                &statements[statement_index + 1..],
+                                0,
+                                constants,
+                            )
+                            && !any_mstore_to_offset(&statements[mstore4_index + 1..], 4, constants)
                         {
-                            return Some((j, error_code));
+                            return Some((statement_index, error_code));
                         }
                     }
                 }
@@ -1151,9 +1179,11 @@ fn panic_window_droppable(statement: &Statement, constants: &BTreeMap<u32, BigUi
         Statement::MStore { offset, .. } => {
             is_const_value(offset.id, 0, constants)
                 || is_const_value(offset.id, 4, constants)
-                || constants
-                    .get(&offset.id.0)
-                    .is_some_and(|v| v.to_u64().is_some_and(|o| o >= 0x24))
+                || constants.get(&offset.id.0).is_some_and(|offset_value| {
+                    offset_value
+                        .to_u64()
+                        .is_some_and(|offset_u64| offset_u64 >= 0x24)
+                })
         }
         Statement::Let { value, .. } | Statement::Expression(value) => {
             !expr_has_side_effects(value)
@@ -1169,8 +1199,8 @@ fn any_mstore_to_offset(
     offset: u64,
     constants: &BTreeMap<u32, BigUint>,
 ) -> bool {
-    statements.iter().any(|s| {
-        matches!(s, Statement::MStore { offset: o, .. } if is_const_value(o.id, offset, constants))
+    statements.iter().any(|statement| {
+        matches!(statement, Statement::MStore { offset: store_offset, .. } if is_const_value(store_offset.id, offset, constants))
     })
 }
 
@@ -1178,7 +1208,7 @@ fn any_mstore_to_offset(
 fn is_const_value(id: ValueId, expected: u64, constants: &BTreeMap<u32, BigUint>) -> bool {
     constants
         .get(&id.0)
-        .is_some_and(|v| *v == BigUint::from(expected))
+        .is_some_and(|value| *value == BigUint::from(expected))
 }
 
 /// Outlines custom error revert patterns in a statement list.
@@ -1192,7 +1222,7 @@ fn outline_custom_error_patterns(
 ) -> Vec<Statement> {
     let has_revert = statements
         .iter()
-        .any(|s| matches!(s, Statement::Revert { .. }));
+        .any(|statement| matches!(statement, Statement::Revert { .. }));
     if !has_revert {
         return statements;
     }
@@ -1219,9 +1249,15 @@ fn outline_custom_error_patterns(
             ref length,
         } = statement
         {
-            if constants.get(&offset.id.0).is_some_and(|v| *v == zero) {
-                if let Some(total_len) = constants.get(&length.id.0).and_then(|v| v.to_u64()) {
-                    let num_args = if total_len == 4 {
+            if constants
+                .get(&offset.id.0)
+                .is_some_and(|offset_constant| *offset_constant == zero)
+            {
+                if let Some(total_len) = constants
+                    .get(&length.id.0)
+                    .and_then(|length_constant| length_constant.to_u64())
+                {
+                    let num_arguments = if total_len == 4 {
                         Some(0usize)
                     } else if total_len >= 0x24 && (total_len - 4) % 0x20 == 0 {
                         Some(((total_len - 4) / 0x20) as usize)
@@ -1229,15 +1265,15 @@ fn outline_custom_error_patterns(
                         None
                     };
 
-                    if let Some(num_args) = num_args {
-                        if let Some((start_idx, selector, arguments)) =
-                            find_custom_error_pattern_backwards(&result, &constants, num_args)
+                    if let Some(num_arguments) = num_arguments {
+                        if let Some((start_index, selector, arguments)) =
+                            find_custom_error_pattern_backwards(&result, &constants, num_arguments)
                         {
                             let mut kept = Vec::new();
-                            for s in result.drain(start_idx..) {
-                                match s {
+                            for statement in result.drain(start_index..) {
+                                match statement {
                                     Statement::MStore { .. } => {}
-                                    _ => kept.push(s),
+                                    _ => kept.push(statement),
                                 }
                             }
                             result.extend(kept);
@@ -1268,14 +1304,14 @@ fn outline_custom_error_patterns(
 ///
 /// Returns `(start_index, selector, arguments)` if found.
 ///
-/// The scan records each payload offset's store and tracks `earliest_idx` (the start of the matched
+/// The scan records each payload offset's store and tracks `earliest_index` (the start of the matched
 /// window). It deliberately does NOT try to keep the latest store per offset: that would be unsound
-/// for overlapping unaligned stores, and it would also skip earlier duplicates so `earliest_idx`
+/// for overlapping unaligned stores, and it would also skip earlier duplicates so `earliest_index`
 /// would no longer cover them. Instead the exactly-once check rejects any window with a duplicate
 /// payload-offset store, so a recorded value is only ever used when its offset has a single store.
 ///
-/// The revert range is `[0, 4 + 32 * num_args)`. The canonical Solidity custom-error shape writes
-/// at exactly the offsets `0`, `4`, `0x24`, … `4 + 32 * (num_args - 1)`. Any in-range mstore at a
+/// The revert range is `[0, 4 + 32 * num_arguments)`. The canonical Solidity custom-error shape writes
+/// at exactly the offsets `0`, `4`, `0x24`, … `4 + 32 * (num_arguments - 1)`. Any in-range mstore at a
 /// different offset corrupts the revert payload — we must NOT collapse the sequence into
 /// `Statement::CustomErrorRevert`. Out-of-range mstores (offset ≥ revert_length) are fine; they
 /// don't escape.
@@ -1287,39 +1323,39 @@ fn outline_custom_error_patterns(
 fn find_custom_error_pattern_backwards(
     statements: &[Statement],
     constants: &BTreeMap<u32, BigUint>,
-    num_args: usize,
+    num_arguments: usize,
 ) -> Option<(usize, BigUint, Vec<Value>)> {
     let len = statements.len();
-    if len < 1 + num_args {
+    if len < 1 + num_arguments {
         return None;
     }
 
     let mut found_selector: Option<BigUint> = None;
-    let mut arguments: Vec<Option<Value>> = vec![None; num_args];
-    let mut earliest_idx = len;
+    let mut arguments: Vec<Option<Value>> = vec![None; num_arguments];
+    let mut earliest_index = len;
 
     let zero = BigUint::ZERO;
     let four = BigUint::from(4u32);
 
     let search_limit = len.saturating_sub(20);
-    for j in (search_limit..len).rev() {
-        match &statements[j] {
+    for statement_index in (search_limit..len).rev() {
+        match &statements[statement_index] {
             Statement::MStore { offset, value, .. } => {
-                if let Some(off_val) = constants.get(&offset.id.0) {
-                    if *off_val == zero {
-                        if let Some(sel) = constants.get(&value.id.0) {
-                            found_selector = Some(sel.clone());
-                            earliest_idx = earliest_idx.min(j);
+                if let Some(offset_value) = constants.get(&offset.id.0) {
+                    if *offset_value == zero {
+                        if let Some(selector_constant) = constants.get(&value.id.0) {
+                            found_selector = Some(selector_constant.clone());
+                            earliest_index = earliest_index.min(statement_index);
                         }
-                    } else if *off_val == four && num_args >= 1 {
+                    } else if *offset_value == four && num_arguments >= 1 {
                         arguments[0] = Some(*value);
-                        earliest_idx = earliest_idx.min(j);
-                    } else if let Some(off_u64) = off_val.to_u64() {
-                        if off_u64 >= 0x24 && (off_u64 - 4) % 0x20 == 0 {
-                            let arg_idx = ((off_u64 - 4) / 0x20) as usize;
-                            if arg_idx < num_args {
-                                arguments[arg_idx] = Some(*value);
-                                earliest_idx = earliest_idx.min(j);
+                        earliest_index = earliest_index.min(statement_index);
+                    } else if let Some(offset_u64) = offset_value.to_u64() {
+                        if offset_u64 >= 0x24 && (offset_u64 - 4) % 0x20 == 0 {
+                            let argument_index = ((offset_u64 - 4) / 0x20) as usize;
+                            if argument_index < num_arguments {
+                                arguments[argument_index] = Some(*value);
+                                earliest_index = earliest_index.min(statement_index);
                             }
                         }
                     }
@@ -1333,34 +1369,39 @@ fn find_custom_error_pattern_backwards(
     let selector = found_selector?;
     let arguments: Vec<Value> = arguments.into_iter().collect::<Option<Vec<_>>>()?;
 
-    let revert_length = 4 + (num_args as u64) * 0x20;
-    let all_safe = statements[earliest_idx..].iter().all(|s| match s {
-        Statement::MStore { offset, .. } => constants.get(&offset.id.0).is_some_and(|off_val| {
-            if let Some(off_u64) = off_val.to_u64() {
-                if off_u64 >= revert_length {
-                    return true;
-                }
-                if off_u64 == 0 {
-                    return true;
-                }
-                off_u64 >= 4 && (off_u64 - 4) % 0x20 == 0
-            } else {
-                false
+    let revert_length = 4 + (num_arguments as u64) * 0x20;
+    let all_safe = statements[earliest_index..]
+        .iter()
+        .all(|statement| match statement {
+            Statement::MStore { offset, .. } => {
+                constants.get(&offset.id.0).is_some_and(|offset_value| {
+                    if let Some(offset_u64) = offset_value.to_u64() {
+                        if offset_u64 >= revert_length {
+                            return true;
+                        }
+                        if offset_u64 == 0 {
+                            return true;
+                        }
+                        offset_u64 >= 4 && (offset_u64 - 4) % 0x20 == 0
+                    } else {
+                        false
+                    }
+                })
             }
-        }),
-        Statement::Let { .. } | Statement::Expression(..) => true,
-        _ => false,
-    });
+            Statement::Let { .. } | Statement::Expression(..) => true,
+            _ => false,
+        });
     if !all_safe {
         return None;
     }
 
-    let payload_offsets = std::iter::once(0u64).chain((0..num_args as u64).map(|i| 4 + i * 0x20));
+    let payload_offsets =
+        std::iter::once(0u64).chain((0..num_arguments as u64).map(|index| 4 + index * 0x20));
     for payload_offset in payload_offsets {
-        let writes = statements[earliest_idx..]
+        let writes = statements[earliest_index..]
             .iter()
-            .filter(|s| {
-                matches!(s, Statement::MStore { offset, .. }
+            .filter(|statement| {
+                matches!(statement, Statement::MStore { offset, .. }
                     if is_const_value(offset.id, payload_offset, constants))
             })
             .count();
@@ -1369,7 +1410,7 @@ fn find_custom_error_pattern_backwards(
         }
     }
 
-    Some((earliest_idx, selector, arguments))
+    Some((earliest_index, selector, arguments))
 }
 
 /// Returns the result type for a binary operation.
@@ -1482,8 +1523,8 @@ fn fold_binary(operation: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<B
             if *a >= BigUint::from(32u32) {
                 BigUint::zero()
             } else {
-                let n = a.to_u64_digits().first().copied().unwrap_or(0) as usize;
-                let shift = (31 - n) * 8;
+                let byte_index = a.to_u64_digits().first().copied().unwrap_or(0) as usize;
+                let shift = (31 - byte_index) * 8;
                 (b >> shift) & BigUint::from(0xffu32)
             }
         }
@@ -1528,25 +1569,25 @@ fn fold_ternary(
 /// Encodes a BigUint as a 32-byte big-endian buffer (left-padded with zeros).
 fn biguint_to_be32(value: &BigUint) -> [u8; 32] {
     let bytes = value.to_bytes_be();
-    let mut buf = [0u8; 32];
+    let mut buffer = [0u8; 32];
     let start = 32usize.saturating_sub(bytes.len());
-    buf[start..].copy_from_slice(&bytes[bytes.len().saturating_sub(32)..]);
-    buf
+    buffer[start..].copy_from_slice(&bytes[bytes.len().saturating_sub(32)..]);
+    buffer
 }
 
 /// Computes keccak256 of a single 256-bit word at compile time.
 fn fold_keccak256_single(word0: &BigUint) -> BigUint {
-    let buf = biguint_to_be32(word0);
-    let hash = revive_common::Keccak256::from_slice(&buf);
+    let buffer = biguint_to_be32(word0);
+    let hash = revive_common::Keccak256::from_slice(&buffer);
     BigUint::from_bytes_be(hash.as_bytes())
 }
 
 /// Computes keccak256 of two 256-bit words at compile time.
 fn fold_keccak256_pair(word0: &BigUint, word1: &BigUint) -> BigUint {
-    let mut buf = [0u8; 64];
-    buf[..32].copy_from_slice(&biguint_to_be32(word0));
-    buf[32..].copy_from_slice(&biguint_to_be32(word1));
-    let hash = revive_common::Keccak256::from_slice(&buf);
+    let mut buffer = [0u8; 64];
+    buffer[..32].copy_from_slice(&biguint_to_be32(word0));
+    buffer[32..].copy_from_slice(&biguint_to_be32(word1));
+    let hash = revive_common::Keccak256::from_slice(&buffer);
     BigUint::from_bytes_be(hash.as_bytes())
 }
 
@@ -1569,8 +1610,8 @@ fn simplify_binary(
     operation: BinaryOperation,
     lhs: &Value,
     rhs: &Value,
-    lhs_val: &Option<BigUint>,
-    rhs_val: &Option<BigUint>,
+    lhs_value: &Option<BigUint>,
+    rhs_value: &Option<BigUint>,
 ) -> Option<Expression> {
     let i256 = Type::Int(BitWidth::I256);
     let literal = |value: BigUint| Expression::Literal {
@@ -1580,8 +1621,8 @@ fn simplify_binary(
     let var_l = || Expression::Var(lhs.id);
     let var_r = || Expression::Var(rhs.id);
     let same = lhs.id == rhs.id;
-    let l_is = |v: &BigUint| lhs_val.as_ref() == Some(v);
-    let r_is = |v: &BigUint| rhs_val.as_ref() == Some(v);
+    let l_is = |value: &BigUint| lhs_value.as_ref() == Some(value);
+    let r_is = |value: &BigUint| rhs_value.as_ref() == Some(value);
     let zero = BigUint::zero();
     let one = BigUint::one();
 
@@ -1608,7 +1649,7 @@ fn simplify_binary(
         BinaryOperation::Div | BinaryOperation::SDiv if r_is(&one) => Some(var_l()),
         BinaryOperation::Div | BinaryOperation::SDiv if l_is(&zero) => Some(literal(zero)),
         BinaryOperation::Div | BinaryOperation::SDiv
-            if same && lhs_val.as_ref().is_some_and(|v| !v.is_zero()) =>
+            if same && lhs_value.as_ref().is_some_and(|value| !value.is_zero()) =>
         {
             Some(literal(one))
         }
@@ -1742,15 +1783,15 @@ fn fold_signextend(b: &BigUint, x: &BigUint, max: &BigUint) -> Option<BigUint> {
         return Some(x.clone());
     }
 
-    let byte_pos = b.to_u64_digits().first().copied().unwrap_or(0) as usize;
-    let bit_pos = byte_pos * 8 + 7;
-    let sign_bit = (x >> bit_pos) & BigUint::one();
+    let byte_position = b.to_u64_digits().first().copied().unwrap_or(0) as usize;
+    let bit_position = byte_position * 8 + 7;
+    let sign_bit = (x >> bit_position) & BigUint::one();
 
     if sign_bit.is_one() {
-        let mask = max << (bit_pos + 1);
+        let mask = max << (bit_position + 1);
         Some((x | mask) & max)
     } else {
-        let mask = (BigUint::one() << (bit_pos + 1)) - BigUint::one();
+        let mask = (BigUint::one() << (bit_position + 1)) - BigUint::one();
         Some(x & mask)
     }
 }
@@ -1787,27 +1828,27 @@ fn expr_has_side_effects(expression: &Expression) -> bool {
 /// definition"). Each such value is therefore re-bound to zero just before the
 /// terminator. The binding lies on a provably unreachable path (it follows an
 /// unconditional terminator), so the zero is never observed and LLVM discards it.
-fn eliminate_dead_code_in_stmts(
+fn eliminate_dead_code_in_statements(
     statements: &mut Vec<Statement>,
     extra_used: &BTreeSet<u32>,
 ) -> usize {
     let mut total_removed = 0;
 
-    if let Some(terminator_pos) = statements.iter().position(is_terminator) {
-        let unreachable_count = statements.len() - terminator_pos - 1;
+    if let Some(terminator_position) = statements.iter().position(is_terminator) {
+        let unreachable_count = statements.len() - terminator_position - 1;
         if unreachable_count > 0 {
             let mut rescued: Vec<ValueId> = Vec::new();
-            for statement in &statements[terminator_pos + 1..] {
+            for statement in &statements[terminator_position + 1..] {
                 statement.for_each_value_id_def(&mut |id| {
                     if extra_used.contains(&id.0) {
                         rescued.push(id);
                     }
                 });
             }
-            statements.truncate(terminator_pos + 1);
+            statements.truncate(terminator_position + 1);
             for id in rescued {
                 statements.insert(
-                    terminator_pos,
+                    terminator_position,
                     Statement::Let {
                         bindings: vec![id],
                         value: Expression::Literal {
@@ -1875,29 +1916,31 @@ fn eliminate_dead_code_in_nested(
         } => {
             let mut removed = 0;
             let extra = yields_as_used(&then_region.yields);
-            removed += eliminate_dead_code_in_stmts(&mut then_region.statements, &extra);
-            if let Some(r) = else_region {
-                let extra = yields_as_used(&r.yields);
-                removed += eliminate_dead_code_in_stmts(&mut r.statements, &extra);
+            removed += eliminate_dead_code_in_statements(&mut then_region.statements, &extra);
+            if let Some(else_region_body) = else_region {
+                let extra = yields_as_used(&else_region_body.yields);
+                removed +=
+                    eliminate_dead_code_in_statements(&mut else_region_body.statements, &extra);
             }
             removed
         }
         Statement::Switch { cases, default, .. } => {
             let mut removed = 0;
-            for c in cases {
-                let extra = yields_as_used(&c.body.yields);
-                removed += eliminate_dead_code_in_stmts(&mut c.body.statements, &extra);
+            for case in cases {
+                let extra = yields_as_used(&case.body.yields);
+                removed += eliminate_dead_code_in_statements(&mut case.body.statements, &extra);
             }
-            if let Some(d) = default {
-                let extra = yields_as_used(&d.yields);
-                removed += eliminate_dead_code_in_stmts(&mut d.statements, &extra);
+            if let Some(default_region) = default {
+                let extra = yields_as_used(&default_region.yields);
+                removed +=
+                    eliminate_dead_code_in_statements(&mut default_region.statements, &extra);
             }
             removed
         }
         Statement::Block(region) => {
             let mut extra = yields_as_used(&region.yields);
             extra.extend(parent_extra_used);
-            eliminate_dead_code_in_stmts(&mut region.statements, &extra)
+            eliminate_dead_code_in_statements(&mut region.statements, &extra)
         }
         _ => 0,
     }
@@ -1938,7 +1981,7 @@ fn has_callvalue_revert_prefix(statements: &[Statement]) -> bool {
         _ => None,
     };
 
-    let Some(cv_id) = callvalue_id else {
+    let Some(callvalue_binding) = callvalue_id else {
         return false;
     };
 
@@ -1950,7 +1993,7 @@ fn has_callvalue_revert_prefix(statements: &[Statement]) -> bool {
             else_region,
             outputs,
         } => {
-            if condition.id != cv_id {
+            if condition.id != callvalue_binding {
                 return false;
             }
             if !inputs.is_empty() || !outputs.is_empty() {
@@ -1962,7 +2005,7 @@ fn has_callvalue_revert_prefix(statements: &[Statement]) -> bool {
             then_region
                 .statements
                 .iter()
-                .any(|s| matches!(s, Statement::Revert { .. }))
+                .any(|statement| matches!(statement, Statement::Revert { .. }))
         }
         _ => false,
     }
@@ -1983,20 +2026,20 @@ fn callvalue_check_fully_hoistable(cases: &[SwitchCase], default: &Option<Region
     }
     let all_branches_check = cases
         .iter()
-        .all(|c| has_callvalue_revert_prefix(&c.body.statements))
+        .all(|case| has_callvalue_revert_prefix(&case.body.statements))
         && default
             .as_ref()
-            .is_some_and(|d| has_callvalue_revert_prefix(&d.statements));
+            .is_some_and(|default_region| has_callvalue_revert_prefix(&default_region.statements));
     if !all_branches_check {
         return false;
     }
     let reference = canonical_callvalue_prefix(&cases[0].body.statements);
     cases
         .iter()
-        .all(|c| canonical_callvalue_prefix(&c.body.statements) == reference)
-        && default
-            .as_ref()
-            .is_some_and(|d| canonical_callvalue_prefix(&d.statements) == reference)
+        .all(|case| canonical_callvalue_prefix(&case.body.statements) == reference)
+        && default.as_ref().is_some_and(|default_region| {
+            canonical_callvalue_prefix(&default_region.statements) == reference
+        })
 }
 
 /// Returns the value id bound by the leading `let vN = callvalue()`.
@@ -2016,27 +2059,27 @@ fn callvalue_binding_id(statements: &[Statement]) -> ValueId {
 /// The caller must have established [`has_callvalue_revert_prefix`] for `statements`.
 fn canonical_callvalue_prefix(statements: &[Statement]) -> Vec<u8> {
     let mut canon = Canonicalizer::new();
-    let mut buf = Vec::new();
-    canon.encode_statement(&statements[0], &mut buf);
-    canon.encode_statement(&statements[1], &mut buf);
-    buf
+    let mut buffer = Vec::new();
+    canon.encode_statement(&statements[0], &mut buffer);
+    canon.encode_statement(&statements[1], &mut buffer);
+    buffer
 }
 
 /// Drops the leading two-statement callvalue-revert prefix and rewrites any remaining use of its
-/// (now-undefined) callvalue binding to `hoisted_cv`, the binding hoisted above the switch.
+/// (now-undefined) callvalue binding to `hoisted_callvalue`, the binding hoisted above the switch.
 ///
 /// Environment CSE may have rewritten a later `callvalue()` in this branch to reuse the prefix's
 /// binding; after the prefix is drained that use would reference an undefined value and trip the
 /// validator unless it is redirected to the hoisted binding. The caller must have established
 /// [`has_callvalue_revert_prefix`] for `statements`.
-fn drain_callvalue_prefix(statements: &mut Vec<Statement>, hoisted_cv: ValueId) {
-    let local_cv = callvalue_binding_id(statements);
+fn drain_callvalue_prefix(statements: &mut Vec<Statement>, hoisted_callvalue: ValueId) {
+    let local_callvalue = callvalue_binding_id(statements);
     statements.drain(0..2);
-    if local_cv != hoisted_cv {
+    if local_callvalue != hoisted_callvalue {
         for statement in statements.iter_mut() {
             statement.for_each_value_id_mut(&mut |id| {
-                if *id == local_cv {
-                    *id = hoisted_cv;
+                if *id == local_callvalue {
+                    *id = hoisted_callvalue;
                 }
             });
         }
@@ -2074,8 +2117,8 @@ fn replace_leading_callvalue_with_var(statements: &mut [Statement], replacement_
 /// Collects ValueIds from region yields into a "used" set.
 fn yields_as_used(yields: &[Value]) -> BTreeSet<u32> {
     let mut used = BTreeSet::new();
-    for y in yields {
-        used.insert(y.id.0);
+    for yielded_value in yields {
+        used.insert(yielded_value.id.0);
     }
     used
 }
@@ -2138,8 +2181,8 @@ pub fn deduplicate_functions(object: &mut Object) -> usize {
         redirect_calls_in_block(&mut function.body, &redirects);
     }
 
-    for dup_id in redirects.keys() {
-        object.functions.remove(dup_id);
+    for duplicate_id in redirects.keys() {
+        object.functions.remove(duplicate_id);
     }
 
     removed_count
@@ -2154,34 +2197,34 @@ fn canonicalize_function(
     return_types: &[Type],
 ) -> Vec<u8> {
     let mut canon = Canonicalizer::new();
-    let mut buf = Vec::new();
+    let mut buffer = Vec::new();
 
-    buf.push(parameter_types.len() as u8);
+    buffer.push(parameter_types.len() as u8);
     for value_type in parameter_types {
-        buf.push(type_tag(value_type));
+        buffer.push(type_tag(value_type));
     }
-    buf.push(return_types.len() as u8);
+    buffer.push(return_types.len() as u8);
     for value_type in return_types {
-        buf.push(type_tag(value_type));
+        buffer.push(type_tag(value_type));
     }
 
     for (parameter_id, _) in &function.parameters {
         canon.get_or_insert(*parameter_id);
     }
-    for rv in &function.return_values_initial {
-        canon.get_or_insert(*rv);
+    for return_value_id in &function.return_values_initial {
+        canon.get_or_insert(*return_value_id);
     }
 
     for statement in &function.body.statements {
-        canon.encode_statement(statement, &mut buf);
+        canon.encode_statement(statement, &mut buffer);
     }
 
-    buf.push(0xFE);
-    for rv in &function.return_values {
-        canon.encode_value_id(*rv, &mut buf);
+    buffer.push(0xFE);
+    for return_value_id in &function.return_values {
+        canon.encode_value_id(*return_value_id, &mut buffer);
     }
 
-    buf
+    buffer
 }
 
 struct Canonicalizer {
@@ -2199,246 +2242,250 @@ impl Canonicalizer {
 
     fn get_or_insert(&mut self, id: ValueId) -> u32 {
         *self.id_map.entry(id.0).or_insert_with(|| {
-            let n = self.next_id;
+            let assigned_index = self.next_id;
             self.next_id += 1;
-            n
+            assigned_index
         })
     }
 
-    fn encode_value_id(&mut self, id: ValueId, buf: &mut Vec<u8>) {
+    fn encode_value_id(&mut self, id: ValueId, buffer: &mut Vec<u8>) {
         let canonical = self.get_or_insert(id);
-        buf.extend_from_slice(&canonical.to_le_bytes());
+        buffer.extend_from_slice(&canonical.to_le_bytes());
     }
 
-    fn encode_value(&mut self, value: &Value, buf: &mut Vec<u8>) {
-        self.encode_value_id(value.id, buf);
-        buf.push(type_tag(&value.value_type));
+    fn encode_value(&mut self, value: &Value, buffer: &mut Vec<u8>) {
+        self.encode_value_id(value.id, buffer);
+        buffer.push(type_tag(&value.value_type));
     }
 
-    fn encode_expression(&mut self, expression: &Expression, buf: &mut Vec<u8>) {
+    fn encode_expression(&mut self, expression: &Expression, buffer: &mut Vec<u8>) {
         match expression {
             Expression::Literal { value, value_type } => {
-                buf.push(0x01);
+                buffer.push(0x01);
                 let bytes = value.to_bytes_le();
-                buf.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
-                buf.extend_from_slice(&bytes);
-                buf.push(type_tag(value_type));
+                buffer.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
+                buffer.extend_from_slice(&bytes);
+                buffer.push(type_tag(value_type));
             }
             Expression::Var(id) => {
-                buf.push(0x02);
-                self.encode_value_id(*id, buf);
+                buffer.push(0x02);
+                self.encode_value_id(*id, buffer);
             }
             Expression::Binary {
                 operation,
                 lhs,
                 rhs,
             } => {
-                buf.push(0x03);
-                buf.push(binop_tag(*operation));
-                self.encode_value(lhs, buf);
-                self.encode_value(rhs, buf);
+                buffer.push(0x03);
+                buffer.push(binop_tag(*operation));
+                self.encode_value(lhs, buffer);
+                self.encode_value(rhs, buffer);
             }
             Expression::Ternary { operation, a, b, n } => {
-                buf.push(0x04);
-                buf.push(binop_tag(*operation));
-                self.encode_value(a, buf);
-                self.encode_value(b, buf);
-                self.encode_value(n, buf);
+                buffer.push(0x04);
+                buffer.push(binop_tag(*operation));
+                self.encode_value(a, buffer);
+                self.encode_value(b, buffer);
+                self.encode_value(n, buffer);
             }
             Expression::Unary { operation, operand } => {
-                buf.push(0x05);
-                buf.push(unaryop_tag(*operation));
-                self.encode_value(operand, buf);
+                buffer.push(0x05);
+                buffer.push(unaryop_tag(*operation));
+                self.encode_value(operand, buffer);
             }
             Expression::Call {
                 function,
                 arguments,
             } => {
-                buf.push(0x06);
-                buf.extend_from_slice(&function.0.to_le_bytes());
-                buf.push(arguments.len() as u8);
+                buffer.push(0x06);
+                buffer.extend_from_slice(&function.0.to_le_bytes());
+                buffer.push(arguments.len() as u8);
                 for argument in arguments {
-                    self.encode_value(argument, buf);
+                    self.encode_value(argument, buffer);
                 }
             }
             Expression::CallDataLoad { offset } => {
-                buf.push(0x10);
-                self.encode_value(offset, buf);
+                buffer.push(0x10);
+                self.encode_value(offset, buffer);
             }
             Expression::MLoad { offset, region } => {
-                buf.push(0x11);
-                self.encode_value(offset, buf);
-                buf.push(region_tag(region));
+                buffer.push(0x11);
+                self.encode_value(offset, buffer);
+                buffer.push(region_tag(region));
             }
             Expression::SLoad { key, static_slot } => {
-                buf.push(0x12);
-                self.encode_value(key, buf);
+                buffer.push(0x12);
+                self.encode_value(key, buffer);
                 if let Some(slot) = static_slot {
-                    buf.push(1);
+                    buffer.push(1);
                     let bytes = slot.to_bytes_le();
-                    buf.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
-                    buf.extend_from_slice(&bytes);
+                    buffer.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
+                    buffer.extend_from_slice(&bytes);
                 } else {
-                    buf.push(0);
+                    buffer.push(0);
                 }
             }
             Expression::TLoad { key } => {
-                buf.push(0x13);
-                self.encode_value(key, buf);
+                buffer.push(0x13);
+                self.encode_value(key, buffer);
             }
             Expression::Keccak256 { offset, length } => {
-                buf.push(0x14);
-                self.encode_value(offset, buf);
-                self.encode_value(length, buf);
+                buffer.push(0x14);
+                self.encode_value(offset, buffer);
+                self.encode_value(length, buffer);
             }
             Expression::Keccak256Pair { word0, word1 } => {
-                buf.push(0x24);
-                self.encode_value(word0, buf);
-                self.encode_value(word1, buf);
+                buffer.push(0x24);
+                self.encode_value(word0, buffer);
+                self.encode_value(word1, buffer);
             }
             Expression::Keccak256Single { word0 } => {
-                buf.push(0x25);
-                self.encode_value(word0, buf);
+                buffer.push(0x25);
+                self.encode_value(word0, buffer);
             }
             Expression::MappingSLoad { key, slot } => {
-                buf.push(0x27);
-                self.encode_value(key, buf);
-                self.encode_value(slot, buf);
+                buffer.push(0x27);
+                self.encode_value(key, buffer);
+                self.encode_value(slot, buffer);
             }
             Expression::Truncate { value, to } => {
-                buf.push(0x15);
-                self.encode_value(value, buf);
-                buf.push(bitwidth_tag(*to));
+                buffer.push(0x15);
+                self.encode_value(value, buffer);
+                buffer.push(bitwidth_tag(*to));
             }
             Expression::ZeroExtend { value, to } => {
-                buf.push(0x16);
-                self.encode_value(value, buf);
-                buf.push(bitwidth_tag(*to));
+                buffer.push(0x16);
+                self.encode_value(value, buffer);
+                buffer.push(bitwidth_tag(*to));
             }
             Expression::SignExtendTo { value, to } => {
-                buf.push(0x17);
-                self.encode_value(value, buf);
-                buf.push(bitwidth_tag(*to));
+                buffer.push(0x17);
+                self.encode_value(value, buffer);
+                buffer.push(bitwidth_tag(*to));
             }
             Expression::ExtCodeSize { address }
             | Expression::ExtCodeHash { address }
             | Expression::Balance { address } => {
-                buf.push(match expression {
+                buffer.push(match expression {
                     Expression::ExtCodeSize { .. } => 0x20,
                     Expression::ExtCodeHash { .. } => 0x21,
                     Expression::Balance { .. } => 0x22,
                     _ => unreachable!(),
                 });
-                self.encode_value(address, buf);
+                self.encode_value(address, buffer);
             }
             Expression::BlockHash { number } => {
-                buf.push(0x23);
-                self.encode_value(number, buf);
+                buffer.push(0x23);
+                self.encode_value(number, buffer);
             }
             Expression::BlobHash { index } => {
-                buf.push(0x26);
-                self.encode_value(index, buf);
+                buffer.push(0x26);
+                self.encode_value(index, buffer);
             }
             Expression::DataOffset { id } => {
-                buf.push(0x30);
-                buf.extend_from_slice(&(id.len() as u16).to_le_bytes());
-                buf.extend_from_slice(id.as_bytes());
+                buffer.push(0x30);
+                buffer.extend_from_slice(&(id.len() as u16).to_le_bytes());
+                buffer.extend_from_slice(id.as_bytes());
             }
             Expression::DataSize { id } => {
-                buf.push(0x31);
-                buf.extend_from_slice(&(id.len() as u16).to_le_bytes());
-                buf.extend_from_slice(id.as_bytes());
+                buffer.push(0x31);
+                buffer.extend_from_slice(&(id.len() as u16).to_le_bytes());
+                buffer.extend_from_slice(id.as_bytes());
             }
             Expression::LoadImmutable { key } => {
-                buf.push(0x32);
-                buf.extend_from_slice(&(key.len() as u16).to_le_bytes());
-                buf.extend_from_slice(key.as_bytes());
+                buffer.push(0x32);
+                buffer.extend_from_slice(&(key.len() as u16).to_le_bytes());
+                buffer.extend_from_slice(key.as_bytes());
             }
             Expression::LinkerSymbol { path } => {
-                buf.push(0x33);
-                buf.extend_from_slice(&(path.len() as u16).to_le_bytes());
-                buf.extend_from_slice(path.as_bytes());
+                buffer.push(0x33);
+                buffer.extend_from_slice(&(path.len() as u16).to_le_bytes());
+                buffer.extend_from_slice(path.as_bytes());
             }
             _ => {
-                buf.push(nullary_expr_tag(expression));
+                buffer.push(nullary_expr_tag(expression));
             }
         }
     }
 
-    fn encode_region(&mut self, region: &Region, buf: &mut Vec<u8>) {
-        buf.extend_from_slice(&(region.statements.len() as u32).to_le_bytes());
+    fn encode_region(&mut self, region: &Region, buffer: &mut Vec<u8>) {
+        buffer.extend_from_slice(&(region.statements.len() as u32).to_le_bytes());
         for statement in &region.statements {
-            self.encode_statement(statement, buf);
+            self.encode_statement(statement, buffer);
         }
-        buf.push(region.yields.len() as u8);
-        for y in &region.yields {
-            self.encode_value(y, buf);
+        buffer.push(region.yields.len() as u8);
+        for yielded_value in &region.yields {
+            self.encode_value(yielded_value, buffer);
         }
     }
 
-    fn encode_statement(&mut self, statement: &Statement, buf: &mut Vec<u8>) {
+    fn encode_statement(&mut self, statement: &Statement, buffer: &mut Vec<u8>) {
         match statement {
             Statement::Let { bindings, value } => {
-                buf.push(0x80);
-                buf.push(bindings.len() as u8);
-                for b in bindings {
-                    self.encode_value_id(*b, buf);
+                buffer.push(0x80);
+                buffer.push(bindings.len() as u8);
+                for binding in bindings {
+                    self.encode_value_id(*binding, buffer);
                 }
-                self.encode_expression(value, buf);
+                self.encode_expression(value, buffer);
             }
             Statement::MStore {
                 offset,
                 value,
                 region,
             } => {
-                buf.push(0x81);
-                self.encode_value(offset, buf);
-                self.encode_value(value, buf);
-                buf.push(region_tag(region));
+                buffer.push(0x81);
+                self.encode_value(offset, buffer);
+                self.encode_value(value, buffer);
+                buffer.push(region_tag(region));
             }
             Statement::MStore8 {
                 offset,
                 value,
                 region,
             } => {
-                buf.push(0x82);
-                self.encode_value(offset, buf);
-                self.encode_value(value, buf);
-                buf.push(region_tag(region));
+                buffer.push(0x82);
+                self.encode_value(offset, buffer);
+                self.encode_value(value, buffer);
+                buffer.push(region_tag(region));
             }
-            Statement::MCopy { dest, src, length } => {
-                buf.push(0x83);
-                self.encode_value(dest, buf);
-                self.encode_value(src, buf);
-                self.encode_value(length, buf);
+            Statement::MCopy {
+                destination,
+                source,
+                length,
+            } => {
+                buffer.push(0x83);
+                self.encode_value(destination, buffer);
+                self.encode_value(source, buffer);
+                self.encode_value(length, buffer);
             }
             Statement::SStore {
                 key,
                 value,
                 static_slot,
             } => {
-                buf.push(0x84);
-                self.encode_value(key, buf);
-                self.encode_value(value, buf);
+                buffer.push(0x84);
+                self.encode_value(key, buffer);
+                self.encode_value(value, buffer);
                 if let Some(slot) = static_slot {
-                    buf.push(1);
+                    buffer.push(1);
                     let bytes = slot.to_bytes_le();
-                    buf.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
-                    buf.extend_from_slice(&bytes);
+                    buffer.extend_from_slice(&(bytes.len() as u16).to_le_bytes());
+                    buffer.extend_from_slice(&bytes);
                 } else {
-                    buf.push(0);
+                    buffer.push(0);
                 }
             }
             Statement::TStore { key, value } => {
-                buf.push(0x85);
-                self.encode_value(key, buf);
-                self.encode_value(value, buf);
+                buffer.push(0x85);
+                self.encode_value(key, buffer);
+                self.encode_value(value, buffer);
             }
             Statement::MappingSStore { key, slot, value } => {
-                buf.push(0xA5);
-                self.encode_value(key, buf);
-                self.encode_value(slot, buf);
-                self.encode_value(value, buf);
+                buffer.push(0xA5);
+                self.encode_value(key, buffer);
+                self.encode_value(slot, buffer);
+                self.encode_value(value, buffer);
             }
             Statement::If {
                 condition,
@@ -2447,22 +2494,22 @@ impl Canonicalizer {
                 else_region,
                 outputs,
             } => {
-                buf.push(0x86);
-                self.encode_value(condition, buf);
-                buf.push(inputs.len() as u8);
-                for i in inputs {
-                    self.encode_value(i, buf);
+                buffer.push(0x86);
+                self.encode_value(condition, buffer);
+                buffer.push(inputs.len() as u8);
+                for input in inputs {
+                    self.encode_value(input, buffer);
                 }
-                self.encode_region(then_region, buf);
-                if let Some(r) = else_region {
-                    buf.push(1);
-                    self.encode_region(r, buf);
+                self.encode_region(then_region, buffer);
+                if let Some(else_region_body) = else_region {
+                    buffer.push(1);
+                    self.encode_region(else_region_body, buffer);
                 } else {
-                    buf.push(0);
+                    buffer.push(0);
                 }
-                buf.push(outputs.len() as u8);
-                for o in outputs {
-                    self.encode_value_id(*o, buf);
+                buffer.push(outputs.len() as u8);
+                for output in outputs {
+                    self.encode_value_id(*output, buffer);
                 }
             }
             Statement::Switch {
@@ -2472,28 +2519,28 @@ impl Canonicalizer {
                 default,
                 outputs,
             } => {
-                buf.push(0x87);
-                self.encode_value(scrutinee, buf);
-                buf.push(inputs.len() as u8);
-                for i in inputs {
-                    self.encode_value(i, buf);
+                buffer.push(0x87);
+                self.encode_value(scrutinee, buffer);
+                buffer.push(inputs.len() as u8);
+                for input in inputs {
+                    self.encode_value(input, buffer);
                 }
-                buf.extend_from_slice(&(cases.len() as u32).to_le_bytes());
-                for c in cases {
-                    let case_bytes = c.value.to_bytes_le();
-                    buf.extend_from_slice(&(case_bytes.len() as u16).to_le_bytes());
-                    buf.extend_from_slice(&case_bytes);
-                    self.encode_region(&c.body, buf);
+                buffer.extend_from_slice(&(cases.len() as u32).to_le_bytes());
+                for case in cases {
+                    let case_bytes = case.value.to_bytes_le();
+                    buffer.extend_from_slice(&(case_bytes.len() as u16).to_le_bytes());
+                    buffer.extend_from_slice(&case_bytes);
+                    self.encode_region(&case.body, buffer);
                 }
-                if let Some(d) = default {
-                    buf.push(1);
-                    self.encode_region(d, buf);
+                if let Some(default_region) = default {
+                    buffer.push(1);
+                    self.encode_region(default_region, buffer);
                 } else {
-                    buf.push(0);
+                    buffer.push(0);
                 }
-                buf.push(outputs.len() as u8);
-                for o in outputs {
-                    self.encode_value_id(*o, buf);
+                buffer.push(outputs.len() as u8);
+                for output in outputs {
+                    self.encode_value_id(*output, buffer);
                 }
             }
             Statement::For {
@@ -2506,58 +2553,58 @@ impl Canonicalizer {
                 post,
                 outputs,
             } => {
-                buf.push(0x88);
-                buf.push(initial_values.len() as u8);
-                for v in initial_values {
-                    self.encode_value(v, buf);
+                buffer.push(0x88);
+                buffer.push(initial_values.len() as u8);
+                for value in initial_values {
+                    self.encode_value(value, buffer);
                 }
-                buf.push(loop_variables.len() as u8);
-                for lv in loop_variables {
-                    self.encode_value_id(*lv, buf);
+                buffer.push(loop_variables.len() as u8);
+                for loop_variable_id in loop_variables {
+                    self.encode_value_id(*loop_variable_id, buffer);
                 }
-                buf.extend_from_slice(&(condition_statements.len() as u32).to_le_bytes());
-                for s in condition_statements {
-                    self.encode_statement(s, buf);
+                buffer.extend_from_slice(&(condition_statements.len() as u32).to_le_bytes());
+                for statement in condition_statements {
+                    self.encode_statement(statement, buffer);
                 }
-                self.encode_expression(condition, buf);
-                self.encode_region(body, buf);
-                buf.push(post_input_variables.len() as u8);
-                for pv in post_input_variables {
-                    self.encode_value_id(*pv, buf);
+                self.encode_expression(condition, buffer);
+                self.encode_region(body, buffer);
+                buffer.push(post_input_variables.len() as u8);
+                for post_input_variable_id in post_input_variables {
+                    self.encode_value_id(*post_input_variable_id, buffer);
                 }
-                self.encode_region(post, buf);
-                buf.push(outputs.len() as u8);
-                for o in outputs {
-                    self.encode_value_id(*o, buf);
+                self.encode_region(post, buffer);
+                buffer.push(outputs.len() as u8);
+                for output in outputs {
+                    self.encode_value_id(*output, buffer);
                 }
             }
             Statement::Block(region) => {
-                buf.push(0x89);
-                self.encode_region(region, buf);
+                buffer.push(0x89);
+                self.encode_region(region, buffer);
             }
             Statement::Revert { offset, length } => {
-                buf.push(0x90);
-                self.encode_value(offset, buf);
-                self.encode_value(length, buf);
+                buffer.push(0x90);
+                self.encode_value(offset, buffer);
+                self.encode_value(length, buffer);
             }
             Statement::Return { offset, length } => {
-                buf.push(0x91);
-                self.encode_value(offset, buf);
-                self.encode_value(length, buf);
+                buffer.push(0x91);
+                self.encode_value(offset, buffer);
+                self.encode_value(length, buffer);
             }
-            Statement::Stop => buf.push(0x92),
-            Statement::Invalid => buf.push(0x93),
+            Statement::Stop => buffer.push(0x92),
+            Statement::Invalid => buffer.push(0x93),
             Statement::PanicRevert { code } => {
-                buf.push(0xA2);
-                buf.push(*code);
+                buffer.push(0xA2);
+                buffer.push(*code);
             }
             Statement::ErrorStringRevert { length, data } => {
-                buf.push(0xA3);
-                buf.push(*length);
-                buf.push(data.len() as u8);
+                buffer.push(0xA3);
+                buffer.push(*length);
+                buffer.push(data.len() as u8);
                 for word in data {
                     for byte in word.to_bytes_be() {
-                        buf.push(byte);
+                        buffer.push(byte);
                     }
                 }
             }
@@ -2565,13 +2612,13 @@ impl Canonicalizer {
                 selector,
                 arguments,
             } => {
-                buf.push(0xA4);
-                buf.push(arguments.len() as u8);
+                buffer.push(0xA4);
+                buffer.push(arguments.len() as u8);
                 for byte in selector.to_bytes_be() {
-                    buf.push(byte);
+                    buffer.push(byte);
                 }
                 for argument in arguments {
-                    self.encode_value(argument, buf);
+                    self.encode_value(argument, buffer);
                 }
             }
             Statement::ExternalCall {
@@ -2585,21 +2632,21 @@ impl Canonicalizer {
                 ret_length,
                 result,
             } => {
-                buf.push(0x94);
-                buf.push(callkind_tag(*kind));
-                self.encode_value(gas, buf);
-                self.encode_value(address, buf);
-                if let Some(v) = value {
-                    buf.push(1);
-                    self.encode_value(v, buf);
+                buffer.push(0x94);
+                buffer.push(callkind_tag(*kind));
+                self.encode_value(gas, buffer);
+                self.encode_value(address, buffer);
+                if let Some(call_value) = value {
+                    buffer.push(1);
+                    self.encode_value(call_value, buffer);
                 } else {
-                    buf.push(0);
+                    buffer.push(0);
                 }
-                self.encode_value(args_offset, buf);
-                self.encode_value(args_length, buf);
-                self.encode_value(ret_offset, buf);
-                self.encode_value(ret_length, buf);
-                self.encode_value_id(*result, buf);
+                self.encode_value(args_offset, buffer);
+                self.encode_value(args_length, buffer);
+                self.encode_value(ret_offset, buffer);
+                self.encode_value(ret_length, buffer);
+                self.encode_value_id(*result, buffer);
             }
             Statement::Create {
                 kind,
@@ -2609,117 +2656,117 @@ impl Canonicalizer {
                 salt,
                 result,
             } => {
-                buf.push(0x95);
-                buf.push(createkind_tag(*kind));
-                self.encode_value(value, buf);
-                self.encode_value(offset, buf);
-                self.encode_value(length, buf);
-                if let Some(s) = salt {
-                    buf.push(1);
-                    self.encode_value(s, buf);
+                buffer.push(0x95);
+                buffer.push(createkind_tag(*kind));
+                self.encode_value(value, buffer);
+                self.encode_value(offset, buffer);
+                self.encode_value(length, buffer);
+                if let Some(salt_value) = salt {
+                    buffer.push(1);
+                    self.encode_value(salt_value, buffer);
                 } else {
-                    buf.push(0);
+                    buffer.push(0);
                 }
-                self.encode_value_id(*result, buf);
+                self.encode_value_id(*result, buffer);
             }
             Statement::Log {
                 offset,
                 length,
                 topics,
             } => {
-                buf.push(0x96);
-                self.encode_value(offset, buf);
-                self.encode_value(length, buf);
-                buf.push(topics.len() as u8);
-                for t in topics {
-                    self.encode_value(t, buf);
+                buffer.push(0x96);
+                self.encode_value(offset, buffer);
+                self.encode_value(length, buffer);
+                buffer.push(topics.len() as u8);
+                for topic in topics {
+                    self.encode_value(topic, buffer);
                 }
             }
             Statement::CodeCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                buf.push(0x97);
-                self.encode_value(dest, buf);
-                self.encode_value(offset, buf);
-                self.encode_value(length, buf);
+                buffer.push(0x97);
+                self.encode_value(destination, buffer);
+                self.encode_value(offset, buffer);
+                self.encode_value(length, buffer);
             }
             Statement::ExtCodeCopy {
                 address,
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                buf.push(0x98);
-                self.encode_value(address, buf);
-                self.encode_value(dest, buf);
-                self.encode_value(offset, buf);
-                self.encode_value(length, buf);
+                buffer.push(0x98);
+                self.encode_value(address, buffer);
+                self.encode_value(destination, buffer);
+                self.encode_value(offset, buffer);
+                self.encode_value(length, buffer);
             }
             Statement::ReturnDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                buf.push(0x99);
-                self.encode_value(dest, buf);
-                self.encode_value(offset, buf);
-                self.encode_value(length, buf);
+                buffer.push(0x99);
+                self.encode_value(destination, buffer);
+                self.encode_value(offset, buffer);
+                self.encode_value(length, buffer);
             }
             Statement::DataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                buf.push(0x9A);
-                self.encode_value(dest, buf);
-                self.encode_value(offset, buf);
-                self.encode_value(length, buf);
+                buffer.push(0x9A);
+                self.encode_value(destination, buffer);
+                self.encode_value(offset, buffer);
+                self.encode_value(length, buffer);
             }
             Statement::CallDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                buf.push(0x9B);
-                self.encode_value(dest, buf);
-                self.encode_value(offset, buf);
-                self.encode_value(length, buf);
+                buffer.push(0x9B);
+                self.encode_value(destination, buffer);
+                self.encode_value(offset, buffer);
+                self.encode_value(length, buffer);
             }
             Statement::SetImmutable { key, value } => {
-                buf.push(0x9C);
-                buf.extend_from_slice(&(key.len() as u16).to_le_bytes());
-                buf.extend_from_slice(key.as_bytes());
-                self.encode_value(value, buf);
+                buffer.push(0x9C);
+                buffer.extend_from_slice(&(key.len() as u16).to_le_bytes());
+                buffer.extend_from_slice(key.as_bytes());
+                self.encode_value(value, buffer);
             }
             Statement::Leave { return_values } => {
-                buf.push(0x9D);
-                buf.push(return_values.len() as u8);
-                for v in return_values {
-                    self.encode_value(v, buf);
+                buffer.push(0x9D);
+                buffer.push(return_values.len() as u8);
+                for value in return_values {
+                    self.encode_value(value, buffer);
                 }
             }
             Statement::Expression(expression) => {
-                buf.push(0x9E);
-                self.encode_expression(expression, buf);
+                buffer.push(0x9E);
+                self.encode_expression(expression, buffer);
             }
             Statement::SelfDestruct { address } => {
-                buf.push(0x9F);
-                self.encode_value(address, buf);
+                buffer.push(0x9F);
+                self.encode_value(address, buffer);
             }
             Statement::Break { values } => {
-                buf.push(0xA0);
-                buf.push(values.len() as u8);
-                for v in values {
-                    self.encode_value(v, buf);
+                buffer.push(0xA0);
+                buffer.push(values.len() as u8);
+                for value in values {
+                    self.encode_value(value, buffer);
                 }
             }
             Statement::Continue { values } => {
-                buf.push(0xA1);
-                buf.push(values.len() as u8);
-                for v in values {
-                    self.encode_value(v, buf);
+                buffer.push(0xA1);
+                buffer.push(values.len() as u8);
+                for value in values {
+                    self.encode_value(value, buffer);
                 }
             }
         }
@@ -2729,7 +2776,7 @@ impl Canonicalizer {
 fn type_tag(value_type: &Type) -> u8 {
     match value_type {
         Type::Int(bit_width) => bitwidth_tag(*bit_width),
-        Type::Ptr(addr) => match addr {
+        Type::Ptr(address_space) => match address_space {
             crate::ir::AddressSpace::Heap => 0xE0,
             crate::ir::AddressSpace::Stack => 0xE1,
             crate::ir::AddressSpace::Storage => 0xE2,
@@ -2887,28 +2934,28 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
         }
 
         let mut group_literals: Vec<(FunctionId, Vec<BigUint>)> = Vec::new();
-        for &fid in group {
-            let function = &object.functions[&fid];
-            let lits = collect_literals_ordered(function);
-            group_literals.push((fid, lits));
+        for &function_id in group {
+            let function = &object.functions[&function_id];
+            let literals = collect_literals_ordered(function);
+            group_literals.push((function_id, literals));
         }
 
-        let lit_count = group_literals[0].1.len();
+        let literal_count = group_literals[0].1.len();
         if group_literals
             .iter()
-            .any(|(_, lits)| lits.len() != lit_count)
+            .any(|(_, literals)| literals.len() != literal_count)
         {
             continue;
         }
 
         let mut differing_positions: Vec<usize> = Vec::new();
-        for pos in 0..lit_count {
-            let first_val = &group_literals[0].1[pos];
+        for position in 0..literal_count {
+            let first_value = &group_literals[0].1[position];
             if group_literals
                 .iter()
-                .any(|(_, lits)| &lits[pos] != first_val)
+                .any(|(_, literals)| &literals[position] != first_value)
             {
-                differing_positions.push(pos);
+                differing_positions.push(position);
             }
         }
 
@@ -2917,73 +2964,82 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
         }
 
         let mut value_sig_to_group: BTreeMap<Vec<Vec<u8>>, Vec<usize>> = BTreeMap::new();
-        for &pos in &differing_positions {
+        for &position in &differing_positions {
             let sig: Vec<Vec<u8>> = group_literals
                 .iter()
-                .map(|(_, lits)| lits[pos].to_bytes_le())
+                .map(|(_, literals)| literals[position].to_bytes_le())
                 .collect();
-            value_sig_to_group.entry(sig).or_default().push(pos);
+            value_sig_to_group.entry(sig).or_default().push(position);
         }
 
-        let unique_param_count = value_sig_to_group.len();
-        if unique_param_count > MAX_FUZZY_LITERAL_DIFFS {
+        let unique_parameter_count = value_sig_to_group.len();
+        if unique_parameter_count > MAX_FUZZY_LITERAL_DIFFS {
             continue;
         }
 
         let mut parameter_groups: Vec<Vec<usize>> = value_sig_to_group.into_values().collect();
-        parameter_groups.sort_by_key(|g| g[0]);
+        parameter_groups.sort_by_key(|group| group[0]);
         let mut position_to_parameter_index: BTreeMap<usize, usize> = BTreeMap::new();
         for (parameter_index, positions) in parameter_groups.iter().enumerate() {
-            for &pos in positions {
-                position_to_parameter_index.insert(pos, parameter_index);
+            for &position in positions {
+                position_to_parameter_index.insert(position, parameter_index);
             }
         }
 
         let canonical_id = group[0];
         let canonical_func = object.functions.get(&canonical_id).unwrap().clone();
 
-        let canonical_param_count = canonical_func.parameters.len();
+        let canonical_parameter_count = canonical_func.parameters.len();
         let canonical_returns = &canonical_func.returns;
-        let all_compatible = group.iter().skip(1).all(|&fid| {
-            let function = &object.functions[&fid];
-            function.parameters.len() == canonical_param_count
+        let all_compatible = group.iter().skip(1).all(|&function_id| {
+            let function = &object.functions[&function_id];
+            function.parameters.len() == canonical_parameter_count
                 && &function.returns == canonical_returns
                 && function
                     .parameters
                     .iter()
                     .zip(canonical_func.parameters.iter())
-                    .all(|((_, t1), (_, t2))| t1 == t2)
+                    .all(|((_, type1), (_, type2))| type1 == type2)
         });
         if !all_compatible {
             continue;
         }
 
         let mut new_parameter_ids: Vec<ValueId> = Vec::new();
-        for _ in 0..unique_param_count {
+        for _ in 0..unique_parameter_count {
             new_parameter_ids.push(next_value_id.fresh());
         }
 
         let position_parameter_ids: Vec<(usize, ValueId)> = differing_positions
             .iter()
-            .map(|&pos| (pos, new_parameter_ids[position_to_parameter_index[&pos]]))
+            .map(|&position| {
+                (
+                    position,
+                    new_parameter_ids[position_to_parameter_index[&position]],
+                )
+            })
             .collect();
 
         let parameter_types: Vec<Type> = parameter_groups
             .iter()
             .map(|positions| {
-                let max_val = group_literals
+                let max_value = group_literals
                     .iter()
-                    .flat_map(|(_, lits)| positions.iter().map(move |&p| lits[p].clone()))
+                    .flat_map(|(_, literals)| {
+                        positions
+                            .iter()
+                            .map(move |&position| literals[position].clone())
+                    })
                     .max()
                     .unwrap_or_else(BigUint::zero);
-                Type::Int(BitWidth::from_max_value(&max_val))
+                Type::Int(BitWidth::from_max_value(&max_value))
             })
             .collect();
 
-        let all_params_narrow = parameter_types
-            .iter()
-            .all(|t| matches!(t, Type::Int(width) if *width <= BitWidth::I64));
-        let effective_min_size = if all_params_narrow {
+        let all_parameters_narrow = parameter_types.iter().all(
+            |parameter_type| matches!(parameter_type, Type::Int(width) if *width <= BitWidth::I64),
+        );
+        let effective_min_size = if all_parameters_narrow {
             MIN_FUZZY_DEDUP_SIZE_NARROW_PARAMS
         } else {
             MIN_FUZZY_DEDUP_SIZE
@@ -2993,54 +3049,58 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
         }
 
         let mut parameterized = canonical_func.clone();
-        for (&vid, parameter_type) in new_parameter_ids.iter().zip(parameter_types.iter()) {
-            parameterized.parameters.push((vid, *parameter_type));
+        for (&value_id, parameter_type) in new_parameter_ids.iter().zip(parameter_types.iter()) {
+            parameterized.parameters.push((value_id, *parameter_type));
         }
 
-        let canonical_lits = &group_literals[0].1;
+        let canonical_literals = &group_literals[0].1;
 
-        replace_literals_with_params(&mut parameterized.body, &position_parameter_ids);
+        replace_literals_with_parameters(&mut parameterized.body, &position_parameter_ids);
 
         object.functions.insert(canonical_id, parameterized);
 
-        let canonical_extra_args: Vec<BigUint> = parameter_groups
+        let canonical_extra_arguments: Vec<BigUint> = parameter_groups
             .iter()
-            .map(|positions| canonical_lits[positions[0]].clone())
+            .map(|positions| canonical_literals[positions[0]].clone())
             .collect();
 
-        for &fid in group {
-            let extra_args: Vec<BigUint> = if fid == canonical_id {
-                canonical_extra_args.clone()
+        for &function_id in group {
+            let extra_arguments: Vec<BigUint> = if function_id == canonical_id {
+                canonical_extra_arguments.clone()
             } else {
-                let lits = &group_literals.iter().find(|(id, _)| *id == fid).unwrap().1;
+                let literals = &group_literals
+                    .iter()
+                    .find(|(id, _)| *id == function_id)
+                    .unwrap()
+                    .1;
                 parameter_groups
                     .iter()
-                    .map(|positions| lits[positions[0]].clone())
+                    .map(|positions| literals[positions[0]].clone())
                     .collect()
             };
 
-            update_call_sites_with_extra_args(
+            update_call_sites_with_extra_arguments(
                 &mut object.code,
-                fid,
+                function_id,
                 canonical_id,
-                &extra_args,
+                &extra_arguments,
                 &parameter_types,
                 &mut next_value_id,
             );
             for function in object.functions.values_mut() {
-                update_call_sites_with_extra_args(
+                update_call_sites_with_extra_arguments(
                     &mut function.body,
-                    fid,
+                    function_id,
                     canonical_id,
-                    &extra_args,
+                    &extra_arguments,
                     &parameter_types,
                     &mut next_value_id,
                 );
             }
         }
 
-        for &fid in group.iter().skip(1) {
-            object.functions.remove(&fid);
+        for &function_id in group.iter().skip(1) {
+            object.functions.remove(&function_id);
             total_removed += 1;
         }
     }
@@ -3053,102 +3113,102 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
 /// identical except for their literal constant values.
 fn fuzzy_canonicalize_function(function: &crate::ir::Function) -> Vec<u8> {
     let mut canon = Canonicalizer::new();
-    let mut buf = Vec::new();
+    let mut buffer = Vec::new();
 
-    buf.push(function.parameters.len() as u8);
+    buffer.push(function.parameters.len() as u8);
     for (_, value_type) in &function.parameters {
-        buf.push(type_tag(value_type));
+        buffer.push(type_tag(value_type));
     }
-    buf.push(function.returns.len() as u8);
+    buffer.push(function.returns.len() as u8);
     for value_type in &function.returns {
-        buf.push(type_tag(value_type));
+        buffer.push(type_tag(value_type));
     }
 
     for (parameter_id, _) in &function.parameters {
         canon.get_or_insert(*parameter_id);
     }
-    for rv in &function.return_values_initial {
-        canon.get_or_insert(*rv);
+    for return_value_id in &function.return_values_initial {
+        canon.get_or_insert(*return_value_id);
     }
 
-    let mut lit_counter = 0u32;
+    let mut literal_counter = 0u32;
     for statement in &function.body.statements {
-        fuzzy_encode_statement(&mut canon, statement, &mut buf, &mut lit_counter);
+        fuzzy_encode_statement(&mut canon, statement, &mut buffer, &mut literal_counter);
     }
 
-    buf.push(0xFE);
-    for rv in &function.return_values {
-        canon.encode_value_id(*rv, &mut buf);
+    buffer.push(0xFE);
+    for return_value_id in &function.return_values {
+        canon.encode_value_id(*return_value_id, &mut buffer);
     }
 
-    buf
+    buffer
 }
 
 fn fuzzy_encode_expressionession(
     canon: &mut Canonicalizer,
     expression: &Expression,
-    buf: &mut Vec<u8>,
-    lit_counter: &mut u32,
+    buffer: &mut Vec<u8>,
+    literal_counter: &mut u32,
 ) {
     match expression {
         Expression::Literal { value_type, .. } => {
-            buf.push(0x01);
-            buf.push(0xFF);
-            buf.extend_from_slice(&lit_counter.to_le_bytes());
-            *lit_counter += 1;
-            buf.push(type_tag(value_type));
+            buffer.push(0x01);
+            buffer.push(0xFF);
+            buffer.extend_from_slice(&literal_counter.to_le_bytes());
+            *literal_counter += 1;
+            buffer.push(type_tag(value_type));
         }
         Expression::Var(id) => {
-            buf.push(0x02);
-            canon.encode_value_id(*id, buf);
+            buffer.push(0x02);
+            canon.encode_value_id(*id, buffer);
         }
         Expression::Binary {
             operation,
             lhs,
             rhs,
         } => {
-            buf.push(0x03);
-            buf.push(binop_tag(*operation));
-            canon.encode_value(lhs, buf);
-            canon.encode_value(rhs, buf);
+            buffer.push(0x03);
+            buffer.push(binop_tag(*operation));
+            canon.encode_value(lhs, buffer);
+            canon.encode_value(rhs, buffer);
         }
         Expression::Ternary { operation, a, b, n } => {
-            buf.push(0x04);
-            buf.push(binop_tag(*operation));
-            canon.encode_value(a, buf);
-            canon.encode_value(b, buf);
-            canon.encode_value(n, buf);
+            buffer.push(0x04);
+            buffer.push(binop_tag(*operation));
+            canon.encode_value(a, buffer);
+            canon.encode_value(b, buffer);
+            canon.encode_value(n, buffer);
         }
         Expression::Unary { operation, operand } => {
-            buf.push(0x05);
-            buf.push(unaryop_tag(*operation));
-            canon.encode_value(operand, buf);
+            buffer.push(0x05);
+            buffer.push(unaryop_tag(*operation));
+            canon.encode_value(operand, buffer);
         }
         Expression::Call {
             function,
             arguments,
         } => {
-            buf.push(0x06);
-            buf.extend_from_slice(&function.0.to_le_bytes());
-            buf.push(arguments.len() as u8);
+            buffer.push(0x06);
+            buffer.extend_from_slice(&function.0.to_le_bytes());
+            buffer.push(arguments.len() as u8);
             for argument in arguments {
-                canon.encode_value(argument, buf);
+                canon.encode_value(argument, buffer);
             }
         }
         Expression::SLoad { key, static_slot } => {
-            buf.push(0x12);
-            canon.encode_value(key, buf);
+            buffer.push(0x12);
+            canon.encode_value(key, buffer);
             if static_slot.is_some() {
-                buf.push(1);
-                buf.push(0xFF);
-                buf.extend_from_slice(&lit_counter.to_le_bytes());
-                *lit_counter += 1;
+                buffer.push(1);
+                buffer.push(0xFF);
+                buffer.extend_from_slice(&literal_counter.to_le_bytes());
+                *literal_counter += 1;
             } else {
-                buf.push(0);
+                buffer.push(0);
             }
         }
         _ => {
-            canon.encode_expression(expression, buf);
+            canon.encode_expression(expression, buffer);
         }
     }
 }
@@ -3158,38 +3218,38 @@ fn fuzzy_encode_expressionession(
 /// A `switch` case match value is encoded CONCRETELY (not as an abstracted literal position). A
 /// `switch` case label must be a compile-time constant, so it cannot be replaced by a parameter;
 /// abstracting it would let two functions that differ only in their case labels share a fuzzy form
-/// and be merged, after which `replace_literals_with_params` (which never substitutes a case value)
+/// and be merged, after which `replace_literals_with_parameters` (which never substitutes a case value)
 /// leaves the canonical function's labels in place — a miscompile of the removed function's callers.
 fn fuzzy_encode_statement(
     canon: &mut Canonicalizer,
     statement: &Statement,
-    buf: &mut Vec<u8>,
-    lit_counter: &mut u32,
+    buffer: &mut Vec<u8>,
+    literal_counter: &mut u32,
 ) {
     match statement {
         Statement::Let { bindings, value } => {
-            buf.push(0x80);
-            buf.push(bindings.len() as u8);
-            for b in bindings {
-                canon.encode_value_id(*b, buf);
+            buffer.push(0x80);
+            buffer.push(bindings.len() as u8);
+            for binding in bindings {
+                canon.encode_value_id(*binding, buffer);
             }
-            fuzzy_encode_expressionession(canon, value, buf, lit_counter);
+            fuzzy_encode_expressionession(canon, value, buffer, literal_counter);
         }
         Statement::SStore {
             key,
             value,
             static_slot,
         } => {
-            buf.push(0x84);
-            canon.encode_value(key, buf);
-            canon.encode_value(value, buf);
+            buffer.push(0x84);
+            canon.encode_value(key, buffer);
+            canon.encode_value(value, buffer);
             if static_slot.is_some() {
-                buf.push(1);
-                buf.push(0xFF);
-                buf.extend_from_slice(&lit_counter.to_le_bytes());
-                *lit_counter += 1;
+                buffer.push(1);
+                buffer.push(0xFF);
+                buffer.extend_from_slice(&literal_counter.to_le_bytes());
+                *literal_counter += 1;
             } else {
-                buf.push(0);
+                buffer.push(0);
             }
         }
         Statement::If {
@@ -3199,22 +3259,22 @@ fn fuzzy_encode_statement(
             else_region,
             outputs,
         } => {
-            buf.push(0x85);
-            canon.encode_value(condition, buf);
-            buf.push(inputs.len() as u8);
-            for v in inputs {
-                canon.encode_value(v, buf);
+            buffer.push(0x85);
+            canon.encode_value(condition, buffer);
+            buffer.push(inputs.len() as u8);
+            for value in inputs {
+                canon.encode_value(value, buffer);
             }
-            fuzzy_encode_region(canon, then_region, buf, lit_counter);
-            if let Some(r) = else_region {
-                buf.push(1);
-                fuzzy_encode_region(canon, r, buf, lit_counter);
+            fuzzy_encode_region(canon, then_region, buffer, literal_counter);
+            if let Some(else_region_body) = else_region {
+                buffer.push(1);
+                fuzzy_encode_region(canon, else_region_body, buffer, literal_counter);
             } else {
-                buf.push(0);
+                buffer.push(0);
             }
-            buf.push(outputs.len() as u8);
-            for o in outputs {
-                canon.encode_value_id(*o, buf);
+            buffer.push(outputs.len() as u8);
+            for output in outputs {
+                canon.encode_value_id(*output, buffer);
             }
         }
         Statement::Switch {
@@ -3224,28 +3284,28 @@ fn fuzzy_encode_statement(
             default,
             outputs,
         } => {
-            buf.push(0x86);
-            canon.encode_value(scrutinee, buf);
-            buf.push(inputs.len() as u8);
-            for v in inputs {
-                canon.encode_value(v, buf);
+            buffer.push(0x86);
+            canon.encode_value(scrutinee, buffer);
+            buffer.push(inputs.len() as u8);
+            for value in inputs {
+                canon.encode_value(value, buffer);
             }
-            buf.push(cases.len() as u8);
-            for c in cases {
-                let case_bytes = c.value.to_bytes_le();
-                buf.extend_from_slice(&(case_bytes.len() as u16).to_le_bytes());
-                buf.extend_from_slice(&case_bytes);
-                fuzzy_encode_region(canon, &c.body, buf, lit_counter);
+            buffer.push(cases.len() as u8);
+            for case in cases {
+                let case_bytes = case.value.to_bytes_le();
+                buffer.extend_from_slice(&(case_bytes.len() as u16).to_le_bytes());
+                buffer.extend_from_slice(&case_bytes);
+                fuzzy_encode_region(canon, &case.body, buffer, literal_counter);
             }
-            if let Some(d) = default {
-                buf.push(1);
-                fuzzy_encode_region(canon, d, buf, lit_counter);
+            if let Some(default_region) = default {
+                buffer.push(1);
+                fuzzy_encode_region(canon, default_region, buffer, literal_counter);
             } else {
-                buf.push(0);
+                buffer.push(0);
             }
-            buf.push(outputs.len() as u8);
-            for o in outputs {
-                canon.encode_value_id(*o, buf);
+            buffer.push(outputs.len() as u8);
+            for output in outputs {
+                canon.encode_value_id(*output, buffer);
             }
         }
         Statement::For {
@@ -3258,37 +3318,37 @@ fn fuzzy_encode_statement(
             outputs,
             ..
         } => {
-            buf.push(0x87);
-            buf.push(initial_values.len() as u8);
-            for v in initial_values {
-                canon.encode_value(v, buf);
+            buffer.push(0x87);
+            buffer.push(initial_values.len() as u8);
+            for value in initial_values {
+                canon.encode_value(value, buffer);
             }
-            buf.push(loop_variables.len() as u8);
-            for v in loop_variables {
-                canon.encode_value_id(*v, buf);
+            buffer.push(loop_variables.len() as u8);
+            for loop_variable_id in loop_variables {
+                canon.encode_value_id(*loop_variable_id, buffer);
             }
-            buf.push(condition_statements.len() as u8);
-            for s in condition_statements {
-                fuzzy_encode_statement(canon, s, buf, lit_counter);
+            buffer.push(condition_statements.len() as u8);
+            for statement in condition_statements {
+                fuzzy_encode_statement(canon, statement, buffer, literal_counter);
             }
-            fuzzy_encode_expressionession(canon, condition, buf, lit_counter);
-            fuzzy_encode_region(canon, body, buf, lit_counter);
-            fuzzy_encode_region(canon, post, buf, lit_counter);
-            buf.push(outputs.len() as u8);
-            for o in outputs {
-                canon.encode_value_id(*o, buf);
+            fuzzy_encode_expressionession(canon, condition, buffer, literal_counter);
+            fuzzy_encode_region(canon, body, buffer, literal_counter);
+            fuzzy_encode_region(canon, post, buffer, literal_counter);
+            buffer.push(outputs.len() as u8);
+            for output in outputs {
+                canon.encode_value_id(*output, buffer);
             }
         }
         Statement::Block(region) => {
-            buf.push(0x88);
-            fuzzy_encode_region(canon, region, buf, lit_counter);
+            buffer.push(0x88);
+            fuzzy_encode_region(canon, region, buffer, literal_counter);
         }
         Statement::Expression(expression) => {
-            buf.push(0x89);
-            fuzzy_encode_expressionession(canon, expression, buf, lit_counter);
+            buffer.push(0x89);
+            fuzzy_encode_expressionession(canon, expression, buffer, literal_counter);
         }
         _ => {
-            canon.encode_statement(statement, buf);
+            canon.encode_statement(statement, buffer);
         }
     }
 }
@@ -3296,21 +3356,21 @@ fn fuzzy_encode_statement(
 fn fuzzy_encode_region(
     canon: &mut Canonicalizer,
     region: &Region,
-    buf: &mut Vec<u8>,
-    lit_counter: &mut u32,
+    buffer: &mut Vec<u8>,
+    literal_counter: &mut u32,
 ) {
-    buf.extend_from_slice(&(region.statements.len() as u32).to_le_bytes());
+    buffer.extend_from_slice(&(region.statements.len() as u32).to_le_bytes());
     for statement in &region.statements {
-        fuzzy_encode_statement(canon, statement, buf, lit_counter);
+        fuzzy_encode_statement(canon, statement, buffer, literal_counter);
     }
-    buf.push(region.yields.len() as u8);
-    for y in &region.yields {
-        canon.encode_value(y, buf);
+    buffer.push(region.yields.len() as u8);
+    for yielded_value in &region.yields {
+        canon.encode_value(yielded_value, buffer);
     }
 }
 
 /// Collects all literal values from a function in walk order. Both this and
-/// [`replace_literals_with_params`] must use the **identical** traversal so
+/// [`replace_literals_with_parameters`] must use the **identical** traversal so
 /// position indices align — keep them in sync if either changes.
 ///
 /// Counted positions: `Expression::Literal` value, `Expression::SLoad::static_slot`, and
@@ -3318,44 +3378,44 @@ fn fuzzy_encode_region(
 ///
 /// Switch case match values are NOT parameterizable literals (a case label must be a compile-time
 /// constant); they are encoded concretely in the fuzzy form, so they are not counted here. Keep
-/// this in sync with `replace_literals_with_params`.
+/// this in sync with `replace_literals_with_parameters`.
 fn collect_literals_ordered(function: &crate::ir::Function) -> Vec<BigUint> {
-    fn from_expr(expression: &Expression, lits: &mut Vec<BigUint>) {
+    fn from_expr(expression: &Expression, literals: &mut Vec<BigUint>) {
         match expression {
-            Expression::Literal { value, .. } => lits.push(value.clone()),
+            Expression::Literal { value, .. } => literals.push(value.clone()),
             Expression::SLoad {
                 static_slot: Some(slot),
                 ..
-            } => lits.push(slot.clone()),
+            } => literals.push(slot.clone()),
             _ => {}
         }
     }
-    fn walk(statements: &[Statement], lits: &mut Vec<BigUint>) {
+    fn walk(statements: &[Statement], literals: &mut Vec<BigUint>) {
         for statement in statements {
             match statement {
                 Statement::Let { value, .. } | Statement::Expression(value) => {
-                    from_expr(value, lits)
+                    from_expr(value, literals)
                 }
                 Statement::SStore {
                     static_slot: Some(slot),
                     ..
-                } => lits.push(slot.clone()),
+                } => literals.push(slot.clone()),
                 Statement::If {
                     then_region,
                     else_region,
                     ..
                 } => {
-                    walk(&then_region.statements, lits);
-                    if let Some(r) = else_region {
-                        walk(&r.statements, lits);
+                    walk(&then_region.statements, literals);
+                    if let Some(else_region_body) = else_region {
+                        walk(&else_region_body.statements, literals);
                     }
                 }
                 Statement::Switch { cases, default, .. } => {
-                    for c in cases {
-                        walk(&c.body.statements, lits);
+                    for case in cases {
+                        walk(&case.body.statements, literals);
                     }
-                    if let Some(d) = default {
-                        walk(&d.statements, lits);
+                    if let Some(default_region) = default {
+                        walk(&default_region.statements, literals);
                     }
                 }
                 Statement::For {
@@ -3365,19 +3425,19 @@ fn collect_literals_ordered(function: &crate::ir::Function) -> Vec<BigUint> {
                     post,
                     ..
                 } => {
-                    walk(condition_statements, lits);
-                    from_expr(condition, lits);
-                    walk(&body.statements, lits);
-                    walk(&post.statements, lits);
+                    walk(condition_statements, literals);
+                    from_expr(condition, literals);
+                    walk(&body.statements, literals);
+                    walk(&post.statements, literals);
                 }
-                Statement::Block(region) => walk(&region.statements, lits),
+                Statement::Block(region) => walk(&region.statements, literals),
                 _ => {}
             }
         }
     }
-    let mut lits = Vec::new();
-    walk(&function.body.statements, &mut lits);
-    lits
+    let mut literals = Vec::new();
+    walk(&function.body.statements, &mut literals);
+    literals
 }
 
 /// Replaces literal values at differing positions with `Var` references to new
@@ -3386,7 +3446,10 @@ fn collect_literals_ordered(function: &crate::ir::Function) -> Vec<BigUint> {
 ///
 /// Switch case match values are not parameterizable and are not counted by
 /// [`collect_literals_ordered`], so the position counter is not advanced for them here.
-fn replace_literals_with_params(block: &mut Block, position_parameter_ids: &[(usize, ValueId)]) {
+fn replace_literals_with_parameters(
+    block: &mut Block,
+    position_parameter_ids: &[(usize, ValueId)],
+) {
     fn from_expr(
         expression: &mut Expression,
         positions: &BTreeMap<usize, ValueId>,
@@ -3436,16 +3499,16 @@ fn replace_literals_with_params(block: &mut Block, position_parameter_ids: &[(us
                     ..
                 } => {
                     walk(&mut then_region.statements, positions, counter);
-                    if let Some(r) = else_region {
-                        walk(&mut r.statements, positions, counter);
+                    if let Some(else_region_body) = else_region {
+                        walk(&mut else_region_body.statements, positions, counter);
                     }
                 }
                 Statement::Switch { cases, default, .. } => {
-                    for c in cases {
-                        walk(&mut c.body.statements, positions, counter);
+                    for case in cases {
+                        walk(&mut case.body.statements, positions, counter);
                     }
-                    if let Some(d) = default {
-                        walk(&mut d.statements, positions, counter);
+                    if let Some(default_region) = default {
+                        walk(&mut default_region.statements, positions, counter);
                     }
                 }
                 Statement::For {
@@ -3474,11 +3537,11 @@ fn replace_literals_with_params(block: &mut Block, position_parameter_ids: &[(us
 /// `new_id` with extra literal arguments appended. For each matching call,
 /// emits one `Let` binding per extra argument immediately before the call site
 /// (allocating fresh `ValueId`s through `next_value_id`).
-fn update_call_sites_with_extra_args(
+fn update_call_sites_with_extra_arguments(
     block: &mut Block,
     old_id: FunctionId,
     new_id: FunctionId,
-    extra_args: &[BigUint],
+    extra_arguments: &[BigUint],
     parameter_types: &[Type],
     next_value_id: &mut ValueId,
 ) {
@@ -3486,13 +3549,13 @@ fn update_call_sites_with_extra_args(
         statements: &mut Vec<Statement>,
         old_id: FunctionId,
         new_id: FunctionId,
-        extra_args: &[BigUint],
+        extra_arguments: &[BigUint],
         parameter_types: &[Type],
         next_id: &mut ValueId,
     ) {
-        let mut i = 0;
-        while i < statements.len() {
-            match &mut statements[i] {
+        let mut index = 0;
+        while index < statements.len() {
+            match &mut statements[index] {
                 Statement::If {
                     then_region,
                     else_region,
@@ -3502,38 +3565,38 @@ fn update_call_sites_with_extra_args(
                         &mut then_region.statements,
                         old_id,
                         new_id,
-                        extra_args,
+                        extra_arguments,
                         parameter_types,
                         next_id,
                     );
-                    if let Some(r) = else_region {
+                    if let Some(else_region_body) = else_region {
                         rewrite(
-                            &mut r.statements,
+                            &mut else_region_body.statements,
                             old_id,
                             new_id,
-                            extra_args,
+                            extra_arguments,
                             parameter_types,
                             next_id,
                         );
                     }
                 }
                 Statement::Switch { cases, default, .. } => {
-                    for c in cases.iter_mut() {
+                    for case in cases.iter_mut() {
                         rewrite(
-                            &mut c.body.statements,
+                            &mut case.body.statements,
                             old_id,
                             new_id,
-                            extra_args,
+                            extra_arguments,
                             parameter_types,
                             next_id,
                         );
                     }
-                    if let Some(d) = default {
+                    if let Some(default_region) = default {
                         rewrite(
-                            &mut d.statements,
+                            &mut default_region.statements,
                             old_id,
                             new_id,
-                            extra_args,
+                            extra_arguments,
                             parameter_types,
                             next_id,
                         );
@@ -3549,7 +3612,7 @@ fn update_call_sites_with_extra_args(
                         condition_statements,
                         old_id,
                         new_id,
-                        extra_args,
+                        extra_arguments,
                         parameter_types,
                         next_id,
                     );
@@ -3557,7 +3620,7 @@ fn update_call_sites_with_extra_args(
                         &mut body.statements,
                         old_id,
                         new_id,
-                        extra_args,
+                        extra_arguments,
                         parameter_types,
                         next_id,
                     );
@@ -3565,7 +3628,7 @@ fn update_call_sites_with_extra_args(
                         &mut post.statements,
                         old_id,
                         new_id,
-                        extra_args,
+                        extra_arguments,
                         parameter_types,
                         next_id,
                     );
@@ -3575,38 +3638,40 @@ fn update_call_sites_with_extra_args(
                         &mut region.statements,
                         old_id,
                         new_id,
-                        extra_args,
+                        extra_arguments,
                         parameter_types,
                         next_id,
                     );
                 }
                 _ => {}
             }
-            let is_target = matches!(&statements[i],
+            let is_target = matches!(&statements[index],
                 Statement::Let { value: Expression::Call { function, .. }, .. }
                 | Statement::Expression(Expression::Call { function, .. })
                 if *function == old_id);
             if is_target {
-                let mut extra_values = Vec::with_capacity(extra_args.len());
-                for (arg_val, parameter_type) in extra_args.iter().zip(parameter_types.iter()) {
-                    let vid = next_id.fresh();
+                let mut extra_values = Vec::with_capacity(extra_arguments.len());
+                for (argument_value, parameter_type) in
+                    extra_arguments.iter().zip(parameter_types.iter())
+                {
+                    let value_id = next_id.fresh();
                     statements.insert(
-                        i,
+                        index,
                         Statement::Let {
-                            bindings: vec![vid],
+                            bindings: vec![value_id],
                             value: Expression::Literal {
-                                value: arg_val.clone(),
+                                value: argument_value.clone(),
                                 value_type: *parameter_type,
                             },
                         },
                     );
-                    i += 1;
+                    index += 1;
                     extra_values.push(Value {
-                        id: vid,
+                        id: value_id,
                         value_type: *parameter_type,
                     });
                 }
-                match &mut statements[i] {
+                match &mut statements[index] {
                     Statement::Let {
                         value:
                             Expression::Call {
@@ -3625,14 +3690,14 @@ fn update_call_sites_with_extra_args(
                     _ => unreachable!("is_target check above just matched a Call"),
                 }
             }
-            i += 1;
+            index += 1;
         }
     }
     rewrite(
         &mut block.statements,
         old_id,
         new_id,
-        extra_args,
+        extra_arguments,
         parameter_types,
         next_value_id,
     );
@@ -3681,11 +3746,11 @@ pub fn fold_constant_keccak(object: &mut Object) {
 /// Walks a block's statements and folds constant keccak256 expressions.
 fn fold_keccak_in_block(block: &mut Block) {
     let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
-    fold_keccak_in_stmts(&mut block.statements, &mut constants);
+    fold_keccak_in_statements(&mut block.statements, &mut constants);
 }
 
 /// Processes statements, tracking constants and folding keccak expressions.
-fn fold_keccak_in_stmts(statements: &mut [Statement], constants: &mut BTreeMap<u32, BigUint>) {
+fn fold_keccak_in_statements(statements: &mut [Statement], constants: &mut BTreeMap<u32, BigUint>) {
     for statement in statements.iter_mut() {
         match statement {
             Statement::Let {
@@ -3700,21 +3765,21 @@ fn fold_keccak_in_stmts(statements: &mut [Statement], constants: &mut BTreeMap<u
 
                 match expression {
                     Expression::Keccak256Single { word0 } => {
-                        if let Some(c) = constants.get(&word0.id.0) {
+                        if let Some(constant) = constants.get(&word0.id.0) {
                             *expression = Expression::Literal {
-                                value: fold_keccak256_single(c),
+                                value: fold_keccak256_single(constant),
                                 value_type: Type::Int(BitWidth::I256),
                             };
                         }
                     }
                     Expression::Keccak256Pair { word0, word1 } => {
-                        if let (Some(c0), Some(c1)) =
+                        if let (Some(constant0), Some(constant1)) =
                             (constants.get(&word0.id.0), constants.get(&word1.id.0))
                         {
-                            let c0 = c0.clone();
-                            let c1 = c1.clone();
+                            let constant0 = constant0.clone();
+                            let constant1 = constant1.clone();
                             *expression = Expression::Literal {
-                                value: fold_keccak256_pair(&c0, &c1),
+                                value: fold_keccak256_pair(&constant0, &constant1),
                                 value_type: Type::Int(BitWidth::I256),
                             };
                         }
@@ -3733,17 +3798,23 @@ fn fold_keccak_in_stmts(statements: &mut [Statement], constants: &mut BTreeMap<u
                 else_region,
                 ..
             } => {
-                fold_keccak_in_stmts(&mut then_region.statements, &mut constants.clone());
-                if let Some(r) = else_region {
-                    fold_keccak_in_stmts(&mut r.statements, &mut constants.clone());
+                fold_keccak_in_statements(&mut then_region.statements, &mut constants.clone());
+                if let Some(else_region_body) = else_region {
+                    fold_keccak_in_statements(
+                        &mut else_region_body.statements,
+                        &mut constants.clone(),
+                    );
                 }
             }
             Statement::Switch { cases, default, .. } => {
                 for case in cases.iter_mut() {
-                    fold_keccak_in_stmts(&mut case.body.statements, &mut constants.clone());
+                    fold_keccak_in_statements(&mut case.body.statements, &mut constants.clone());
                 }
-                if let Some(d) = default {
-                    fold_keccak_in_stmts(&mut d.statements, &mut constants.clone());
+                if let Some(default_region) = default {
+                    fold_keccak_in_statements(
+                        &mut default_region.statements,
+                        &mut constants.clone(),
+                    );
                 }
             }
             Statement::For {
@@ -3752,12 +3823,12 @@ fn fold_keccak_in_stmts(statements: &mut [Statement], constants: &mut BTreeMap<u
                 post,
                 ..
             } => {
-                fold_keccak_in_stmts(condition_statements, constants);
-                fold_keccak_in_stmts(&mut body.statements, &mut constants.clone());
-                fold_keccak_in_stmts(&mut post.statements, &mut constants.clone());
+                fold_keccak_in_statements(condition_statements, constants);
+                fold_keccak_in_statements(&mut body.statements, &mut constants.clone());
+                fold_keccak_in_statements(&mut post.statements, &mut constants.clone());
             }
             Statement::Block(region) => {
-                fold_keccak_in_stmts(&mut region.statements, &mut constants.clone());
+                fold_keccak_in_statements(&mut region.statements, &mut constants.clone());
             }
             _ => {}
         }
@@ -3931,7 +4002,7 @@ mod tests {
         simplifier.simplify_block(block);
 
         let v3_let = block.statements.iter().find(
-            |s| matches!(s, Statement::Let { bindings, .. } if bindings.contains(&ValueId(3))),
+            |statement| matches!(statement, Statement::Let { bindings, .. } if bindings.contains(&ValueId(3))),
         );
         let v3_let = v3_let.expect("v3 should still exist");
         if let Statement::Let { value, .. } = v3_let {
@@ -3967,7 +4038,7 @@ mod tests {
         simplifier.simplify_block(block);
 
         let v2_let = block.statements.iter().find(
-            |s| matches!(s, Statement::Let { bindings, .. } if bindings.contains(&ValueId(2))),
+            |statement| matches!(statement, Statement::Let { bindings, .. } if bindings.contains(&ValueId(2))),
         );
         let v2_let = v2_let.expect("v2 should still exist");
         if let Statement::Let { value, .. } = v2_let {

@@ -263,15 +263,15 @@ impl HeapAnalysis {
                 let pattern = self.classify_access(offset);
                 self.track_variable_access(offset);
                 let static_offset = self.extract_static_offset(offset);
-                if let Some(addr) = static_offset {
-                    self.memory_accesses.insert(addr, pattern);
+                if let Some(address) = static_offset {
+                    self.memory_accesses.insert(address, pattern);
                 } else {
                     self.has_dynamic_accesses = true;
                 }
                 if *region == MemoryRegion::Unknown && !pattern.is_aligned() {
-                    if let Some(addr) = static_offset {
-                        if addr % BYTE_LENGTH_WORD as u64 != 0 {
-                            self.tainted_regions.insert(word_align(addr));
+                    if let Some(address) = static_offset {
+                        if address % BYTE_LENGTH_WORD as u64 != 0 {
+                            self.tainted_regions.insert(word_align(address));
                         }
                     }
                 }
@@ -283,10 +283,10 @@ impl HeapAnalysis {
 
             Statement::MStore8 { offset, .. } => {
                 let pattern = AccessPattern::Unknown;
-                if let Some(addr) = self.extract_static_offset(offset) {
-                    self.memory_accesses.insert(addr, pattern);
-                    self.tainted_regions.insert(word_align(addr));
-                    if word_align(addr) == 0x40 {
+                if let Some(address) = self.extract_static_offset(offset) {
+                    self.memory_accesses.insert(address, pattern);
+                    self.tainted_regions.insert(word_align(address));
+                    if word_align(address) == 0x40 {
                         self.fmp_could_be_unbounded = true;
                     }
                 } else {
@@ -295,12 +295,16 @@ impl HeapAnalysis {
                 }
             }
 
-            Statement::MCopy { dest, src, length } => {
-                let dest_start = self.extract_static_offset(dest);
-                let src_start = self.extract_static_offset(src);
+            Statement::MCopy {
+                destination,
+                source,
+                length,
+            } => {
+                let destination_start = self.extract_static_offset(destination);
+                let source_start = self.extract_static_offset(source);
                 let len = self.extract_static_offset(length);
-                self.taint_range(dest_start, len);
-                self.taint_range(src_start, len);
+                self.taint_range(destination_start, len);
+                self.taint_range(source_start, len);
             }
 
             Statement::ExternalCall {
@@ -346,10 +350,12 @@ impl HeapAnalysis {
                 outputs,
                 ..
             } => {
-                for (initial_value, loop_var) in initial_values.iter().zip(loop_variables.iter()) {
+                for (initial_value, loop_variable) in
+                    initial_values.iter().zip(loop_variables.iter())
+                {
                     if let Some(mut info) = self.offset_values.get(&initial_value.id.0).cloned() {
                         info.from_literal = false;
-                        self.offset_values.insert(loop_var.0, info);
+                        self.offset_values.insert(loop_variable.0, info);
                     }
                 }
                 for (initial_value, output) in initial_values.iter().zip(outputs.iter()) {
@@ -364,20 +370,40 @@ impl HeapAnalysis {
                 self.analyze_expression_side_effects(expression);
             }
 
-            Statement::ReturnDataCopy { dest, length, .. } => {
-                self.taint_copy_destination(dest, length);
+            Statement::ReturnDataCopy {
+                destination,
+                length,
+                ..
+            } => {
+                self.taint_copy_destination(destination, length);
             }
 
-            Statement::CodeCopy { dest, length, .. }
-            | Statement::ExtCodeCopy { dest, length, .. }
-            | Statement::DataCopy { dest, length, .. }
-            | Statement::CallDataCopy { dest, length, .. } => {
-                if let Some(addr) = self.extract_static_offset(dest) {
+            Statement::CodeCopy {
+                destination,
+                length,
+                ..
+            }
+            | Statement::ExtCodeCopy {
+                destination,
+                length,
+                ..
+            }
+            | Statement::DataCopy {
+                destination,
+                length,
+                ..
+            }
+            | Statement::CallDataCopy {
+                destination,
+                length,
+                ..
+            } => {
+                if let Some(address) = self.extract_static_offset(destination) {
                     self.memory_accesses
-                        .entry(addr)
-                        .or_insert(AccessPattern::AlignedStatic(addr));
+                        .entry(address)
+                        .or_insert(AccessPattern::AlignedStatic(address));
                 }
-                self.taint_copy_destination(dest, length);
+                self.taint_copy_destination(destination, length);
             }
 
             Statement::SStore { .. }
@@ -399,11 +425,11 @@ impl HeapAnalysis {
     /// Classifies a memory access based on the offset value.
     fn classify_access(&self, offset: &Value) -> AccessPattern {
         if let Some(info) = self.offset_values.get(&offset.id.0) {
-            if let Some(static_val) = info.static_value {
-                if static_val % BYTE_LENGTH_WORD as u64 == 0 {
-                    return AccessPattern::AlignedStatic(static_val);
+            if let Some(static_value) = info.static_value {
+                if static_value % BYTE_LENGTH_WORD as u64 == 0 {
+                    return AccessPattern::AlignedStatic(static_value);
                 } else {
-                    return AccessPattern::UnalignedStatic(static_val);
+                    return AccessPattern::UnalignedStatic(static_value);
                 }
             }
             if info.alignment >= 32 {
@@ -425,9 +451,9 @@ impl HeapAnalysis {
     /// if we use native mode for literal accesses to the same offset.
     fn track_variable_access(&mut self, offset: &Value) {
         if let Some(info) = self.offset_values.get(&offset.id.0) {
-            if let Some(static_val) = info.static_value {
+            if let Some(static_value) = info.static_value {
                 if !info.from_literal {
-                    self.variable_accessed_offsets.insert(static_val);
+                    self.variable_accessed_offsets.insert(static_value);
                 }
             }
         }
@@ -460,7 +486,7 @@ impl HeapAnalysis {
                 let word_start = word_align(s);
                 self.min_dynamic_escape_start = Some(
                     self.min_dynamic_escape_start
-                        .map_or(word_start, |prev| prev.min(word_start)),
+                        .map_or(word_start, |previous| previous.min(word_start)),
                 );
             }
             (None, _) => {
@@ -474,9 +500,9 @@ impl HeapAnalysis {
         let len = self.extract_static_offset(length);
         match (start, len) {
             (Some(_), Some(0)) => {}
-            (Some(addr), Some(size)) => {
-                let end = addr.saturating_add(size);
-                let first_word = word_align(addr);
+            (Some(address), Some(size)) => {
+                let end = address.saturating_add(size);
+                let first_word = word_align(address);
                 let range = end.saturating_sub(first_word);
                 let num_words =
                     range.saturating_add(BYTE_LENGTH_WORD as u64 - 1) / BYTE_LENGTH_WORD as u64;
@@ -491,8 +517,8 @@ impl HeapAnalysis {
                     }
                 }
             }
-            (Some(addr), None) => {
-                self.escaping_regions.insert(word_align(addr));
+            (Some(address), None) => {
+                self.escaping_regions.insert(word_align(address));
                 self.has_dynamic_escapes = true;
             }
             (None, _) => {
@@ -513,7 +539,7 @@ impl HeapAnalysis {
     /// a large code-size regression for no soundness gain over the existing
     /// dynamic-offset guards.
     /// Records the memory tainted by a copy (`calldatacopy`/`codecopy`/`mcopy`/…) with
-    /// destination `dest` and length `length`, and flags the free-memory-pointer slot as
+    /// destination `destination` and length `length`, and flags the free-memory-pointer slot as
     /// possibly unbounded when the copy can clobber it.
     ///
     /// A copy that can overwrite the FMP slot `[0x40, 0x60)` replaces the free-memory
@@ -531,27 +557,29 @@ impl HeapAnalysis {
     /// flag unboundedness. A fully-dynamic destination, or a static destination *outside*
     /// the word (proxy `calldatacopy(0, 0, size)`, OZ's FMP-relative ABI-decode copies to
     /// `mload(0x40) >= 0x80`), is left to `has_dynamic_accesses` / the native-mode guards.
-    fn taint_copy_destination(&mut self, dest: &Value, length: &Value) {
-        let dest_start = self.extract_static_offset(dest);
+    fn taint_copy_destination(&mut self, destination: &Value, length: &Value) {
+        let destination_start = self.extract_static_offset(destination);
         let len = self.extract_static_offset(length);
 
-        let covers_fmp = match (dest_start, len) {
-            (Some(addr), Some(size)) => size > 0 && addr < 0x60 && addr.saturating_add(size) > 0x40,
-            (Some(addr), None) => (0x40..0x60).contains(&addr),
+        let covers_fmp = match (destination_start, len) {
+            (Some(address), Some(size)) => {
+                size > 0 && address < 0x60 && address.saturating_add(size) > 0x40
+            }
+            (Some(address), None) => (0x40..0x60).contains(&address),
             _ => false,
         };
         if covers_fmp {
             self.fmp_could_be_unbounded = true;
         }
 
-        match (dest_start, len) {
-            (Some(addr), Some(size)) => {
+        match (destination_start, len) {
+            (Some(address), Some(size)) => {
                 if size > 0 {
-                    self.taint_range(Some(addr), Some(size));
+                    self.taint_range(Some(address), Some(size));
                 }
             }
-            (Some(addr), None) => {
-                self.tainted_regions.insert(word_align(addr));
+            (Some(address), None) => {
+                self.tainted_regions.insert(word_align(address));
             }
             (None, _) => self.has_dynamic_accesses = true,
         }
@@ -561,9 +589,9 @@ impl HeapAnalysis {
     /// If the range is too large, treats it as a dynamic access instead.
     fn taint_range(&mut self, start: Option<u64>, len: Option<u64>) {
         match (start, len) {
-            (Some(addr), Some(size)) if size > 0 => {
-                let end = addr.saturating_add(size);
-                let first_word = word_align(addr);
+            (Some(address), Some(size)) if size > 0 => {
+                let end = address.saturating_add(size);
+                let first_word = word_align(address);
                 let num_words = end
                     .saturating_sub(first_word)
                     .saturating_add(BYTE_LENGTH_WORD as u64 - 1)
@@ -579,8 +607,8 @@ impl HeapAnalysis {
                     }
                 }
             }
-            (Some(addr), _) => {
-                self.tainted_regions.insert(word_align(addr));
+            (Some(address), _) => {
+                self.tainted_regions.insert(word_align(address));
                 self.has_dynamic_accesses = true;
             }
             (None, _) => {
@@ -594,9 +622,9 @@ impl HeapAnalysis {
         let start = self.extract_static_offset(offset);
         let len = self.extract_static_offset(length);
         match (start, len) {
-            (Some(addr), Some(size)) if size > 0 => {
-                let end = addr.saturating_add(size);
-                let first_word = word_align(addr);
+            (Some(address), Some(size)) if size > 0 => {
+                let end = address.saturating_add(size);
+                let first_word = word_align(address);
                 let num_words = end
                     .saturating_sub(first_word)
                     .saturating_add(BYTE_LENGTH_WORD as u64 - 1)
@@ -614,9 +642,9 @@ impl HeapAnalysis {
                     }
                 }
             }
-            (Some(addr), None) => {
-                self.escaping_regions.insert(word_align(addr));
-                self.tainted_regions.insert(word_align(addr));
+            (Some(address), None) => {
+                self.escaping_regions.insert(word_align(address));
+                self.tainted_regions.insert(word_align(address));
                 self.has_dynamic_escapes = true;
             }
             _ => {
@@ -630,7 +658,7 @@ impl HeapAnalysis {
         match expression {
             Expression::Literal { value, .. } => {
                 let digits = value.to_u64_digits();
-                let static_val = if digits.is_empty() {
+                let static_value = if digits.is_empty() {
                     0
                 } else if digits.len() == 1 {
                     digits[0]
@@ -638,8 +666,8 @@ impl HeapAnalysis {
                     return None;
                 };
                 Some(OffsetInfo {
-                    static_value: Some(static_val),
-                    alignment: compute_alignment(static_val),
+                    static_value: Some(static_value),
+                    alignment: compute_alignment(static_value),
                     from_literal: true,
                 })
             }
@@ -659,52 +687,56 @@ impl HeapAnalysis {
 
                 match operation {
                     crate::ir::BinaryOperation::Add => {
-                        let lhs_align = lhs_info.map(|i| i.alignment).unwrap_or(1);
-                        let rhs_align = rhs_info.map(|i| i.alignment).unwrap_or(1);
+                        let lhs_align = lhs_info.map(|info| info.alignment).unwrap_or(1);
+                        let rhs_align = rhs_info.map(|info| info.alignment).unwrap_or(1);
                         let result_align = gcd(lhs_align, rhs_align);
 
-                        let static_val = match (
-                            lhs_info.and_then(|i| i.static_value),
-                            rhs_info.and_then(|i| i.static_value),
+                        let static_value = match (
+                            lhs_info.and_then(|info| info.static_value),
+                            rhs_info.and_then(|info| info.static_value),
                         ) {
-                            (Some(l), Some(r)) => Some(l.wrapping_add(r)),
+                            (Some(lhs_value), Some(rhs_value)) => {
+                                Some(lhs_value.wrapping_add(rhs_value))
+                            }
                             _ => None,
                         };
 
                         Some(OffsetInfo {
-                            static_value: static_val,
+                            static_value,
                             alignment: result_align,
                             from_literal: false,
                         })
                     }
 
                     crate::ir::BinaryOperation::Mul => {
-                        let static_val = match (
-                            lhs_info.and_then(|i| i.static_value),
-                            rhs_info.and_then(|i| i.static_value),
+                        let static_value = match (
+                            lhs_info.and_then(|info| info.static_value),
+                            rhs_info.and_then(|info| info.static_value),
                         ) {
-                            (Some(l), Some(r)) => Some(l.wrapping_mul(r)),
+                            (Some(lhs_value), Some(rhs_value)) => {
+                                Some(lhs_value.wrapping_mul(rhs_value))
+                            }
                             _ => None,
                         };
 
                         let mult_align = match (
-                            rhs_info.and_then(|i| i.static_value),
-                            lhs_info.and_then(|i| i.static_value),
+                            rhs_info.and_then(|info| info.static_value),
+                            lhs_info.and_then(|info| info.static_value),
                         ) {
                             (Some(32), _) | (_, Some(32)) => 32,
-                            (Some(n), _) | (_, Some(n)) if n % 32 == 0 => 32,
+                            (Some(factor), _) | (_, Some(factor)) if factor % 32 == 0 => 32,
                             _ => 1,
                         };
 
                         Some(OffsetInfo {
-                            static_value: static_val,
+                            static_value,
                             alignment: mult_align,
                             from_literal: false,
                         })
                     }
 
                     crate::ir::BinaryOperation::And => {
-                        if let Some(mask) = rhs_info.and_then(|i| i.static_value) {
+                        if let Some(mask) = rhs_info.and_then(|info| info.static_value) {
                             let align = compute_alignment((!mask).wrapping_add(1));
                             Some(OffsetInfo {
                                 static_value: None,
@@ -717,9 +749,9 @@ impl HeapAnalysis {
                     }
 
                     crate::ir::BinaryOperation::Shl => {
-                        if let Some(shift) = rhs_info.and_then(|i| i.static_value) {
+                        if let Some(shift) = rhs_info.and_then(|info| info.static_value) {
                             if shift < 32 {
-                                let base_align = lhs_info.map(|i| i.alignment).unwrap_or(1);
+                                let base_align = lhs_info.map(|info| info.alignment).unwrap_or(1);
                                 Some(OffsetInfo {
                                     static_value: None,
                                     alignment: base_align.saturating_mul(1 << shift),
@@ -777,15 +809,16 @@ impl HeapAnalysis {
     }
 
     /// Returns whether a memory region requires big-endian emulation.
-    pub fn requires_big_endian(&self, addr: u64) -> bool {
-        let word_addr = word_align(addr);
-        self.tainted_regions.contains(&word_addr) || self.escaping_regions.contains(&word_addr)
+    pub fn requires_big_endian(&self, address: u64) -> bool {
+        let word_address = word_align(address);
+        self.tainted_regions.contains(&word_address)
+            || self.escaping_regions.contains(&word_address)
     }
 
     /// Returns whether a memory region escapes to external code.
-    pub fn region_escapes(&self, addr: u64) -> bool {
-        let word_addr = word_align(addr);
-        self.escaping_regions.contains(&word_addr)
+    pub fn region_escapes(&self, address: u64) -> bool {
+        let word_address = word_align(address);
+        self.escaping_regions.contains(&word_address)
     }
 
     /// Returns the set of tainted memory regions (word-aligned addresses).
@@ -901,12 +934,12 @@ impl HeapAnalysis {
         let aligned_accesses = self
             .memory_accesses
             .values()
-            .filter(|p| p.is_aligned())
+            .filter(|pattern| pattern.is_aligned())
             .count();
         let static_accesses = self
             .memory_accesses
             .values()
-            .filter(|p| p.is_static())
+            .filter(|pattern| pattern.is_static())
             .count();
 
         HeapAnalysisStats {
@@ -1007,14 +1040,14 @@ impl HeapOptResults {
         let mut native_safe_offsets = BTreeSet::new();
         let mut unknown_accesses = 0;
 
-        for (&addr, pattern) in &analysis.memory_accesses {
+        for (&address, pattern) in &analysis.memory_accesses {
             if matches!(pattern, AccessPattern::Unknown) {
                 unknown_accesses += 1;
             } else if pattern.is_aligned() {
-                let word_addr = word_align(addr);
-                if !analysis.requires_big_endian(addr) {
-                    native_safe_regions.insert(word_addr);
-                    native_safe_offsets.insert(addr);
+                let word_address = word_align(address);
+                if !analysis.requires_big_endian(address) {
+                    native_safe_regions.insert(word_address);
+                    native_safe_offsets.insert(address);
                 }
             }
         }
@@ -1065,8 +1098,8 @@ impl HeapOptResults {
         if self.native_safe_offsets.contains(&offset) {
             return true;
         }
-        let word_addr = word_align(offset);
-        self.native_safe_regions.contains(&word_addr)
+        let word_address = word_align(offset);
+        self.native_safe_regions.contains(&word_address)
     }
 
     /// Returns true if any optimization opportunities were found.

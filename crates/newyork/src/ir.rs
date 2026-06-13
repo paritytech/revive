@@ -111,13 +111,13 @@ pub enum MemoryRegion {
 
 impl MemoryRegion {
     /// Determines the memory region from a statically known address.
-    pub fn from_address(addr: &BigUint) -> Self {
-        let addr_u64 = addr.to_u64_digits();
-        if addr_u64.is_empty() || (addr_u64.len() == 1 && addr_u64[0] < 0x40) {
+    pub fn from_address(address: &BigUint) -> Self {
+        let address_u64 = address.to_u64_digits();
+        if address_u64.is_empty() || (address_u64.len() == 1 && address_u64[0] < 0x40) {
             MemoryRegion::Scratch
-        } else if addr_u64.len() == 1 && addr_u64[0] == 0x40 {
+        } else if address_u64.len() == 1 && address_u64[0] == 0x40 {
             MemoryRegion::FreePointerSlot
-        } else if addr_u64.len() == 1 && addr_u64[0] >= 0x80 {
+        } else if address_u64.len() == 1 && address_u64[0] >= 0x80 {
             MemoryRegion::Dynamic
         } else {
             MemoryRegion::Unknown
@@ -525,8 +525,8 @@ pub enum Statement {
 
     /// Memory copy.
     MCopy {
-        dest: Value,
-        src: Value,
+        destination: Value,
+        source: Value,
         length: Value,
     },
 
@@ -690,28 +690,28 @@ pub enum Statement {
     },
 
     CodeCopy {
-        dest: Value,
+        destination: Value,
         offset: Value,
         length: Value,
     },
     ExtCodeCopy {
         address: Value,
-        dest: Value,
+        destination: Value,
         offset: Value,
         length: Value,
     },
     ReturnDataCopy {
-        dest: Value,
+        destination: Value,
         offset: Value,
         length: Value,
     },
     DataCopy {
-        dest: Value,
+        destination: Value,
         offset: Value,
         length: Value,
     },
     CallDataCopy {
-        dest: Value,
+        destination: Value,
         offset: Value,
         length: Value,
     },
@@ -873,8 +873,14 @@ impl Object {
     /// allowing InlineNative stores to skip the `ensure_heap_size` call.
     pub fn has_msize(&self) -> bool {
         has_msize_in_block(&self.code)
-            || self.functions.values().any(|f| has_msize_in_block(&f.body))
-            || self.subobjects.iter().any(|s| s.has_msize())
+            || self
+                .functions
+                .values()
+                .any(|function| has_msize_in_block(&function.body))
+            || self
+                .subobjects
+                .iter()
+                .any(|subobject| subobject.has_msize())
     }
 
     /// Finds the maximum `ValueId` used anywhere in this object — its code, its
@@ -905,8 +911,8 @@ impl Object {
             }
             scan_block(&function.body, &mut max_id);
         }
-        for sub in &self.subobjects {
-            max_id = max_id.max(sub.find_max_value_id());
+        for sub_object in &self.subobjects {
+            max_id = max_id.max(sub_object.find_max_value_id());
         }
         max_id
     }
@@ -966,19 +972,19 @@ impl Statement {
     ///     statement.for_each_expression(&mut |expression| { /* ... */ });
     /// });
     /// ```
-    pub fn for_each_expression(&self, f: &mut dyn FnMut(&Expression)) {
+    pub fn for_each_expression(&self, visit: &mut dyn FnMut(&Expression)) {
         match self {
-            Statement::Let { value, .. } | Statement::Expression(value) => f(value),
-            Statement::For { condition, .. } => f(condition),
+            Statement::Let { value, .. } | Statement::Expression(value) => visit(value),
+            Statement::For { condition, .. } => visit(condition),
             _ => {}
         }
     }
 
     /// Mutating variant of [`Statement::for_each_expression`].
-    pub fn for_each_expression_mut(&mut self, f: &mut dyn FnMut(&mut Expression)) {
+    pub fn for_each_expression_mut(&mut self, visit: &mut dyn FnMut(&mut Expression)) {
         match self {
-            Statement::Let { value, .. } | Statement::Expression(value) => f(value),
-            Statement::For { condition, .. } => f(condition),
+            Statement::Let { value, .. } | Statement::Expression(value) => visit(value),
+            Statement::For { condition, .. } => visit(condition),
             _ => {}
         }
     }
@@ -988,28 +994,32 @@ impl Statement {
     /// visit defining `ValueId`s (Let bindings, If/Switch/For outputs,
     /// loop_variables, post_input_variables, ExternalCall/Create result). Use
     /// [`Statement::for_each_value_id_def`] for those.
-    pub fn for_each_value_id(&self, f: &mut dyn FnMut(ValueId)) {
+    pub fn for_each_value_id(&self, visit: &mut dyn FnMut(ValueId)) {
         match self {
             Statement::Let { value, .. } | Statement::Expression(value) => {
-                value.for_each_value_id(f)
+                value.for_each_value_id(visit)
             }
             Statement::MStore { offset, value, .. } | Statement::MStore8 { offset, value, .. } => {
-                f(offset.id);
-                f(value.id);
+                visit(offset.id);
+                visit(value.id);
             }
-            Statement::MCopy { dest, src, length } => {
-                f(dest.id);
-                f(src.id);
-                f(length.id);
+            Statement::MCopy {
+                destination,
+                source,
+                length,
+            } => {
+                visit(destination.id);
+                visit(source.id);
+                visit(length.id);
             }
             Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
-                f(key.id);
-                f(value.id);
+                visit(key.id);
+                visit(value.id);
             }
             Statement::MappingSStore { key, slot, value } => {
-                f(key.id);
-                f(slot.id);
-                f(value.id);
+                visit(key.id);
+                visit(slot.id);
+                visit(value.id);
             }
             Statement::If {
                 condition,
@@ -1018,13 +1028,13 @@ impl Statement {
                 else_region,
                 ..
             } => {
-                f(condition.id);
-                for v in inputs {
-                    f(v.id);
+                visit(condition.id);
+                for input in inputs {
+                    visit(input.id);
                 }
-                walk_region_uses(then_region, f);
-                if let Some(r) = else_region {
-                    walk_region_uses(r, f);
+                walk_region_uses(then_region, visit);
+                if let Some(region) = else_region {
+                    walk_region_uses(region, visit);
                 }
             }
             Statement::Switch {
@@ -1034,15 +1044,15 @@ impl Statement {
                 default,
                 ..
             } => {
-                f(scrutinee.id);
-                for v in inputs {
-                    f(v.id);
+                visit(scrutinee.id);
+                for input in inputs {
+                    visit(input.id);
                 }
-                for c in cases {
-                    walk_region_uses(&c.body, f);
+                for case in cases {
+                    walk_region_uses(&case.body, visit);
                 }
-                if let Some(r) = default {
-                    walk_region_uses(r, f);
+                if let Some(region) = default {
+                    walk_region_uses(region, visit);
                 }
             }
             Statement::For {
@@ -1053,22 +1063,22 @@ impl Statement {
                 post,
                 ..
             } => {
-                for v in initial_values {
-                    f(v.id);
+                for initial_value in initial_values {
+                    visit(initial_value.id);
                 }
-                for s in condition_statements {
-                    s.for_each_value_id(f);
+                for statement in condition_statements {
+                    statement.for_each_value_id(visit);
                 }
-                condition.for_each_value_id(f);
-                walk_region_uses(body, f);
-                walk_region_uses(post, f);
+                condition.for_each_value_id(visit);
+                walk_region_uses(body, visit);
+                walk_region_uses(post, visit);
             }
-            Statement::Block(region) => walk_region_uses(region, f),
+            Statement::Block(region) => walk_region_uses(region, visit),
             Statement::Revert { offset, length } | Statement::Return { offset, length } => {
-                f(offset.id);
-                f(length.id);
+                visit(offset.id);
+                visit(length.id);
             }
-            Statement::SelfDestruct { address } => f(address.id),
+            Statement::SelfDestruct { address } => visit(address.id),
             Statement::ExternalCall {
                 gas,
                 address,
@@ -1079,15 +1089,15 @@ impl Statement {
                 ret_length,
                 ..
             } => {
-                f(gas.id);
-                f(address.id);
-                if let Some(v) = value {
-                    f(v.id);
+                visit(gas.id);
+                visit(address.id);
+                if let Some(transferred_value) = value {
+                    visit(transferred_value.id);
                 }
-                f(args_offset.id);
-                f(args_length.id);
-                f(ret_offset.id);
-                f(ret_length.id);
+                visit(args_offset.id);
+                visit(args_length.id);
+                visit(ret_offset.id);
+                visit(ret_length.id);
             }
             Statement::Create {
                 value,
@@ -1096,11 +1106,11 @@ impl Statement {
                 salt,
                 ..
             } => {
-                f(value.id);
-                f(offset.id);
-                f(length.id);
-                if let Some(s) = salt {
-                    f(s.id);
+                visit(value.id);
+                visit(offset.id);
+                visit(length.id);
+                if let Some(salt_value) = salt {
+                    visit(salt_value.id);
                 }
             }
             Statement::Log {
@@ -1108,48 +1118,48 @@ impl Statement {
                 length,
                 topics,
             } => {
-                f(offset.id);
-                f(length.id);
-                for t in topics {
-                    f(t.id);
+                visit(offset.id);
+                visit(length.id);
+                for topic in topics {
+                    visit(topic.id);
                 }
             }
             Statement::CodeCopy {
-                dest,
+                destination,
                 offset,
                 length,
             }
             | Statement::ReturnDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             }
             | Statement::DataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             }
             | Statement::CallDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                f(dest.id);
-                f(offset.id);
-                f(length.id);
+                visit(destination.id);
+                visit(offset.id);
+                visit(length.id);
             }
             Statement::ExtCodeCopy {
                 address,
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                f(address.id);
-                f(dest.id);
-                f(offset.id);
-                f(length.id);
+                visit(address.id);
+                visit(destination.id);
+                visit(offset.id);
+                visit(length.id);
             }
-            Statement::SetImmutable { value, .. } => f(value.id),
+            Statement::SetImmutable { value, .. } => visit(value.id),
             Statement::Leave { return_values }
             | Statement::Break {
                 values: return_values,
@@ -1157,13 +1167,13 @@ impl Statement {
             | Statement::Continue {
                 values: return_values,
             } => {
-                for v in return_values {
-                    f(v.id);
+                for return_value in return_values {
+                    visit(return_value.id);
                 }
             }
             Statement::CustomErrorRevert { arguments, .. } => {
-                for a in arguments {
-                    f(a.id);
+                for argument in arguments {
+                    visit(argument.id);
                 }
             }
             Statement::Stop
@@ -1175,28 +1185,32 @@ impl Statement {
 
     /// Mutating variant of [`Statement::for_each_value_id`]. Same traversal
     /// rules — visits use sites, recurses into nested regions, skips definitions.
-    pub fn for_each_value_id_mut(&mut self, f: &mut dyn FnMut(&mut ValueId)) {
+    pub fn for_each_value_id_mut(&mut self, visit: &mut dyn FnMut(&mut ValueId)) {
         match self {
             Statement::Let { value, .. } | Statement::Expression(value) => {
-                value.for_each_value_id_mut(f)
+                value.for_each_value_id_mut(visit)
             }
             Statement::MStore { offset, value, .. } | Statement::MStore8 { offset, value, .. } => {
-                f(&mut offset.id);
-                f(&mut value.id);
+                visit(&mut offset.id);
+                visit(&mut value.id);
             }
-            Statement::MCopy { dest, src, length } => {
-                f(&mut dest.id);
-                f(&mut src.id);
-                f(&mut length.id);
+            Statement::MCopy {
+                destination,
+                source,
+                length,
+            } => {
+                visit(&mut destination.id);
+                visit(&mut source.id);
+                visit(&mut length.id);
             }
             Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
-                f(&mut key.id);
-                f(&mut value.id);
+                visit(&mut key.id);
+                visit(&mut value.id);
             }
             Statement::MappingSStore { key, slot, value } => {
-                f(&mut key.id);
-                f(&mut slot.id);
-                f(&mut value.id);
+                visit(&mut key.id);
+                visit(&mut slot.id);
+                visit(&mut value.id);
             }
             Statement::If {
                 condition,
@@ -1205,13 +1219,13 @@ impl Statement {
                 else_region,
                 ..
             } => {
-                f(&mut condition.id);
-                for v in inputs {
-                    f(&mut v.id);
+                visit(&mut condition.id);
+                for input in inputs {
+                    visit(&mut input.id);
                 }
-                walk_region_uses_mut(then_region, f);
-                if let Some(r) = else_region {
-                    walk_region_uses_mut(r, f);
+                walk_region_uses_mut(then_region, visit);
+                if let Some(region) = else_region {
+                    walk_region_uses_mut(region, visit);
                 }
             }
             Statement::Switch {
@@ -1221,15 +1235,15 @@ impl Statement {
                 default,
                 ..
             } => {
-                f(&mut scrutinee.id);
-                for v in inputs {
-                    f(&mut v.id);
+                visit(&mut scrutinee.id);
+                for input in inputs {
+                    visit(&mut input.id);
                 }
-                for c in cases {
-                    walk_region_uses_mut(&mut c.body, f);
+                for case in cases {
+                    walk_region_uses_mut(&mut case.body, visit);
                 }
-                if let Some(r) = default {
-                    walk_region_uses_mut(r, f);
+                if let Some(region) = default {
+                    walk_region_uses_mut(region, visit);
                 }
             }
             Statement::For {
@@ -1240,22 +1254,22 @@ impl Statement {
                 post,
                 ..
             } => {
-                for v in initial_values {
-                    f(&mut v.id);
+                for initial_value in initial_values {
+                    visit(&mut initial_value.id);
                 }
-                for s in condition_statements {
-                    s.for_each_value_id_mut(f);
+                for statement in condition_statements {
+                    statement.for_each_value_id_mut(visit);
                 }
-                condition.for_each_value_id_mut(f);
-                walk_region_uses_mut(body, f);
-                walk_region_uses_mut(post, f);
+                condition.for_each_value_id_mut(visit);
+                walk_region_uses_mut(body, visit);
+                walk_region_uses_mut(post, visit);
             }
-            Statement::Block(region) => walk_region_uses_mut(region, f),
+            Statement::Block(region) => walk_region_uses_mut(region, visit),
             Statement::Revert { offset, length } | Statement::Return { offset, length } => {
-                f(&mut offset.id);
-                f(&mut length.id);
+                visit(&mut offset.id);
+                visit(&mut length.id);
             }
-            Statement::SelfDestruct { address } => f(&mut address.id),
+            Statement::SelfDestruct { address } => visit(&mut address.id),
             Statement::ExternalCall {
                 gas,
                 address,
@@ -1266,15 +1280,15 @@ impl Statement {
                 ret_length,
                 ..
             } => {
-                f(&mut gas.id);
-                f(&mut address.id);
-                if let Some(v) = value {
-                    f(&mut v.id);
+                visit(&mut gas.id);
+                visit(&mut address.id);
+                if let Some(transferred_value) = value {
+                    visit(&mut transferred_value.id);
                 }
-                f(&mut args_offset.id);
-                f(&mut args_length.id);
-                f(&mut ret_offset.id);
-                f(&mut ret_length.id);
+                visit(&mut args_offset.id);
+                visit(&mut args_length.id);
+                visit(&mut ret_offset.id);
+                visit(&mut ret_length.id);
             }
             Statement::Create {
                 value,
@@ -1283,11 +1297,11 @@ impl Statement {
                 salt,
                 ..
             } => {
-                f(&mut value.id);
-                f(&mut offset.id);
-                f(&mut length.id);
-                if let Some(s) = salt {
-                    f(&mut s.id);
+                visit(&mut value.id);
+                visit(&mut offset.id);
+                visit(&mut length.id);
+                if let Some(salt_value) = salt {
+                    visit(&mut salt_value.id);
                 }
             }
             Statement::Log {
@@ -1295,48 +1309,48 @@ impl Statement {
                 length,
                 topics,
             } => {
-                f(&mut offset.id);
-                f(&mut length.id);
-                for t in topics {
-                    f(&mut t.id);
+                visit(&mut offset.id);
+                visit(&mut length.id);
+                for topic in topics {
+                    visit(&mut topic.id);
                 }
             }
             Statement::CodeCopy {
-                dest,
+                destination,
                 offset,
                 length,
             }
             | Statement::ReturnDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             }
             | Statement::DataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             }
             | Statement::CallDataCopy {
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                f(&mut dest.id);
-                f(&mut offset.id);
-                f(&mut length.id);
+                visit(&mut destination.id);
+                visit(&mut offset.id);
+                visit(&mut length.id);
             }
             Statement::ExtCodeCopy {
                 address,
-                dest,
+                destination,
                 offset,
                 length,
             } => {
-                f(&mut address.id);
-                f(&mut dest.id);
-                f(&mut offset.id);
-                f(&mut length.id);
+                visit(&mut address.id);
+                visit(&mut destination.id);
+                visit(&mut offset.id);
+                visit(&mut length.id);
             }
-            Statement::SetImmutable { value, .. } => f(&mut value.id),
+            Statement::SetImmutable { value, .. } => visit(&mut value.id),
             Statement::Leave { return_values }
             | Statement::Break {
                 values: return_values,
@@ -1344,13 +1358,13 @@ impl Statement {
             | Statement::Continue {
                 values: return_values,
             } => {
-                for v in return_values {
-                    f(&mut v.id);
+                for return_value in return_values {
+                    visit(&mut return_value.id);
                 }
             }
             Statement::CustomErrorRevert { arguments, .. } => {
-                for a in arguments {
-                    f(&mut a.id);
+                for argument in arguments {
+                    visit(&mut argument.id);
                 }
             }
             Statement::Stop
@@ -1364,16 +1378,16 @@ impl Statement {
     /// This is the dual of [`Statement::for_each_value_id`]. Does not recurse
     /// into nested regions — for that, use [`for_each_statement`] to walk and call
     /// this on each statement.
-    pub fn for_each_value_id_def(&self, f: &mut dyn FnMut(ValueId)) {
+    pub fn for_each_value_id_def(&self, visit: &mut dyn FnMut(ValueId)) {
         match self {
             Statement::Let { bindings, .. } => {
-                for b in bindings {
-                    f(*b);
+                for binding in bindings {
+                    visit(*binding);
                 }
             }
             Statement::If { outputs, .. } | Statement::Switch { outputs, .. } => {
-                for o in outputs {
-                    f(*o);
+                for output in outputs {
+                    visit(*output);
                 }
             }
             Statement::For {
@@ -1382,17 +1396,19 @@ impl Statement {
                 outputs,
                 ..
             } => {
-                for v in loop_variables {
-                    f(*v);
+                for loop_variable in loop_variables {
+                    visit(*loop_variable);
                 }
-                for v in post_input_variables {
-                    f(*v);
+                for post_input_variable in post_input_variables {
+                    visit(*post_input_variable);
                 }
-                for o in outputs {
-                    f(*o);
+                for output in outputs {
+                    visit(*output);
                 }
             }
-            Statement::ExternalCall { result, .. } | Statement::Create { result, .. } => f(*result),
+            Statement::ExternalCall { result, .. } | Statement::Create { result, .. } => {
+                visit(*result)
+            }
             _ => {}
         }
     }
@@ -1400,16 +1416,16 @@ impl Statement {
     /// Mutating variant of [`Statement::for_each_value_id_def`]. Same per-statement
     /// scope (no recursion into nested regions). Used by the inliner to
     /// allocate fresh IDs for definitions in a cloned function body.
-    pub fn for_each_value_id_def_mut(&mut self, f: &mut dyn FnMut(&mut ValueId)) {
+    pub fn for_each_value_id_def_mut(&mut self, visit: &mut dyn FnMut(&mut ValueId)) {
         match self {
             Statement::Let { bindings, .. } => {
-                for b in bindings {
-                    f(b);
+                for binding in bindings {
+                    visit(binding);
                 }
             }
             Statement::If { outputs, .. } | Statement::Switch { outputs, .. } => {
-                for o in outputs {
-                    f(o);
+                for output in outputs {
+                    visit(output);
                 }
             }
             Statement::For {
@@ -1418,84 +1434,88 @@ impl Statement {
                 outputs,
                 ..
             } => {
-                for v in loop_variables {
-                    f(v);
+                for loop_variable in loop_variables {
+                    visit(loop_variable);
                 }
-                for v in post_input_variables {
-                    f(v);
+                for post_input_variable in post_input_variables {
+                    visit(post_input_variable);
                 }
-                for o in outputs {
-                    f(o);
+                for output in outputs {
+                    visit(output);
                 }
             }
-            Statement::ExternalCall { result, .. } | Statement::Create { result, .. } => f(result),
+            Statement::ExternalCall { result, .. } | Statement::Create { result, .. } => {
+                visit(result)
+            }
             _ => {}
         }
     }
 }
 
-fn walk_region_uses(region: &Region, f: &mut dyn FnMut(ValueId)) {
-    for s in &region.statements {
-        s.for_each_value_id(f);
+fn walk_region_uses(region: &Region, visit: &mut dyn FnMut(ValueId)) {
+    for statement in &region.statements {
+        statement.for_each_value_id(visit);
     }
-    for v in &region.yields {
-        f(v.id);
+    for yielded in &region.yields {
+        visit(yielded.id);
     }
 }
 
-fn walk_region_uses_mut(region: &mut Region, f: &mut dyn FnMut(&mut ValueId)) {
-    for s in &mut region.statements {
-        s.for_each_value_id_mut(f);
+fn walk_region_uses_mut(region: &mut Region, visit: &mut dyn FnMut(&mut ValueId)) {
+    for statement in &mut region.statements {
+        statement.for_each_value_id_mut(visit);
     }
-    for v in &mut region.yields {
-        f(&mut v.id);
+    for yielded in &mut region.yields {
+        visit(&mut yielded.id);
     }
 }
 
 impl Expression {
     /// Visits every `ValueId` *used* by this expression. Includes the
     /// `ValueId` of `Expression::Var` and the `id` of every `Value` operand.
-    pub fn for_each_value_id(&self, f: &mut dyn FnMut(ValueId)) {
+    pub fn for_each_value_id(&self, visit: &mut dyn FnMut(ValueId)) {
         match self {
-            Expression::Var(id) => f(*id),
+            Expression::Var(id) => visit(*id),
             Expression::Binary { lhs, rhs, .. } => {
-                f(lhs.id);
-                f(rhs.id);
+                visit(lhs.id);
+                visit(rhs.id);
             }
             Expression::Ternary { a, b, n, .. } => {
-                f(a.id);
-                f(b.id);
-                f(n.id);
+                visit(a.id);
+                visit(b.id);
+                visit(n.id);
             }
-            Expression::Unary { operand, .. } => f(operand.id),
-            Expression::CallDataLoad { offset } | Expression::MLoad { offset, .. } => f(offset.id),
+            Expression::Unary { operand, .. } => visit(operand.id),
+            Expression::CallDataLoad { offset } | Expression::MLoad { offset, .. } => {
+                visit(offset.id)
+            }
             Expression::ExtCodeSize { address }
             | Expression::ExtCodeHash { address }
-            | Expression::Balance { address } => f(address.id),
-            Expression::BlockHash { number } => f(number.id),
-            Expression::BlobHash { index } => f(index.id),
-            Expression::SLoad { key, .. } | Expression::TLoad { key } => f(key.id),
+            | Expression::Balance { address } => visit(address.id),
+            Expression::BlockHash { number } => visit(number.id),
+            Expression::BlobHash { index } => visit(index.id),
+            Expression::SLoad { key, .. } | Expression::TLoad { key } => visit(key.id),
             Expression::Call { arguments, .. } => {
-                for a in arguments {
-                    f(a.id);
+                for argument in arguments {
+                    visit(argument.id);
                 }
             }
             Expression::Truncate { value, .. }
             | Expression::ZeroExtend { value, .. }
-            | Expression::SignExtendTo { value, .. } => f(value.id),
+            | Expression::SignExtendTo { value, .. } => visit(value.id),
             Expression::Keccak256 { offset, length } => {
-                f(offset.id);
-                f(length.id);
+                visit(offset.id);
+                visit(length.id);
             }
             Expression::Keccak256Pair { word0, word1 } => {
-                f(word0.id);
-                f(word1.id);
+                visit(word0.id);
+                visit(word1.id);
             }
             Expression::MappingSLoad { key, slot } => {
-                f(key.id);
-                f(slot.id);
+                visit(key.id);
+                visit(slot.id);
             }
-            Expression::Keccak256Single { word0 } => f(word0.id),
+            Expression::Keccak256Single { word0 } => visit(word0.id),
             Expression::Literal { .. }
             | Expression::CallValue
             | Expression::Caller
@@ -1524,49 +1544,49 @@ impl Expression {
     }
 
     /// Mutating variant of [`Expression::for_each_value_id`].
-    pub fn for_each_value_id_mut(&mut self, f: &mut dyn FnMut(&mut ValueId)) {
+    pub fn for_each_value_id_mut(&mut self, visit: &mut dyn FnMut(&mut ValueId)) {
         match self {
-            Expression::Var(id) => f(id),
+            Expression::Var(id) => visit(id),
             Expression::Binary { lhs, rhs, .. } => {
-                f(&mut lhs.id);
-                f(&mut rhs.id);
+                visit(&mut lhs.id);
+                visit(&mut rhs.id);
             }
             Expression::Ternary { a, b, n, .. } => {
-                f(&mut a.id);
-                f(&mut b.id);
-                f(&mut n.id);
+                visit(&mut a.id);
+                visit(&mut b.id);
+                visit(&mut n.id);
             }
-            Expression::Unary { operand, .. } => f(&mut operand.id),
+            Expression::Unary { operand, .. } => visit(&mut operand.id),
             Expression::CallDataLoad { offset } | Expression::MLoad { offset, .. } => {
-                f(&mut offset.id)
+                visit(&mut offset.id)
             }
             Expression::ExtCodeSize { address }
             | Expression::ExtCodeHash { address }
-            | Expression::Balance { address } => f(&mut address.id),
-            Expression::BlockHash { number } => f(&mut number.id),
-            Expression::BlobHash { index } => f(&mut index.id),
-            Expression::SLoad { key, .. } | Expression::TLoad { key } => f(&mut key.id),
+            | Expression::Balance { address } => visit(&mut address.id),
+            Expression::BlockHash { number } => visit(&mut number.id),
+            Expression::BlobHash { index } => visit(&mut index.id),
+            Expression::SLoad { key, .. } | Expression::TLoad { key } => visit(&mut key.id),
             Expression::Call { arguments, .. } => {
-                for a in arguments {
-                    f(&mut a.id);
+                for argument in arguments {
+                    visit(&mut argument.id);
                 }
             }
             Expression::Truncate { value, .. }
             | Expression::ZeroExtend { value, .. }
-            | Expression::SignExtendTo { value, .. } => f(&mut value.id),
+            | Expression::SignExtendTo { value, .. } => visit(&mut value.id),
             Expression::Keccak256 { offset, length } => {
-                f(&mut offset.id);
-                f(&mut length.id);
+                visit(&mut offset.id);
+                visit(&mut length.id);
             }
             Expression::Keccak256Pair { word0, word1 } => {
-                f(&mut word0.id);
-                f(&mut word1.id);
+                visit(&mut word0.id);
+                visit(&mut word1.id);
             }
             Expression::MappingSLoad { key, slot } => {
-                f(&mut key.id);
-                f(&mut slot.id);
+                visit(&mut key.id);
+                visit(&mut slot.id);
             }
-            Expression::Keccak256Single { word0 } => f(&mut word0.id),
+            Expression::Keccak256Single { word0 } => visit(&mut word0.id),
             Expression::Literal { .. }
             | Expression::CallValue
             | Expression::Caller
@@ -1596,30 +1616,30 @@ impl Expression {
 }
 
 /// Mutating variant of [`for_each_statement`]. Visits every statement in a slice
-/// recursively. `f` is called on each statement *before* recursion into its
+/// recursively. `visit` is called on each statement *before* recursion into its
 /// nested regions, so a callback that swaps a statement's variant will not
 /// have its new nested regions re-visited. For our use cases the callback
 /// only mutates inner fields, never changes the variant.
-pub fn for_each_statement_mut(statements: &mut [Statement], f: &mut dyn FnMut(&mut Statement)) {
+pub fn for_each_statement_mut(statements: &mut [Statement], visit: &mut dyn FnMut(&mut Statement)) {
     for statement in statements.iter_mut() {
-        f(statement);
+        visit(statement);
         match statement {
             Statement::If {
                 then_region,
                 else_region,
                 ..
             } => {
-                for_each_statement_mut(&mut then_region.statements, f);
-                if let Some(r) = else_region {
-                    for_each_statement_mut(&mut r.statements, f);
+                for_each_statement_mut(&mut then_region.statements, visit);
+                if let Some(region) = else_region {
+                    for_each_statement_mut(&mut region.statements, visit);
                 }
             }
             Statement::Switch { cases, default, .. } => {
                 for case in cases {
-                    for_each_statement_mut(&mut case.body.statements, f);
+                    for_each_statement_mut(&mut case.body.statements, visit);
                 }
-                if let Some(r) = default {
-                    for_each_statement_mut(&mut r.statements, f);
+                if let Some(region) = default {
+                    for_each_statement_mut(&mut region.statements, visit);
                 }
             }
             Statement::For {
@@ -1628,38 +1648,38 @@ pub fn for_each_statement_mut(statements: &mut [Statement], f: &mut dyn FnMut(&m
                 post,
                 ..
             } => {
-                for_each_statement_mut(condition_statements, f);
-                for_each_statement_mut(&mut body.statements, f);
-                for_each_statement_mut(&mut post.statements, f);
+                for_each_statement_mut(condition_statements, visit);
+                for_each_statement_mut(&mut body.statements, visit);
+                for_each_statement_mut(&mut post.statements, visit);
             }
-            Statement::Block(region) => for_each_statement_mut(&mut region.statements, f),
+            Statement::Block(region) => for_each_statement_mut(&mut region.statements, visit),
             _ => {}
         }
     }
 }
 
-/// Visits every statement in a slice recursively, calling `f` on each one.
+/// Visits every statement in a slice recursively, calling `visit` on each one.
 /// Handles structural recursion into If/Switch/For/Block regions.
-pub fn for_each_statement(statements: &[Statement], f: &mut dyn FnMut(&Statement)) {
+pub fn for_each_statement(statements: &[Statement], visit: &mut dyn FnMut(&Statement)) {
     for statement in statements {
-        f(statement);
+        visit(statement);
         match statement {
             Statement::If {
                 then_region,
                 else_region,
                 ..
             } => {
-                for_each_statement(&then_region.statements, f);
-                if let Some(r) = else_region {
-                    for_each_statement(&r.statements, f);
+                for_each_statement(&then_region.statements, visit);
+                if let Some(region) = else_region {
+                    for_each_statement(&region.statements, visit);
                 }
             }
             Statement::Switch { cases, default, .. } => {
                 for case in cases {
-                    for_each_statement(&case.body.statements, f);
+                    for_each_statement(&case.body.statements, visit);
                 }
-                if let Some(r) = default {
-                    for_each_statement(&r.statements, f);
+                if let Some(region) = default {
+                    for_each_statement(&region.statements, visit);
                 }
             }
             Statement::For {
@@ -1668,11 +1688,11 @@ pub fn for_each_statement(statements: &[Statement], f: &mut dyn FnMut(&Statement
                 post,
                 ..
             } => {
-                for_each_statement(condition_statements, f);
-                for_each_statement(&body.statements, f);
-                for_each_statement(&post.statements, f);
+                for_each_statement(condition_statements, visit);
+                for_each_statement(&body.statements, visit);
+                for_each_statement(&post.statements, visit);
             }
-            Statement::Block(region) => for_each_statement(&region.statements, f),
+            Statement::Block(region) => for_each_statement(&region.statements, visit),
             _ => {}
         }
     }

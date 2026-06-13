@@ -267,9 +267,6 @@ impl HeapAnalysis {
                     self.memory_accesses.insert(addr, pattern);
                 } else {
                     self.has_dynamic_accesses = true;
-                    // A dynamic full-word store could wrap to the FMP word and corrupt it; we
-                    // deliberately do not set `fmp_could_be_unbounded` here — see the field's doc
-                    // comment for the (cost-driven) rationale and why no cheap sound fix exists.
                 }
                 if *region == MemoryRegion::Unknown && !pattern.is_aligned() {
                     if let Some(addr) = static_offset {
@@ -278,12 +275,6 @@ impl HeapAnalysis {
                         }
                     }
                 }
-                // FMP unboundedness tracking: any `mstore(0x40, value)`
-                // whose value isn't a recognized sbrk-allocator pattern
-                // means the FMP could hold a non-Solidity-convention
-                // value at runtime. Downstream `mload(0x40)` range
-                // proofs / native-mode truncations assume `FMP <
-                // heap_size`; those assumptions break here.
                 let is_fmp_store = region.is_free_pointer_slot(static_offset);
                 if is_fmp_store && !self.is_trusted_fmp_source(value.id.0) {
                     self.fmp_could_be_unbounded = true;
@@ -295,21 +286,11 @@ impl HeapAnalysis {
                 if let Some(addr) = self.extract_static_offset(offset) {
                     self.memory_accesses.insert(addr, pattern);
                     self.tainted_regions.insert(word_align(addr));
-                    // A byte write to the FMP word puts non-pointer, big-endian-
-                    // positioned data at 0x40. The FMP fast paths (`mload(0x40)`
-                    // low-32 native load + the `FMP < heap_size` range proof)
-                    // assume a small native pointer there, so they must be
-                    // disabled — otherwise `mstore8(0x40,v); mload(0x40)` reads the
-                    // wrong half / gets range-masked. Treat the slot as unbounded.
                     if word_align(addr) == 0x40 {
                         self.fmp_could_be_unbounded = true;
                     }
                 } else {
                     self.has_dynamic_accesses = true;
-                    // A dynamic-offset byte write could land on the FMP word. Unlike the dynamic
-                    // full-word `MStore` branch above (which leaves this flag unset for cost
-                    // reasons — see the gap note there), dynamic `mstore8` is rare, so flagging it
-                    // conservatively costs essentially nothing.
                     self.fmp_could_be_unbounded = true;
                 }
             }
@@ -342,11 +323,6 @@ impl HeapAnalysis {
 
             Statement::Return { offset, length } => {
                 self.mark_escaping_range(offset, length);
-                // A `return` covering the FMP slot exposes its bytes to the
-                // caller in EVM big-endian format. Fire FMP-escape accounting
-                // for in-function returns and for any runtime-subobject return;
-                // only the deploy (root) object's top-level `return(0, codesize)`
-                // is exempt (it returns raw runtime code, not BE-encoded data).
                 if in_function || !is_root {
                     self.note_fmp_coverage(offset, length);
                 }
@@ -569,8 +545,11 @@ impl HeapAnalysis {
         }
 
         match (dest_start, len) {
-            (Some(addr), Some(size)) if size > 0 => self.taint_range(Some(addr), Some(size)),
-            (Some(_), Some(_)) => {} // zero-length copy writes nothing
+            (Some(addr), Some(size)) => {
+                if size > 0 {
+                    self.taint_range(Some(addr), Some(size));
+                }
+            }
             (Some(addr), None) => {
                 self.tainted_regions.insert(word_align(addr));
             }
@@ -857,6 +836,9 @@ impl HeapAnalysis {
     ///   - `Binary { Add, ... }` where at least one operand is trusted
     ///     (the canonical `add(mload(0x40), bounded_size)` pattern, or
     ///     its variants with both operands derived from FMP arithmetic).
+    ///   - `Binary { And, ... }` where at least one operand is trusted
+    ///     (alignment masking such as `and(add(mload(0x40), size), not(31))`
+    ///     keeps a bounded value bounded).
     ///   - `MLoad { offset: 0x40, .. }` — reads the current FMP, which
     ///     sbrk-style code uses as the base for new allocations.
     ///   - `Keccak256Single` / `Keccak256Pair` — solc never writes a
@@ -875,10 +857,6 @@ impl HeapAnalysis {
         let mut current = value_id;
         for _ in 0..MAX_FMP_TRUST_DEPTH {
             let Some(expression) = self.value_expressions.get(&current) else {
-                // No known Let binding for `current`: it's either a
-                // function parameter or a result whose Let we haven't
-                // visited yet. Either way, we can't prove it's
-                // sbrk-bounded.
                 return false;
             };
             match expression {
@@ -895,9 +873,6 @@ impl HeapAnalysis {
                     lhs,
                     rhs,
                 } => {
-                    // `add(trusted, _)` is trusted iff at least one
-                    // operand is trusted. Solidity's allocator emits
-                    // `add(mload(0x40), bounded_size)` which fits this.
                     return self.is_trusted_fmp_source(lhs.id.0)
                         || self.is_trusted_fmp_source(rhs.id.0);
                 }
@@ -906,12 +881,6 @@ impl HeapAnalysis {
                     lhs,
                     rhs,
                 } => {
-                    // `and(trusted, _)` is trusted. `guard_narrow.rs`'s
-                    // body-rewrite synthesizes `mstore(0x40, and(sum,
-                    // max_const))` for any allocator that matches
-                    // `has_allocator_shape`. The `sum` chain leads back
-                    // through `add(mload(0x40), aligned_size)`, which
-                    // recurses to trusted via the `Add` arm above.
                     return self.is_trusted_fmp_source(lhs.id.0)
                         || self.is_trusted_fmp_source(rhs.id.0);
                 }
@@ -1238,8 +1207,8 @@ mod tests {
         assert_eq!(info.alignment, 5);
     }
 
-    /// N5 regression: fuzzy dedup that parameterizes a literal memory offset
-    /// invalidates a heap analysis computed before it runs.
+    /// Fuzzy dedup that parameterizes a literal memory offset invalidates a heap
+    /// analysis computed before it runs.
     ///
     /// Two functions identical except for a literal memory offset get merged by
     /// `deduplicate_functions_fuzzy`, which replaces the differing offset literal
@@ -1284,8 +1253,6 @@ mod tests {
                     statements: store_at(offset, offset_id, value_id),
                 },
                 call_count: 1,
-                // Above MIN_FUZZY_DEDUP_SIZE_NARROW_PARAMS so the narrow-params
-                // path considers the pair (the bodies are deliberately tiny).
                 size_estimate: 15,
             }
         }

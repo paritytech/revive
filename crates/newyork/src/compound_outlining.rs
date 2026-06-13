@@ -261,9 +261,11 @@ mod tests {
     /// A keccak hash defined inside a scope-transparent `Statement::Block` and `sload`ed there,
     /// but *also* referenced by an ancestor statement, must NOT be fused: deleting its definition
     /// would dangle the outer reference. Regression for the per-list use-count bug.
+    ///
+    /// Value layout: word0 = v1, word1 = v2, stored value = v3, hash = v4, loaded value = v5.
+    /// The outer `SStore` on v4 is an ancestor use of the block-defined hash that keeps it live.
     #[test]
     fn block_leaked_hash_not_fused() {
-        // word0 = v1, word1 = v2, stored value = v3, hash = v4, loaded value = v5
         let inner = Region {
             statements: vec![
                 Statement::Let {
@@ -291,7 +293,6 @@ mod tests {
                     literal(2, 1),
                     literal(3, 42),
                     Statement::Block(inner),
-                    // Outer use of the block-defined hash v4 — keeps it live.
                     Statement::SStore {
                         key: value(4),
                         value: value(3),

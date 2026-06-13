@@ -177,46 +177,8 @@ impl MemoryOptimizer {
                     if let Some(static_offset) = self.try_get_static_offset(&offset) {
                         let word_offset = word_align(static_offset);
 
-                        // Dead-store elimination: an unread mstore to the
-                        // exact same offset is fully overwritten by this
-                        // one. Check this FIRST, before the overlap-retain
-                        // below drops the matching `pending_stores` entry.
-                        if let Some(&prev_idx) = self.pending_stores.get(&static_offset) {
-                            self.dead_store_indices.insert(prev_idx);
-                            self.statistics.stores_eliminated += 1;
-                            log::trace!(
-                                "Dead store at index {} (offset {}) - overwritten at index {}",
-                                prev_idx,
-                                static_offset,
-                                index
-                            );
-                        }
-
-                        // Soundness: an `mstore(p, v)` writes 32 bytes at
-                        // `[p, p + 32)`. Forwarding compares the *exact*
-                        // `tracked.offset` against the load's static
-                        // offset, so any tracked entry whose own 32-byte
-                        // write range overlaps `[p, p + 32)` must be
-                        // invalidated — otherwise a later `mload` at the
-                        // stale tracked offset would forward the
-                        // pre-overwrite value while the actual memory has
-                        // been partially overwritten by the new store.
-                        let new_end = static_offset.saturating_add(BYTE_LENGTH_WORD as u64);
-                        self.memory_state.retain(|_, tracked| {
-                            let tracked_end =
-                                tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
-                            tracked_end <= static_offset || tracked.offset >= new_end
-                        });
-                        // Same for pending_stores: a partial-overwrite
-                        // doesn't make the prior store dead (its bytes are
-                        // only *partially* covered), but a later `mload`
-                        // won't match the original offset either, so the
-                        // pending entry can never be matched and should
-                        // not be kept.
-                        self.pending_stores.retain(|&k, _| {
-                            let prev_end = k.saturating_add(BYTE_LENGTH_WORD as u64);
-                            prev_end <= static_offset || k >= new_end
-                        });
+                        self.eliminate_dead_store_at(static_offset, index);
+                        self.invalidate_state_overlapping_store(static_offset);
 
                         self.pending_stores.insert(static_offset, index);
 
@@ -246,23 +208,7 @@ impl MemoryOptimizer {
                     region,
                 } => {
                     if let Some(static_offset) = self.try_get_static_offset(&offset) {
-                        // Soundness: `mstore8(p, _)` overwrites the single
-                        // byte at `p`. Any tracked entry from an earlier
-                        // `mstore` whose 32-byte write range
-                        // `[tracked.offset, tracked.offset + 32)` covers
-                        // `p` becomes stale — `mload` at the still-cached
-                        // exact tracked offset would forward the
-                        // pre-overwrite value. Invalidate every such
-                        // entry and the matching `pending_stores` key.
-                        self.memory_state.retain(|_, tracked| {
-                            let tracked_end =
-                                tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
-                            tracked.offset > static_offset || tracked_end <= static_offset
-                        });
-                        self.pending_stores.retain(|&k, _| {
-                            let prev_end = k.saturating_add(BYTE_LENGTH_WORD as u64);
-                            k > static_offset || prev_end <= static_offset
-                        });
+                        self.invalidate_state_covering_byte(static_offset);
                     } else {
                         self.memory_state.clear();
                         self.pending_stores.clear();
@@ -483,47 +429,7 @@ impl MemoryOptimizer {
                     ref length,
                     ..
                 } => {
-                    // Soundness: a `*copy(dest, _, length)` writes
-                    // `length` bytes at `[dest, dest + length)`. Any
-                    // tracked entry whose own 32-byte write range
-                    // overlaps that range must be invalidated —
-                    // otherwise a later `mload` at the still-cached
-                    // exact tracked offset would forward the
-                    // pre-overwrite value while actual memory has been
-                    // overwritten by the copy.
-                    //
-                    // Three cases, in priority order:
-                    //
-                    // 1. `length == Some(0)`: zero-byte copy is a
-                    //    no-op regardless of whether `dest` is known —
-                    //    nothing to invalidate.
-                    // 2. `dest == Some(start)` and `length == Some(size)`
-                    //    with `size > 0`: known write range, retain
-                    //    only entries that don't overlap.
-                    // 3. anything else (dynamic dest with nonzero or
-                    //    unknown length, dynamic length with known
-                    //    dest): conservatively clear all tracking.
-                    let copy_length = self.try_get_static_offset(length);
-                    let copy_dest = self.try_get_static_offset(dest);
-                    if matches!(copy_length, Some(0)) {
-                        // case 1: no bytes written
-                    } else if let (Some(start), Some(size)) = (copy_dest, copy_length) {
-                        // case 2: known [start, start + size) range
-                        let end = start.saturating_add(size);
-                        self.memory_state.retain(|_, tracked| {
-                            let tracked_end =
-                                tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
-                            tracked_end <= start || tracked.offset >= end
-                        });
-                        self.pending_stores.retain(|&k, _| {
-                            let prev_end = k.saturating_add(BYTE_LENGTH_WORD as u64);
-                            prev_end <= start || k >= end
-                        });
-                    } else {
-                        // case 3: dynamic — pessimistic clear
-                        self.memory_state.clear();
-                        self.pending_stores.clear();
-                    }
+                    self.invalidate_state_for_copy(dest, length);
                     processed.push(statement);
                 }
 
@@ -578,6 +484,101 @@ impl MemoryOptimizer {
         self.pending_stores = outer_pending;
 
         result
+    }
+
+    /// Marks an unread pending store to `static_offset` as dead when the current
+    /// `mstore` at the same offset fully overwrites it.
+    ///
+    /// Must run before [`Self::invalidate_state_overlapping_store`], which drops the
+    /// matching `pending_stores` entry that this dead-store check relies on.
+    fn eliminate_dead_store_at(&mut self, static_offset: u64, index: usize) {
+        if let Some(&prev_idx) = self.pending_stores.get(&static_offset) {
+            self.dead_store_indices.insert(prev_idx);
+            self.statistics.stores_eliminated += 1;
+            log::trace!(
+                "Dead store at index {} (offset {}) - overwritten at index {}",
+                prev_idx,
+                static_offset,
+                index
+            );
+        }
+    }
+
+    /// Invalidates tracked state whose 32-byte write range overlaps the word written
+    /// by an `mstore(static_offset, v)`.
+    ///
+    /// An `mstore(p, v)` writes 32 bytes at `[p, p + 32)`. Forwarding compares the
+    /// exact `tracked.offset` against the load's static offset, so any tracked entry
+    /// whose own 32-byte write range overlaps `[p, p + 32)` must be invalidated —
+    /// otherwise a later `mload` at the stale tracked offset would forward the
+    /// pre-overwrite value while the actual memory has been partially overwritten by
+    /// the new store. A partial overwrite does not make a prior `pending_stores`
+    /// entry dead (its bytes are only partially covered), but a later `mload` won't
+    /// match the original offset either, so the pending entry can never be matched
+    /// and is dropped.
+    fn invalidate_state_overlapping_store(&mut self, static_offset: u64) {
+        let new_end = static_offset.saturating_add(BYTE_LENGTH_WORD as u64);
+        self.memory_state.retain(|_, tracked| {
+            let tracked_end = tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
+            tracked_end <= static_offset || tracked.offset >= new_end
+        });
+        self.pending_stores.retain(|&k, _| {
+            let prev_end = k.saturating_add(BYTE_LENGTH_WORD as u64);
+            prev_end <= static_offset || k >= new_end
+        });
+    }
+
+    /// Invalidates tracked state whose 32-byte write range covers the single byte
+    /// written by an `mstore8(static_offset, _)`.
+    ///
+    /// `mstore8(p, _)` overwrites the single byte at `p`. Any tracked entry from an
+    /// earlier `mstore` whose 32-byte write range `[tracked.offset, tracked.offset + 32)`
+    /// covers `p` becomes stale — `mload` at the still-cached exact tracked offset
+    /// would forward the pre-overwrite value. Every such entry and the matching
+    /// `pending_stores` key is invalidated.
+    fn invalidate_state_covering_byte(&mut self, static_offset: u64) {
+        self.memory_state.retain(|_, tracked| {
+            let tracked_end = tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
+            tracked.offset > static_offset || tracked_end <= static_offset
+        });
+        self.pending_stores.retain(|&k, _| {
+            let prev_end = k.saturating_add(BYTE_LENGTH_WORD as u64);
+            k > static_offset || prev_end <= static_offset
+        });
+    }
+
+    /// Invalidates tracked state overlapping the range written by a `*copy(dest, _, length)`.
+    ///
+    /// A `*copy(dest, _, length)` writes `length` bytes at `[dest, dest + length)`. Any
+    /// tracked entry whose own 32-byte write range overlaps that range must be
+    /// invalidated — otherwise a later `mload` at the still-cached exact tracked offset
+    /// would forward the pre-overwrite value while actual memory has been overwritten by
+    /// the copy. Three cases are handled, in priority order:
+    ///
+    /// 1. `length == Some(0)`: zero-byte copy is a no-op regardless of whether `dest` is
+    ///    known — nothing to invalidate.
+    /// 2. `dest == Some(start)` and `length == Some(size)` with `size > 0`: known write
+    ///    range, retain only entries that don't overlap.
+    /// 3. anything else (dynamic dest with nonzero or unknown length, dynamic length with
+    ///    known dest): conservatively clear all tracking.
+    fn invalidate_state_for_copy(&mut self, dest: &Value, length: &Value) {
+        let copy_length = self.try_get_static_offset(length);
+        let copy_dest = self.try_get_static_offset(dest);
+        if matches!(copy_length, Some(0)) {
+        } else if let (Some(start), Some(size)) = (copy_dest, copy_length) {
+            let end = start.saturating_add(size);
+            self.memory_state.retain(|_, tracked| {
+                let tracked_end = tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
+                tracked_end <= start || tracked.offset >= end
+            });
+            self.pending_stores.retain(|&k, _| {
+                let prev_end = k.saturating_add(BYTE_LENGTH_WORD as u64);
+                prev_end <= start || k >= end
+            });
+        } else {
+            self.memory_state.clear();
+            self.pending_stores.clear();
+        }
     }
 
     /// Tracks memory reads for dead store elimination and load-after-store forwarding.
@@ -945,6 +946,12 @@ impl FmpPropagation {
     ///
     /// Tracks constant values to resolve MStore/MLoad offsets, and maintains the
     /// known FMP value across control flow when provably safe.
+    ///
+    /// A dynamic-offset `mstore` whose offset can't be resolved statically could land
+    /// on 0x40 at runtime (e.g. `mstore(calldataload(p), v)`). The simplifier leaves
+    /// `region == Unknown` for any non-literal offset, so the only safe move is to
+    /// invalidate the tracked FMP. `Dynamic` (offset proven `>= 0x80`) and `Scratch`
+    /// (`< 0x40`) regions can't reach 0x40 even at runtime, so they are kept.
     fn propagate_statements(
         &mut self,
         statements: Vec<Statement>,
@@ -967,20 +974,11 @@ impl FmpPropagation {
                     if is_fmp_store {
                         let new_fmp = Self::resolve_value(&constants, &value);
                         fmp_value = new_fmp;
-                    } else if word_store_overlaps_free_pointer_slot(resolved_offset) {
-                        fmp_value = None;
-                    } else if resolved_offset.is_none()
-                        && region != MemoryRegion::Dynamic
-                        && region != MemoryRegion::Scratch
+                    } else if word_store_overlaps_free_pointer_slot(resolved_offset)
+                        || (resolved_offset.is_none()
+                            && region != MemoryRegion::Dynamic
+                            && region != MemoryRegion::Scratch)
                     {
-                        // Soundness: a dynamic-offset mstore whose offset we
-                        // can't resolve statically could land on 0x40 at
-                        // runtime (e.g. `mstore(calldataload(p), v)`). The
-                        // simplifier leaves `region == Unknown` for any
-                        // non-literal offset, so the only safe move is to
-                        // invalidate the tracked FMP. `Dynamic` (offset
-                        // proven `>= 0x80`) and `Scratch` (`< 0x40`) regions
-                        // can't reach 0x40 even at runtime, so we keep them.
                         fmp_value = None;
                     }
 
@@ -1181,8 +1179,6 @@ impl FmpPropagation {
                     ref length,
                     ..
                 } => {
-                    // These copies write to memory at `dest`; if that range can overlap
-                    // the FMP slot [0x40, 0x60) the tracked free-memory pointer is stale.
                     if Self::write_may_cover_fmp(&constants, dest, length) {
                         fmp_value = None;
                     }

@@ -143,7 +143,6 @@ fn has_allocator_shape(
     let mut lt_against_addend: BTreeMap<u32, (u32, u32)> = BTreeMap::new();
     let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
     let mut fmp_store_value: Option<u32> = None;
-    // Conditions of `if` statements whose then-region reverts (aborts the transaction).
     let mut reverting_if_conditions: std::collections::BTreeSet<u32> =
         std::collections::BTreeSet::new();
 
@@ -223,7 +222,6 @@ fn has_allocator_shape(
         return false;
     }
 
-    // Collect the specific comparison bindings `gt(sum, UINT64_MAX)` and `lt(sum, p0)`.
     let uint64_max: BigUint = (BigUint::from(1u32) << 64) - 1u32;
     let gt_ids: std::collections::BTreeSet<u32> = gt_const_checks
         .iter()
@@ -239,9 +237,6 @@ fn has_allocator_shape(
         return false;
     }
 
-    // Require an aborting `if or(gt, lt) { revert }` over those two comparisons. This is what
-    // guarantees the function reverts for a pointer wide enough to overflow `sum`, making the
-    // `p0` narrowing sound.
     or_results.iter().any(|(or_id, (a, b))| {
         reverting_if_conditions.contains(or_id)
             && ((gt_ids.contains(a) && lt_ids.contains(b))
@@ -355,8 +350,15 @@ fn detect_validator_functions(
     validators
 }
 
-/// Checks if a block contains the eq-based validator pattern for the given param.
-/// Returns the boundary mask if found.
+/// Checks if a block contains the eq-based validator pattern for the given parameter, returning
+/// the boundary mask if found.
+///
+/// The failure branch must revert, not merely `leave`: callers of a detected validator rewrite the
+/// argument to `and(arg, MASK)`, which is only sound if an out-of-range argument aborts the whole
+/// call. A `leave` just returns from the validator, so the caller would proceed with a
+/// silently-masked (wrong) value. Detection therefore uses [`region_reverts`], which excludes
+/// `leave`/`return` — unlike the looser [`region_terminates`] used for intra-function guards, where
+/// the terminator merely skips the narrowed uses within the same function.
 fn detect_validator_mask(
     block: &Block,
     parameter_id: ValueId,
@@ -445,12 +447,6 @@ fn detect_validator_mask(
             ..
         } = statement
         {
-            // The failure branch must REVERT, not merely `leave`: callers of a detected validator
-            // rewrite the argument to `and(arg, MASK)`, which is only sound if an out-of-range
-            // argument aborts the whole call. A `leave` just returns from the validator, so the
-            // caller would proceed with a silently-masked (wrong) value. `region_reverts` excludes
-            // `leave`/`return` (unlike the looser `region_terminates` used for intra-function
-            // guards, where the terminator skips the narrowed uses in the same function).
             if else_region.is_none() && outputs.is_empty() && region_reverts(then_region, noreturn)
             {
                 if let Some(mask) = iszero_eq_defs.get(&condition.id.0) {
@@ -975,6 +971,9 @@ mod tests {
     /// Builds a `finalize_allocation(memPtr, size)`-shaped function (param 0 = `memPtr`/`p0`,
     /// param 1 = `size`/`p1`). When `with_guard` is set, the overflow comparisons feed an aborting
     /// `if or(gt(sum, u64max), lt(sum, p0)) { panic }`; otherwise they are computed but ignored.
+    ///
+    /// Mirroring solc, the size is rounded up to a word (`and(add(size, 31), not(31))`) before being
+    /// added to the pointer, so `p1` sits behind `add`+`and` rather than feeding the guard directly.
     fn allocator_object(with_guard: bool) -> Object {
         let p0 = ValueId(0);
         let p1 = ValueId(1);
@@ -991,8 +990,6 @@ mod tests {
         let u64_max: BigUint = (BigUint::from(1u32) << 64) - 1u32;
         let not_31: BigUint = (BigUint::from(1u32) << 256) - BigUint::from(32u32);
 
-        // Mirror solc's `finalize_allocation`: the size is rounded up to a word before being added
-        // to the pointer, so `p1` sits behind `add`+`and` rather than feeding the guard directly.
         let mut statements = vec![
             Statement::Let {
                 bindings: vec![c40],
@@ -1145,7 +1142,7 @@ mod tests {
         );
     }
 
-    /// N9: overflow comparisons that are computed but never feed an aborting `if` are not the
+    /// Overflow comparisons that are computed but never feed an aborting `if` are not the
     /// allocator shape, so the pointer parameter must not be narrowed — narrowing it would make
     /// the call-site truncation trap on wide pointers that EVM accepts.
     #[test]
@@ -1229,7 +1226,7 @@ mod tests {
         function
     }
 
-    /// N8: a validator is only sound to key argument masking off if its failure branch *reverts*.
+    /// A validator is only sound to key argument masking off if its failure branch *reverts*.
     /// One whose branch merely `leave`s returns control to the caller, so the caller must not mask
     /// the argument — that validator must not be detected.
     #[test]

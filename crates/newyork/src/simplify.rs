@@ -229,6 +229,9 @@ impl Simplifier {
     }
 
     /// Simplifies a list of statements, returning the simplified list.
+    ///
+    /// Object code has no yields; a function body's return values are repaired separately by
+    /// `reconcile_dangling_return_values`, so no rescue set is needed here.
     fn simplify_statements(&mut self, statements: Vec<Statement>) -> Vec<Statement> {
         let outer_constants = self.constants.clone();
         let outer_copies = self.copies.clone();
@@ -240,8 +243,6 @@ impl Simplifier {
             result.extend(simplified);
         }
 
-        // Object code has no yields; a function body's return values are repaired separately by
-        // `reconcile_dangling_return_values`, so no rescue set is needed here.
         result = outline_panic_patterns(result, &self.constants, &BTreeSet::new());
 
         result = outline_custom_error_patterns(result, &self.constants);
@@ -591,6 +592,9 @@ impl Simplifier {
     }
 
     /// Simplifies a region in place.
+    ///
+    /// Yields are resolved before outlining so a panic-pattern truncation can rescue any pure
+    /// binding they still reference (otherwise the yield would dangle).
     fn simplify_region(&mut self, region: Region) -> Region {
         let outer_constants = self.constants.clone();
         let outer_copies = self.copies.clone();
@@ -602,8 +606,6 @@ impl Simplifier {
             statements.extend(simplified);
         }
 
-        // Resolve yields before outlining so a panic-pattern truncation can rescue any pure binding
-        // they still reference (otherwise the yield would dangle).
         let yields: Vec<Value> = region
             .yields
             .into_iter()
@@ -624,6 +626,12 @@ impl Simplifier {
 
     /// Simplifies an expression, performing constant folding, algebraic identities,
     /// and copy propagation on operands.
+    ///
+    /// Among the algebraic identities are ones that recurse through a previously-recorded binary
+    /// definition: `sub(add(a, b), a) → b`, `sub(add(a, b), b) → a`, `add(sub(a, b), b) → a`, and
+    /// `add(b, sub(a, b)) → a`. These come up wherever a helper computes `tail = base + 32` and the
+    /// caller takes `length = tail - base` (or the symmetric forms); recognising them lets the
+    /// return_word peephole match against Solidity's inline encode helper output.
     fn simplify_expression(&mut self, expression: Expression) -> Expression {
         match expression {
             Expression::Binary {
@@ -652,23 +660,15 @@ impl Simplifier {
                     return simplified;
                 }
 
-                // Simplify identities that recurse through a previously-recorded
-                // binary definition. These come up wherever a helper computes
-                // `tail = base + 32` and the caller takes `length = tail - base`
-                // (or the symmetric forms); recognising them lets the
-                // return_word peephole match against Solidity's inline encode
-                // helper output.
                 if operation == BinaryOperation::Sub {
                     if let Some(&(lhs_op, lhs_a, lhs_b)) = self.binary_defs.get(&lhs.id.0) {
                         if lhs_op == BinaryOperation::Add {
                             let resolved_a = self.resolve_copy(lhs_a);
                             let resolved_b = self.resolve_copy(lhs_b);
-                            // sub(add(a, b), a) → b
                             if resolved_a == rhs.id {
                                 self.statistics.identities_simplified += 1;
                                 return Expression::Var(resolved_b);
                             }
-                            // sub(add(a, b), b) → a
                             if resolved_b == rhs.id {
                                 self.statistics.identities_simplified += 1;
                                 return Expression::Var(resolved_a);
@@ -681,7 +681,6 @@ impl Simplifier {
                         if lhs_op == BinaryOperation::Sub {
                             let resolved_a = self.resolve_copy(lhs_a);
                             let resolved_b = self.resolve_copy(lhs_b);
-                            // add(sub(a, b), b) → a
                             if resolved_b == rhs.id {
                                 self.statistics.identities_simplified += 1;
                                 return Expression::Var(resolved_a);
@@ -692,7 +691,6 @@ impl Simplifier {
                         if rhs_op == BinaryOperation::Sub {
                             let resolved_a = self.resolve_copy(rhs_a);
                             let resolved_b = self.resolve_copy(rhs_b);
-                            // add(b, sub(a, b)) → a
                             if resolved_b == lhs.id {
                                 self.statistics.identities_simplified += 1;
                                 return Expression::Var(resolved_a);
@@ -1064,6 +1062,16 @@ fn outline_panic_patterns(
 ///   mstore(0, panic_selector), [let bindings]*, mstore(4, code), [let bindings]*
 ///
 /// Returns `(start_index, error_code)` if the pattern is found.
+///
+/// The simplifier emits `Statement::PanicRevert { code: u8 }` which encodes Solidity's canonical
+/// 36-byte panic revert with `code` zero-padded into the last byte. Only fold when the original
+/// mstored value actually fits in `u8` — i.e. ALL bits above the low byte are zero. Using
+/// `to_u64_digits().first()` here was unsound: it returned only the lowest u64 digit, so values
+/// like `2^124 + 0x42` were mis-classified as `code = 0x42` and the high bits (which the EVM emits
+/// literally into the revert data) were silently dropped.
+///
+/// Last-write-wins: the matched selector/code stores must be the final writes to offsets 0/4, or
+/// the revert payload differs from canonical Panic.
 fn find_panic_pattern_backwards(
     statements: &[Statement],
     constants: &BTreeMap<u32, BigUint>,
@@ -1082,15 +1090,6 @@ fn find_panic_pattern_backwards(
             Statement::MStore { offset, value, .. } => {
                 if is_const_value(offset.id, 4, constants) {
                     if let Some(code_val) = constants.get(&value.id.0) {
-                        // The simplifier emits `Statement::PanicRevert { code: u8 }` which
-                        // encodes Solidity's canonical 36-byte panic revert with `code`
-                        // zero-padded into the last byte. Only fold when the original
-                        // mstored value actually fits in `u8` — i.e. ALL bits above the
-                        // low byte are zero. Using `to_u64_digits().first()` here was
-                        // unsound: it returned only the lowest u64 digit, so values like
-                        // `2^124 + 0x42` were mis-classified as `code = 0x42` and the
-                        // high bits (which the EVM emits literally into the revert data)
-                        // were silently dropped.
                         if code_val.bits() <= 8 {
                             let code_u8 =
                                 code_val.to_u64_digits().first().copied().unwrap_or(0) as u8;
@@ -1116,8 +1115,6 @@ fn find_panic_pattern_backwards(
                 if is_const_value(offset.id, 0, constants) {
                     if let Some(sel_val) = constants.get(&value.id.0) {
                         let sel_hex = format!("{sel_val:064x}");
-                        // Last-write-wins: the matched selector/code stores must be the final
-                        // writes to offsets 0/4, or the revert payload differs from canonical Panic.
                         if sel_hex == revive_common::PANIC_UINT256_SELECTOR_WORD_HEX
                             && statements[j..]
                                 .iter()
@@ -1276,6 +1273,17 @@ fn outline_custom_error_patterns(
 /// for overlapping unaligned stores, and it would also skip earlier duplicates so `earliest_idx`
 /// would no longer cover them. Instead the exactly-once check rejects any window with a duplicate
 /// payload-offset store, so a recorded value is only ever used when its offset has a single store.
+///
+/// The revert range is `[0, 4 + 32 * num_args)`. The canonical Solidity custom-error shape writes
+/// at exactly the offsets `0`, `4`, `0x24`, … `4 + 32 * (num_args - 1)`. Any in-range mstore at a
+/// different offset corrupts the revert payload — we must NOT collapse the sequence into
+/// `Statement::CustomErrorRevert`. Out-of-range mstores (offset ≥ revert_length) are fine; they
+/// don't escape.
+///
+/// Last-write-wins: each payload offset (selector at 0, arguments at 4, 0x24, …) must be written
+/// exactly once in the collapsed window. A repeated store means a later write overwrites an earlier
+/// one — so the value the backward scan matched is not what the EVM revert emits — and the sequence
+/// must not be collapsed into a `CustomErrorRevert`.
 fn find_custom_error_pattern_backwards(
     statements: &[Statement],
     constants: &BTreeMap<u32, BigUint>,
@@ -1325,14 +1333,6 @@ fn find_custom_error_pattern_backwards(
     let selector = found_selector?;
     let arguments: Vec<Value> = arguments.into_iter().collect::<Option<Vec<_>>>()?;
 
-    // Soundness: see the analogous comment in
-    // `find_panic_pattern_backwards`. The revert range is
-    // `[0, 4 + 32 * num_args)`. The canonical Solidity custom-error
-    // shape writes at exactly the offsets `0`, `4`, `0x24`, …
-    // `4 + 32 * (num_args - 1)`. Any in-range mstore at a different
-    // offset corrupts the revert payload — we must NOT collapse the
-    // sequence into `Statement::CustomErrorRevert`. Out-of-range
-    // mstores (offset ≥ revert_length) are fine; they don't escape.
     let revert_length = 4 + (num_args as u64) * 0x20;
     let all_safe = statements[earliest_idx..].iter().all(|s| match s {
         Statement::MStore { offset, .. } => constants.get(&offset.id.0).is_some_and(|off_val| {
@@ -1355,10 +1355,6 @@ fn find_custom_error_pattern_backwards(
         return None;
     }
 
-    // Last-write-wins: each payload offset (selector at 0, arguments at 4, 0x24, …) must be written
-    // exactly once in the collapsed window. A repeated store means a later write overwrites an
-    // earlier one — so the value the backward scan matched is not what the EVM revert emits — and the
-    // sequence must not be collapsed into a `CustomErrorRevert`.
     let payload_offsets = std::iter::once(0u64).chain((0..num_args as u64).map(|i| 4 + i * 0x20));
     for payload_offset in payload_offsets {
         let writes = statements[earliest_idx..]
@@ -1565,6 +1561,10 @@ fn log2_exact(value: &BigUint) -> Option<u32> {
 
 /// Applies algebraic identity simplifications.
 /// Returns Some(simplified_expr) if an identity applies, None otherwise.
+///
+/// `div(x, x) → 1` and `sdiv(x, x) → 1` are unsound when `x == 0`. EVM defines division by zero to
+/// return 0, so `div(0, 0) = 0`, not 1. We can only fold the same-operand case when we statically
+/// know `x != 0`.
 fn simplify_binary(
     operation: BinaryOperation,
     lhs: &Value,
@@ -1607,9 +1607,6 @@ fn simplify_binary(
 
         BinaryOperation::Div | BinaryOperation::SDiv if r_is(&one) => Some(var_l()),
         BinaryOperation::Div | BinaryOperation::SDiv if l_is(&zero) => Some(literal(zero)),
-        // NOTE: `div(x, x) → 1` and `sdiv(x, x) → 1` are unsound when `x == 0`.
-        // EVM defines division by zero to return 0, so `div(0, 0) = 0`, not 1.
-        // We can only fold the same-operand case when we statically know `x != 0`.
         BinaryOperation::Div | BinaryOperation::SDiv
             if same && lhs_val.as_ref().is_some_and(|v| !v.is_zero()) =>
         {
@@ -1799,8 +1796,6 @@ fn eliminate_dead_code_in_stmts(
     if let Some(terminator_pos) = statements.iter().position(is_terminator) {
         let unreachable_count = statements.len() - terminator_pos - 1;
         if unreachable_count > 0 {
-            // Rescue values defined in the unreachable tail that an enclosing
-            // yield/return still references, then truncate (see the doc comment).
             let mut rescued: Vec<ValueId> = Vec::new();
             for statement in &statements[terminator_pos + 1..] {
                 statement.for_each_value_id_def(&mut |id| {
@@ -3158,6 +3153,13 @@ fn fuzzy_encode_expressionession(
     }
 }
 
+/// Encodes a statement into the fuzzy form used for function deduplication.
+///
+/// A `switch` case match value is encoded CONCRETELY (not as an abstracted literal position). A
+/// `switch` case label must be a compile-time constant, so it cannot be replaced by a parameter;
+/// abstracting it would let two functions that differ only in their case labels share a fuzzy form
+/// and be merged, after which `replace_literals_with_params` (which never substitutes a case value)
+/// leaves the canonical function's labels in place — a miscompile of the removed function's callers.
 fn fuzzy_encode_statement(
     canon: &mut Canonicalizer,
     statement: &Statement,
@@ -3230,14 +3232,6 @@ fn fuzzy_encode_statement(
             }
             buf.push(cases.len() as u8);
             for c in cases {
-                // Encode the case match value CONCRETELY (not as an abstracted
-                // literal position). A `switch` case label must be a compile-time
-                // constant, so it cannot be replaced by a parameter; abstracting
-                // it would let two functions that differ only in their case
-                // labels share a fuzzy form and be merged, after which
-                // `replace_literals_with_params` (which never substitutes a case
-                // value) leaves the canonical function's labels in place — a
-                // miscompile of the removed function's callers.
                 let case_bytes = c.value.to_bytes_le();
                 buf.extend_from_slice(&(case_bytes.len() as u16).to_le_bytes());
                 buf.extend_from_slice(&case_bytes);
@@ -3319,8 +3313,12 @@ fn fuzzy_encode_region(
 /// [`replace_literals_with_params`] must use the **identical** traversal so
 /// position indices align — keep them in sync if either changes.
 ///
-/// Counted positions: `Expression::Literal` value, `Expression::SLoad::static_slot`,
-/// `Statement::SStore::static_slot`, and each `Switch` case value.
+/// Counted positions: `Expression::Literal` value, `Expression::SLoad::static_slot`, and
+/// `Statement::SStore::static_slot`.
+///
+/// Switch case match values are NOT parameterizable literals (a case label must be a compile-time
+/// constant); they are encoded concretely in the fuzzy form, so they are not counted here. Keep
+/// this in sync with `replace_literals_with_params`.
 fn collect_literals_ordered(function: &crate::ir::Function) -> Vec<BigUint> {
     fn from_expr(expression: &Expression, lits: &mut Vec<BigUint>) {
         match expression {
@@ -3353,11 +3351,6 @@ fn collect_literals_ordered(function: &crate::ir::Function) -> Vec<BigUint> {
                     }
                 }
                 Statement::Switch { cases, default, .. } => {
-                    // Switch case match values are NOT parameterizable literals
-                    // (a case label must be a compile-time constant); they are
-                    // encoded concretely in the fuzzy form, so they are not
-                    // counted here. Keep this in sync with
-                    // `replace_literals_with_params`.
                     for c in cases {
                         walk(&c.body.statements, lits);
                     }
@@ -3390,6 +3383,9 @@ fn collect_literals_ordered(function: &crate::ir::Function) -> Vec<BigUint> {
 /// Replaces literal values at differing positions with `Var` references to new
 /// parameters. Walk order **must** match [`collect_literals_ordered`] so the
 /// position indices align.
+///
+/// Switch case match values are not parameterizable and are not counted by
+/// [`collect_literals_ordered`], so the position counter is not advanced for them here.
 fn replace_literals_with_params(block: &mut Block, position_parameter_ids: &[(usize, ValueId)]) {
     fn from_expr(
         expression: &mut Expression,
@@ -3445,9 +3441,6 @@ fn replace_literals_with_params(block: &mut Block, position_parameter_ids: &[(us
                     }
                 }
                 Statement::Switch { cases, default, .. } => {
-                    // Switch case match values are not parameterizable and are
-                    // not counted by `collect_literals_ordered`, so do not
-                    // advance the counter for them here.
                     for c in cases {
                         walk(&mut c.body.statements, positions, counter);
                     }
@@ -4086,7 +4079,7 @@ mod tests {
         assert_eq!(result, Some(BigUint::zero()));
     }
 
-    /// N14: the panic-pattern matcher must honor last-write-wins — a later store that overwrites
+    /// The panic-pattern matcher must honor last-write-wins — a later store that overwrites
     /// the matched selector (offset 0) or code (offset 4) means the revert payload is not the
     /// canonical `Panic`, so the window must not be collapsed.
     #[test]
@@ -4099,12 +4092,12 @@ mod tests {
         )
         .unwrap();
         let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
-        constants.insert(0, BigUint::zero()); // offset 0
-        constants.insert(1, panic_word); // panic selector
-        constants.insert(2, BigUint::from(4u64)); // offset 4
-        constants.insert(3, BigUint::from(0x11u64)); // code (fits u8)
-        constants.insert(4, BigUint::from(0xdeadbeefu64)); // overwriting selector value
-        constants.insert(5, BigUint::from(0x100u64)); // wide code (> u8)
+        constants.insert(0, BigUint::zero());
+        constants.insert(1, panic_word);
+        constants.insert(2, BigUint::from(4u64));
+        constants.insert(3, BigUint::from(0x11u64));
+        constants.insert(4, BigUint::from(0xdeadbeefu64));
+        constants.insert(5, BigUint::from(0x100u64));
 
         let mstore = |offset: u32, value: u32| Statement::MStore {
             offset: Value::int(ValueId(offset)),
@@ -4112,19 +4105,16 @@ mod tests {
             region: MemoryRegion::Scratch,
         };
 
-        // Canonical `mstore(0, sel); mstore(4, code)` is recognized.
         assert_eq!(
             find_panic_pattern_backwards(&[mstore(0, 1), mstore(2, 3)], &constants),
             Some((0, 0x11)),
         );
 
-        // A later `mstore(0, 0xdeadbeef)` overwrites the selector.
         assert_eq!(
             find_panic_pattern_backwards(&[mstore(0, 1), mstore(2, 3), mstore(0, 4)], &constants),
             None,
         );
 
-        // A later (wide) `mstore(4, 0x100)` overwrites the code.
         assert_eq!(
             find_panic_pattern_backwards(&[mstore(0, 1), mstore(2, 3), mstore(2, 5)], &constants),
             None,

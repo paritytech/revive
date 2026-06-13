@@ -359,7 +359,6 @@ impl TypeInference {
 
         self.apply_backward_constraints();
 
-        // Force the full-width operands back to I256 (see this method's doc comment).
         for id in &self.full_width_operands {
             let mut constraint = self.constraints.get(id).copied().unwrap_or_default();
             constraint.max_width = BitWidth::I256;
@@ -751,7 +750,8 @@ impl TypeInference {
     /// `leave`, which carries its own snapshot of the return variables. Narrowing must
     /// account for all of them — a `leave` can return a full-width value even when the
     /// fall-through value is narrow — so the loop below collects every return path's value
-    /// id per position and narrows to the widest min_width across all of them.
+    /// id per position and narrows to the widest min_width across all of them. A signed return
+    /// path keeps the type full width — a narrow magnitude can still be a full-width negative value.
     ///
     /// Returns true if any return type was narrowed.
     pub fn narrow_function_returns(&self, object: &mut Object) -> bool {
@@ -785,8 +785,6 @@ impl TypeInference {
                     continue;
                 }
 
-                // Any signed return path forces full width; the widest min_width across
-                // all return paths bounds the narrowed type.
                 if ids.iter().any(|id| self.get(*id).is_signed) {
                     continue;
                 }
@@ -1059,6 +1057,36 @@ impl TypeInference {
         }
     }
 
+    /// Records `value` as an i64 memory offset or length. A checked truncation at the use
+    /// site traps on an out-of-range value, matching EVM's memory-expansion out-of-gas.
+    fn record_memory_offset_use(&mut self, value: &Value) {
+        self.record_use(value.id, UseContext::MemoryOffset);
+        self.narrow_from_use(value.id, BitWidth::I64);
+    }
+
+    /// Records the operand uses of a zero-filling copy (`calldatacopy`, `codecopy`).
+    ///
+    /// Destination and length narrow to i64, but the source offset must stay full width: EVM
+    /// zero-fills bytes beyond the source, so a `>= 2^64` offset must reach the copy intrinsic
+    /// intact (it saturates and the host zero-fills). Narrowing it would truncate the offset at
+    /// its definition / the call boundary and read the wrong source (or trap) instead of
+    /// zero-filling.
+    fn record_zero_filling_copy_uses(&mut self, dest: &Value, offset: &Value, length: &Value) {
+        self.record_memory_offset_use(dest);
+        self.record_memory_offset_use(length);
+        self.record_use(offset.id, UseContext::MemoryOffset);
+        self.full_width_operands.insert(offset.id.0);
+    }
+
+    /// Records the operand uses of a copy that reverts on an out-of-range source
+    /// (`returndatacopy`; `extcodecopy` is unsupported). All three operands narrow to i64 — the
+    /// use-site checked truncation traps on an out-of-range source, matching EVM's revert.
+    fn record_reverting_copy_uses(&mut self, dest: &Value, offset: &Value, length: &Value) {
+        self.record_memory_offset_use(dest);
+        self.record_memory_offset_use(offset);
+        self.record_memory_offset_use(length);
+    }
+
     /// Collects uses from a single statement (no recursion — [`Self::collect_uses_region`]
     /// walks nested regions so the conditional context is tracked).
     fn collect_uses_statement(&mut self, statement: &Statement) {
@@ -1164,18 +1192,7 @@ impl TypeInference {
                 offset,
                 length,
             } => {
-                // Destination (heap pointer) and length (byte count) narrow to i64.
-                self.record_use(dest.id, UseContext::MemoryOffset);
-                self.narrow_from_use(dest.id, BitWidth::I64);
-                self.record_use(length.id, UseContext::MemoryOffset);
-                self.narrow_from_use(length.id, BitWidth::I64);
-                // The SOURCE offset must stay full width: EVM zero-fills bytes beyond
-                // the calldata/code source, so a >= 2^64 offset must reach the copy
-                // intrinsic intact (it saturates and the host zero-fills). Narrowing it
-                // would truncate the offset at its definition / the call boundary and
-                // read the wrong source (or trap) instead of zero-filling.
-                self.record_use(offset.id, UseContext::MemoryOffset);
-                self.full_width_operands.insert(offset.id.0);
+                self.record_zero_filling_copy_uses(dest, offset, length);
             }
 
             Statement::ExtCodeCopy {
@@ -1189,15 +1206,7 @@ impl TypeInference {
                 offset,
                 length,
             } => {
-                // `returndatacopy` reverts on an out-of-range source (and `extcodecopy`
-                // is unsupported), so narrowing the source is safe: the use-site checked
-                // truncation traps, matching EVM's revert.
-                self.record_use(dest.id, UseContext::MemoryOffset);
-                self.narrow_from_use(dest.id, BitWidth::I64);
-                self.record_use(offset.id, UseContext::MemoryOffset);
-                self.narrow_from_use(offset.id, BitWidth::I64);
-                self.record_use(length.id, UseContext::MemoryOffset);
-                self.narrow_from_use(length.id, BitWidth::I64);
+                self.record_reverting_copy_uses(dest, offset, length);
             }
 
             Statement::DataCopy {
@@ -1300,10 +1309,6 @@ impl TypeInference {
                 | BinaryOperation::And => {}
                 BinaryOperation::Shl => {
                     self.record_use(lhs.id, UseContext::Arithmetic);
-                    // The shift amount must keep full width: EVM defines a shift >= 256
-                    // as 0, but if `lhs` is also narrowed (e.g. it doubles as a memory
-                    // offset) a >= 256 amount is truncated/​trapped at the boundary,
-                    // diverging from EVM.
                     self.full_width_operands.insert(lhs.id.0);
                 }
                 BinaryOperation::Shr
@@ -1312,10 +1317,6 @@ impl TypeInference {
                 | BinaryOperation::SignExtend => {
                     self.record_use(lhs.id, UseContext::Arithmetic);
                     self.record_use(rhs.id, UseContext::Arithmetic);
-                    // The amount (shr/sar) / byte index / sign-extend byte position must
-                    // keep full width: EVM handles out-of-range values specially (shift
-                    // >= 256 -> 0/sign-fill; byte index >= 32 -> 0; signextend byte >= 31
-                    // -> unchanged), so narrowing+truncating `lhs` diverges from EVM.
                     self.full_width_operands.insert(lhs.id.0);
                 }
                 _ => {
@@ -1643,6 +1644,22 @@ impl TypeInference {
     }
 
     /// Infers the minimum bit width for an expression result.
+    ///
+    /// The soundness-critical binary-operation width rules:
+    /// - `Div`/`Mod`/`SMod` are bounded by the dividend — the result magnitude
+    ///   never exceeds `lhs`. `smod` takes the dividend's sign, so a non-negative
+    ///   narrow dividend yields a non-negative result `<= dividend`.
+    /// - `SDiv` is *not* bounded by the dividend: a small non-negative dividend
+    ///   with a negative divisor yields a negative (full-width) quotient. A
+    ///   negative divisor already has `rhs_width == I256`, so `max(lhs, rhs)`
+    ///   stays full width; when both operands are narrow and non-negative the
+    ///   result is `<= dividend`.
+    /// - `Shr` by a known constant shifts in zero high bits, bounding the result
+    ///   to `256 - shift` bits; a non-constant shift falls back to `rhs` width.
+    /// - `Sar` sign-extends, so it is *not* bounded by `256 - shift`: a negative
+    ///   value keeps its high bits set. It is bounded by the operand's own width
+    ///   (`rhs`) — a non-negative operand has `rhs_width < 256`, a negative one
+    ///   has `rhs_width == I256`.
     fn infer_expression_width(&mut self, expression: &Expression) -> BitWidth {
         match expression {
             Expression::Literal { value, .. } => BitWidth::from_max_value(value),
@@ -1671,19 +1688,9 @@ impl TypeInference {
                         self.widen(rhs.id, capped_operand_width);
                         double_width(lhs_width.max(rhs_width))
                     }
-                    // Unsigned div/mod and signed mod are bounded by the
-                    // dividend: the result magnitude never exceeds `lhs`. `smod`
-                    // takes the sign of the dividend, so a non-negative (narrow)
-                    // dividend yields a non-negative result <= dividend.
                     BinaryOperation::Div | BinaryOperation::Mod | BinaryOperation::SMod => {
                         lhs_width
                     }
-                    // Signed division is NOT bounded by the dividend: a small
-                    // non-negative dividend with a negative divisor yields a
-                    // negative (full-width) quotient. A negative divisor has
-                    // `rhs_width == I256`, so `max` correctly stays full-width;
-                    // when both operands are narrow and non-negative the result
-                    // is <= dividend < 2^max.
                     BinaryOperation::SDiv => lhs_width.max(rhs_width),
                     BinaryOperation::Exp => BitWidth::I256,
 
@@ -1695,8 +1702,6 @@ impl TypeInference {
                     }
 
                     BinaryOperation::Shl => BitWidth::I256,
-                    // Logical right shift: the shifted-in high bits are zero, so
-                    // a constant shift bounds the result to `256 - shift` bits.
                     BinaryOperation::Shr => {
                         if let Some(&shift) = self.known_constants.get(&lhs.id.0) {
                             if shift >= 256 {
@@ -1709,11 +1714,6 @@ impl TypeInference {
                             rhs_width
                         }
                     }
-                    // Arithmetic right shift sign-extends: shifting a *negative*
-                    // value keeps the high bits set, so the result is NOT bounded
-                    // by `256 - shift`. It is bounded by the operand's own width
-                    // (`rhs`): a non-negative operand (rhs_width < 256) shifts
-                    // down, a negative operand has rhs_width == I256.
                     BinaryOperation::Sar => rhs_width,
 
                     BinaryOperation::Lt
@@ -1980,8 +1980,8 @@ mod tests {
         assert!(joined.is_signed);
     }
 
-    /// N3 (#issuecomment-450): `keccak256`/mapping hash-input operands must demand
-    /// `StorageAccess`, not `FunctionArg` (which resolves through `fn_arg_demand`).
+    /// `keccak256`/mapping hash-input operands must demand `StorageAccess`, not
+    /// `FunctionArg` (which resolves through `fn_arg_demand`).
     #[test]
     fn hash_input_operands_demand_storage_access_not_function_arg() {
         let word0 = crate::ir::Value::new(ValueId(0), Type::Int(BitWidth::I256));
@@ -2002,8 +2002,8 @@ mod tests {
         }
     }
 
-    /// N3 (#issuecomment-450): a key that derives a storage slot via keccak and is also passed
-    /// to a narrowed parameter must keep full width — narrowing it would hash a truncated key.
+    /// A key that derives a storage slot via keccak and is also passed to a narrowed parameter
+    /// must keep full width — narrowing it would hash a truncated key.
     #[test]
     fn keccak_key_also_passed_to_narrowed_param_keeps_full_width() {
         let mut inference = TypeInference::new();

@@ -120,6 +120,10 @@ impl Validator {
         }
     }
 
+    /// Subobjects compile to separate units with their own SSA ID and function-ID
+    /// namespaces — they share no values or callables with the parent. Each is validated
+    /// with a fresh validator so the parent's defined IDs don't leak in and produce
+    /// spurious MultipleDef errors when the subobject reuses the same value numbers.
     fn validate_object(&mut self, object: &Object) {
         for id in object.functions.keys() {
             self.known_functions.insert(id.0);
@@ -131,10 +135,6 @@ impl Validator {
             self.validate_function(function);
         }
 
-        // Subobjects compile to separate units with their own SSA ID and function-ID
-        // namespaces — they share no values or callables with the parent. Validate each
-        // with a fresh validator so the parent's defined IDs don't leak in and produce
-        // spurious MultipleDef errors when the subobject reuses the same value numbers.
         for subobject in &object.subobjects {
             if let Err(sub_errors) = validate_object(subobject) {
                 self.errors.extend(sub_errors);
@@ -196,6 +196,16 @@ impl Validator {
         }
     }
 
+    /// Scope-isolation and yield-count checks mirror the codegen's control-flow shape:
+    ///
+    /// - For a `Statement::Switch` with no explicit default, the unmatched-scrutinee path
+    ///   implicitly yields `inputs` unchanged (mirroring a `Statement::If` without an else
+    ///   region), so the outputs must line up with the inputs.
+    /// - A standalone `Statement::Block` is straight-line code in the codegen (no LLVM-level
+    ///   scoping, no phi merge — `generate_region` just lowers the statements). SSA values
+    ///   defined inside flow through to the surrounding scope, matching
+    ///   `Statement::For`/`If`/`Switch` which DO scope-isolate because their regions form
+    ///   control-flow splits.
     fn validate_statement(&mut self, statement: &Statement, context: &str) {
         match statement {
             Statement::Let { bindings, value } => {
@@ -333,9 +343,6 @@ impl Validator {
                     }
                     self.exit_scope();
                 } else if outputs.len() != inputs.len() {
-                    // With no explicit default, the unmatched-scrutinee path implicitly
-                    // yields `inputs` unchanged (mirroring a `Statement::If` without an
-                    // else region), so the outputs must line up with the inputs.
                     self.error(ValidationError::YieldCountMismatch {
                         expected: outputs.len(),
                         actual: inputs.len(),
@@ -568,11 +575,6 @@ impl Validator {
             }
 
             Statement::Block(region) => {
-                // A standalone `Statement::Block` is straight-line code in the codegen
-                // (no LLVM-level scoping, no phi merge — `generate_region` just lowers
-                // the statements). SSA values defined inside flow through to the
-                // surrounding scope, matching `Statement::For`/`If`/`Switch` which DO
-                // scope-isolate because their regions form control-flow splits.
                 self.validate_region(region, context);
             }
 

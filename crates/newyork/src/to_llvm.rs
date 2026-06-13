@@ -16,7 +16,7 @@ use revive_llvm_context::{
 use crate::heap_opt::HeapOptResults;
 use crate::ir::{
     BinaryOperation, BitWidth, Block, CallKind, CreateKind, Expression, Function, FunctionId,
-    MemoryRegion, Object, Region, Statement, Type, UnaryOperation, Value, ValueId,
+    MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value, ValueId,
 };
 use crate::type_inference::TypeInference;
 
@@ -596,6 +596,31 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(extended.as_basic_value_enum())
     }
 
+    /// Applies the free-memory-pointer range proof to a loaded value.
+    ///
+    /// The post-MLoad range proof asserts `FMP < heap_size`. The codesize win
+    /// from dropping the byte-order gate on this proof relies on the assertion
+    /// holding when Solidity's allocator updates the FMP via sbrk-style
+    /// `mstore(0x40, add(mload(0x40), bounded))` or a literal initial value.
+    /// Hand-written Yul / inline asm that writes a non-bounded value to 0x40
+    /// violates the assumption; `fmp_could_be_unbounded` is set by the heap
+    /// analysis when any FMP store uses a value whose source isn't a
+    /// recognized allocator pattern, so the proof stays sound and OZ contracts
+    /// keep their codesize wins.
+    fn apply_free_pointer_range_proof(
+        context: &PolkaVMContext<'ctx>,
+        loaded: BasicValueEnum<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>> {
+        let heap_size = context
+            .heap_size()
+            .get_zero_extended_constant()
+            .unwrap_or(131072);
+        let max_fmp = heap_size.saturating_sub(1).max(1);
+        let raw_bits = 64 - max_fmp.leading_zeros();
+        let range_bits = raw_bits.clamp(8, 31);
+        Self::apply_range_proof(context, loaded, range_bits, "fmp")
+    }
+
     /// Determines native memory mode for a specific memory access.
     ///
     /// Returns one of four modes:
@@ -660,6 +685,67 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 .builder()
                 .build_int_truncate(offset, xlen_type, name)
                 .map_err(|e| CodegenError::Llvm(e.to_string()))
+        }
+    }
+
+    /// Advances the `msize` watermark to cover a word-sized access at `offset`.
+    ///
+    /// EVM grows active memory (and thus `msize`) on reads as well as writes.
+    /// The unchecked native/byteswap paths bypass sbrk, so the watermark is
+    /// advanced explicitly to cover `[offset, offset + WORD)`. Without this,
+    /// `mload(p)`/`mstore(p, _)` followed by `msize()` under-reports relative
+    /// to EVM.
+    ///
+    /// EVM `msize` is the highest accessed byte rounded *up* to a full word; a
+    /// word-sized access touches `[off, off + WORD)`, so `off + WORD` is
+    /// rounded up to the next word boundary (this matters for unaligned
+    /// offsets). A dynamic (non-constant) offset is treated as the heap base.
+    fn advance_msize_watermark(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        offset_val: IntValue<'ctx>,
+    ) -> Result<()> {
+        if self.has_msize {
+            let static_off = Self::try_extract_const_u64(offset_val).unwrap_or(DYNAMIC_HEAP_BASE);
+            let word = revive_common::BYTE_LENGTH_WORD as u64;
+            let rounded = static_off.saturating_add(word).div_ceil(word) * word;
+            let min_size = context.xlen_type().const_int(rounded, false);
+            context
+                .ensure_heap_size(min_size)
+                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
+        }
+        Ok(())
+    }
+
+    /// Zero-extends a switch scrutinee so its type can hold every case label.
+    ///
+    /// Case labels are materialized at the scrutinee's type via
+    /// `const_int_arbitrary_precision`, which truncates a label wider than that
+    /// type. If type inference narrowed the scrutinee (e.g. to i64 via an
+    /// `and(x, 0xff..ff)` mask) below the width of some case label, two labels
+    /// congruent modulo `2^(scrut width)` would collapse — producing a
+    /// duplicate LLVM switch case (verifier error) or matching a value EVM
+    /// never would. Widening before lowering is value-preserving: the
+    /// scrutinee was only narrowed because it provably fits its current width,
+    /// so the high bits are zero.
+    fn widen_scrutinee_for_case_labels(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        scrut_val: IntValue<'ctx>,
+        cases: &[SwitchCase],
+    ) -> Result<IntValue<'ctx>> {
+        let max_label_bits = cases
+            .iter()
+            .map(|case| case.value.bits() as u32)
+            .max()
+            .unwrap_or(0);
+        if max_label_bits > scrut_val.get_type().get_bit_width() {
+            context
+                .builder()
+                .build_int_z_extend(scrut_val, context.word_type(), "switch_widen")
+                .map_err(|e| CodegenError::Llvm(e.to_string()))
+        } else {
+            Ok(scrut_val)
         }
     }
 
@@ -1132,6 +1218,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// analysis proves the argument fits in `target_bits`. Used by the Call
     /// codegen to decide between a bare truncate (when provably narrow) and a
     /// checked truncate (when the high bits might be non-zero).
+    ///
+    /// `narrow_function_params` may narrow a parameter to I64/I32 based purely
+    /// on use-site demand (e.g. the callee uses the value only as an mload
+    /// offset). A bare `trunc i256 → iN` would silently drop bits and bypass
+    /// the use-site `safe_truncate_int_to_xlen`, so when this check cannot
+    /// prove the argument fits the caller emits a checked truncate that traps
+    /// on overflow.
     fn argument_provably_fits(
         &self,
         integer_value: IntValue<'ctx>,
@@ -2028,6 +2121,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Combines store_bswap_checked + exit_checked for single-word returns:
     /// bounds-checks offset, bswap-stores value at heap+offset, then seal_returns 32 bytes.
     /// Eliminates one function call per site and one redundant bounds check.
+    ///
+    /// `store_bswap_checked` already performs the offset bounds check, so the
+    /// wrapper does not duplicate it. After that call returns the offset is
+    /// known to be in range, so the subsequent GEP can be unchecked.
     fn get_or_create_return_word_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -2067,9 +2164,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context.set_basic_block(entry_block);
         let offset_param = function.get_nth_param(0).unwrap().into_int_value();
         let value_param = function.get_nth_param(1).unwrap().into_int_value();
-        // store_bswap_checked already performs the offset bounds check; no need
-        // to duplicate it in this wrapper. After the call returns we know the
-        // offset is in range and can use the unchecked GEP.
         let store_fn = self.get_or_create_store_bswap_checked_fn(context)?;
         context
             .builder()
@@ -3597,11 +3691,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// every site, costing more bytes than the saved call overhead. For
     /// other functions, we let LLVM decide using its own heuristics (it
     /// already has MinSize/OptimizeForSize from `set_default_attributes`).
+    ///
+    /// Inline hints are a middle-end code-size heuristic; they only apply when
+    /// the middle-end optimizer runs. With the middle end disabled (library /
+    /// post-link and `-O0` builds) the backend runs `default<O0>`, so inlining
+    /// is left to its defaults rather than pinning `AlwaysInline`/`NoInline`.
     fn set_inline_attributes(&self, function: &Function, context: &PolkaVMContext<'ctx>) {
-        // Inline hints are a middle-end code-size heuristic; they only apply when the
-        // middle-end optimizer runs. With the middle end disabled (library/post-link and
-        // `-O0` builds) the backend runs `default<O0>`, so we leave inlining to its defaults
-        // rather than pinning `AlwaysInline`/`NoInline` here.
         if !context.optimizer_settings().is_middle_end_enabled() {
             return;
         }
@@ -4190,19 +4285,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             .map_err(|e| CodegenError::Llvm(e.to_string()))?
                             .set_alignment(revive_common::BYTE_LENGTH_BYTE as u32)
                             .expect("Alignment is valid");
-                        if self.has_msize {
-                            let static_off = Self::try_extract_const_u64(offset_val)
-                                .unwrap_or(DYNAMIC_HEAP_BASE);
-                            // EVM `msize` rounds the highest accessed byte up to a full
-                            // word; a full-word store touches `[off, off+32)`, so round
-                            // `off+32` up to the next word (matters for unaligned offsets).
-                            let word = revive_common::BYTE_LENGTH_WORD as u64;
-                            let rounded = static_off.saturating_add(word).div_ceil(word) * word;
-                            let min_size = context.xlen_type().const_int(rounded, false);
-                            context
-                                .ensure_heap_size(min_size)
-                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        }
+                        self.advance_msize_watermark(context, offset_val)?;
                     }
                     NativeMemoryMode::InlineByteSwap => {
                         let offset_xlen = self.truncate_offset_to_xlen(
@@ -4230,19 +4313,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                                 )
                                 .map_err(|e| CodegenError::Llvm(e.to_string()))?;
                         }
-                        if self.has_msize {
-                            let static_off = Self::try_extract_const_u64(offset_val)
-                                .unwrap_or(DYNAMIC_HEAP_BASE);
-                            // EVM `msize` rounds the highest accessed byte up to a full
-                            // word; a full-word store touches `[off, off+32)`, so round
-                            // `off+32` up to the next word (matters for unaligned offsets).
-                            let word = revive_common::BYTE_LENGTH_WORD as u64;
-                            let rounded = static_off.saturating_add(word).div_ceil(word) * word;
-                            let min_size = context.xlen_type().const_int(rounded, false);
-                            context
-                                .ensure_heap_size(min_size)
-                                .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                        }
+                        self.advance_msize_watermark(context, offset_val)?;
                     }
                     NativeMemoryMode::ByteSwap => {
                         let offset_val = self.narrow_offset_for_pointer(
@@ -4618,26 +4689,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     }
                 }
 
-                // Soundness: case labels are materialized at the scrutinee's type via
-                // `const_int_arbitrary_precision`, which truncates a label wider than
-                // that type. If type inference narrowed the scrutinee (e.g. to i64 via an
-                // `and(x, 0xff..ff)` mask) below the width of some case label, two labels
-                // congruent modulo 2^(scrut width) would collapse — producing a duplicate
-                // LLVM switch case (verifier error) or matching a value EVM never would.
-                // Zero-extend the scrutinee to hold every label before lowering. This is
-                // value-preserving: the scrutinee was only narrowed because it provably
-                // fits its current width, so the high bits are zero.
-                let max_label_bits = cases
-                    .iter()
-                    .map(|case| case.value.bits() as u32)
-                    .max()
-                    .unwrap_or(0);
-                if max_label_bits > scrut_val.get_type().get_bit_width() {
-                    scrut_val = context
-                        .builder()
-                        .build_int_z_extend(scrut_val, context.word_type(), "switch_widen")
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                }
+                scrut_val = self.widen_scrutinee_for_case_labels(context, scrut_val, cases)?;
 
                 let scrut_type = scrut_val.get_type();
                 let join_block = context.append_basic_block("switch_join");
@@ -5866,16 +5918,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         self.generate_binop(*operation, lhs_cmp, rhs_cmp, context)
                     }
                     BinaryOperation::Slt | BinaryOperation::Sgt => {
-                        // Signed comparisons must run at full width. A narrowed
-                        // operand is provably non-negative (newyork never narrows
-                        // signed values), so a set top bit at the narrow width is
-                        // not a sign bit — comparing at that width misreads it as
-                        // negative (e.g. 1 in i1 is -1, 0xC8 in i8 is -56), which
-                        // diverges from EVM's 256-bit signed comparison. Zero-extend
-                        // both operands to the full word before comparing.
-                        let lhs_val = self.ensure_word_type(context, lhs_val, "scmp_lhs")?;
-                        let rhs_val = self.ensure_word_type(context, rhs_val, "scmp_rhs")?;
-                        self.generate_binop(*operation, lhs_val, rhs_val, context)
+                        self.generate_signed_comparison(*operation, lhs_val, rhs_val, context)
                     }
 
                     BinaryOperation::And | BinaryOperation::Or | BinaryOperation::Xor => {
@@ -6251,24 +6294,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
             Expression::MLoad { offset, region } => {
                 let offset_val = self.translate_value(offset)?.into_int_value();
-                // EVM grows active memory (and thus `msize`) on reads as well as
-                // writes. The unchecked native/byteswap load paths bypass sbrk, so
-                // advance the msize watermark explicitly to cover `[offset, offset+32)`,
-                // mirroring `MStore`. Without this, `mload(p)` followed by `msize()`
-                // under-reports relative to EVM.
-                if self.has_msize {
-                    let static_off =
-                        Self::try_extract_const_u64(offset_val).unwrap_or(DYNAMIC_HEAP_BASE);
-                    // EVM `msize` is the highest accessed byte rounded *up* to a full
-                    // word. The read touches `[off, off + WORD)`, so round `off + WORD`
-                    // up to the next word boundary (matters for unaligned offsets).
-                    let word = revive_common::BYTE_LENGTH_WORD as u64;
-                    let rounded = static_off.saturating_add(word).div_ceil(word) * word;
-                    let min_size = context.xlen_type().const_int(rounded, false);
-                    context
-                        .ensure_heap_size(min_size)
-                        .map_err(|e| CodegenError::Llvm(e.to_string()))?;
-                }
+                self.advance_msize_watermark(context, offset_val)?;
                 let is_free_pointer = matches!(region, MemoryRegion::FreePointerSlot)
                     || Self::is_free_pointer_load(offset_val);
 
@@ -6335,26 +6361,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     }
                 };
                 if is_free_pointer && !self.heap_opt.fmp_could_be_unbounded() {
-                    // Soundness gate: the post-MLoad range proof asserts
-                    // `FMP < heap_size`. Iter36's win (-31k bytes on OZ)
-                    // relies on this holding when Solidity's allocator
-                    // updates the FMP via sbrk-style `mstore(0x40,
-                    // add(mload(0x40), bounded))` or a literal initial
-                    // value. Hand-written Yul / inline asm that writes
-                    // a non-bounded value to 0x40 violates the
-                    // assumption. `fmp_could_be_unbounded` is set by
-                    // `heap_opt::analyze_statement` when any FMP store
-                    // uses a value whose source isn't a recognized
-                    // allocator pattern, so the proof stays sound and
-                    // OZ contracts keep their codesize wins.
-                    let heap_size = context
-                        .heap_size()
-                        .get_zero_extended_constant()
-                        .unwrap_or(131072);
-                    let max_fmp = heap_size.saturating_sub(1).max(1);
-                    let raw_bits = 64 - max_fmp.leading_zeros();
-                    let range_bits = raw_bits.clamp(8, 31);
-                    Self::apply_range_proof(context, loaded, range_bits, "fmp")
+                    Self::apply_free_pointer_range_proof(context, loaded)
                 } else {
                     Ok(loaded)
                 }
@@ -6416,14 +6423,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             let argument_bits = integer_value.get_type().get_bit_width();
                             let target_bits = target_type.get_bit_width();
                             if argument_bits > target_bits {
-                                // Soundness: `narrow_function_params` may narrow a
-                                // parameter to I64/I32 based purely on use-site
-                                // demand (e.g. the callee uses the value only as an
-                                // mload offset). A bare `trunc i256 → iN` would
-                                // silently drop bits and bypass the use-site
-                                // `safe_truncate_int_to_xlen`. If forward type
-                                // inference can't prove the argument fits, emit a
-                                // checked truncate that traps on overflow.
                                 if self.argument_provably_fits(
                                     integer_value,
                                     *argument,
@@ -6749,6 +6748,26 @@ impl<'ctx> LlvmCodegen<'ctx> {
         phi.add_incoming(&[(&zero, current_block), (&result, non_zero_exit)]);
 
         Ok(phi.as_basic_value().as_basic_value_enum())
+    }
+
+    /// Generates a signed comparison (`slt`/`sgt`) at full word width.
+    ///
+    /// Signed comparisons must run at full width. A narrowed operand is
+    /// provably non-negative (newyork never narrows signed values), so a set
+    /// top bit at the narrow width is not a sign bit — comparing at that width
+    /// misreads it as negative (e.g. 1 in i1 is -1, 0xC8 in i8 is -56), which
+    /// diverges from EVM's 256-bit signed comparison. Both operands are
+    /// zero-extended to the full word before comparing.
+    fn generate_signed_comparison(
+        &mut self,
+        operation: BinaryOperation,
+        lhs_val: IntValue<'ctx>,
+        rhs_val: IntValue<'ctx>,
+        context: &mut PolkaVMContext<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>> {
+        let lhs_val = self.ensure_word_type(context, lhs_val, "scmp_lhs")?;
+        let rhs_val = self.ensure_word_type(context, rhs_val, "scmp_rhs")?;
+        self.generate_binop(operation, lhs_val, rhs_val, context)
     }
 
     /// Generates a binary operation.
@@ -7097,14 +7116,14 @@ mod then_region_aborts_tests {
         ));
     }
 
+    /// A call to a function NOT proven noreturn does not abort: a failure
+    /// handler that returns leaves the validator argument unconstrained, so no
+    /// assume may be emitted. The same call to a noreturn function does abort.
     #[test]
     fn trailing_call_aborts_only_when_noreturn() {
-        // A call to a function NOT proven noreturn does not abort: a failure handler that returns
-        // leaves the validator argument unconstrained, so no assume may be emitted.
         let none: BTreeSet<u32> = BTreeSet::new();
         assert!(!then_region_aborts(&region(vec![call(7)]), &none));
 
-        // The same call to a noreturn function does abort.
         let noreturn: BTreeSet<u32> = [7u32].into_iter().collect();
         assert!(then_region_aborts(&region(vec![call(7)]), &noreturn));
     }

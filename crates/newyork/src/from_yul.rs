@@ -397,6 +397,11 @@ impl YulTranslator {
     /// The `DataSize`, `DataOffset`, `LoadImmutable`, `SetImmutable`, and `LinkerSymbol` builtins
     /// receive a string literal argument that cannot be evaluated as an expression, so they are
     /// extracted before the generic argument-translation loop runs.
+    ///
+    /// For `SetImmutable`, the memory-offset argument (index 0) is not represented in the IR
+    /// `SetImmutable` — immutables are keyed by name — but Yul still evaluates it for its side
+    /// effects. It is evaluated after the value (per the argument order above) and its result is
+    /// discarded.
     fn translate_function_call(
         &mut self,
         call: &FunctionCall,
@@ -430,10 +435,6 @@ impl YulTranslator {
                     }
                 };
 
-                // The memory-offset argument (index 0) is not represented in the IR
-                // `SetImmutable` — immutables are keyed by name — but Yul still evaluates it for
-                // its side effects. Evaluate it after the value (per the argument order above)
-                // and discard the result.
                 let (offset_statements, offset_expression) =
                     self.translate_expression(&call.arguments[0])?;
                 statements.extend(offset_statements);
@@ -1181,6 +1182,11 @@ impl YulTranslator {
     /// are included so their post-loop value is still written back. Nested function bodies
     /// are not scanned: their assignments target their own scope, never this loop's
     /// variables.
+    ///
+    /// The initializer block's scope — functions included — spans the condition, body, and
+    /// post in Yul. The body and post get their own (nested) frames via `translate_region`;
+    /// the initializer frame holds the initializer's own functions until the whole loop is
+    /// translated.
     fn translate_for_loop(
         &mut self,
         for_loop: &ForLoop,
@@ -1190,9 +1196,6 @@ impl YulTranslator {
         let enclosing_scope = self.ssa.current_scope().clone();
 
         self.ssa.enter_scope();
-        // The initializer block's scope — functions included — spans the condition, body, and
-        // post in Yul. The body and post get their own (nested) frames via `translate_region`;
-        // this frame holds the initializer's own functions until the whole loop is translated.
         self.enter_function_scope(&for_loop.initializer)?;
         for statement in &for_loop.initializer.statements {
             let initializer_statements = self.translate_statement(statement)?;
@@ -1288,8 +1291,6 @@ impl YulTranslator {
         self.exit_function_scope();
 
         for (name, value) in output_values {
-            // Only write back variables that exist in the enclosing scope;
-            // init-block-local variables are out of scope after the loop.
             if enclosing_scope.contains_key(&name) {
                 self.ssa.assign(&name, value);
             }
@@ -1655,7 +1656,6 @@ object "Test" {
             "the two disjoint `f` definitions must not collapse into one FunctionId"
         );
 
-        // The two call sites must resolve to different functions.
         let mut called: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
         collect_called_function_ids(&object.code.statements, &mut called);
         assert_eq!(
@@ -1667,6 +1667,9 @@ object "Test" {
 
     /// `setimmutable(offset, "name", value)` must evaluate its offset argument for side effects,
     /// even though the IR `SetImmutable` is keyed by name and ignores the offset value.
+    ///
+    /// In this fixture `f` is only ever invoked as the offset argument of `setimmutable`. If that
+    /// argument is dropped, the deploy code contains no call to it (and its `sstore` is lost).
     #[test]
     fn setimmutable_offset_side_effects_preserved() {
         let source = r#"
@@ -1689,8 +1692,6 @@ object "C" {
             .translate_object(&yul_object)
             .expect("translation should succeed");
 
-        // `f` is only ever invoked as the offset argument of `setimmutable`. If that argument is
-        // dropped, the deploy code contains no call to it (and its `sstore` is lost).
         let mut called: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
         collect_called_function_ids(&object.code.statements, &mut called);
         assert!(

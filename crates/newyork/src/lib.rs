@@ -116,39 +116,13 @@ pub fn translate_yul_object(
 
     let (mut inline_results, mem_opt_results) = optimize_object_tree(&mut ir_object);
 
-    // When `NEWYORK_DUMP_IR` is set, dump this post-`optimize_object_tree` IR snapshot into the
-    // caller-provided debug output directory. If the variable is set but no debug output directory
-    // was configured, skip the dump rather than writing to a hardcoded path.
-    if std::env::var(NEWYORK_DUMP_IR_ENV)
-        .map(|value| value == "1")
-        .unwrap_or(false)
-    {
-        if let Some(directory) = debug_output_directory {
-            use std::io::Write;
-            let mut dump_path = directory.to_owned();
-            dump_path.push(format!(
-                "newyork_ir_{}.txt",
-                ir_object.name.replace('/', "_")
-            ));
-            if let Ok(mut file) = std::fs::File::create(&dump_path) {
-                let _ = write!(file, "{}", print_object(&ir_object));
-            }
-        }
-    }
+    dump_ir_snapshot_if_requested(&ir_object, debug_output_directory);
 
     let mut type_info = TypeInference::new();
     type_info.infer_object_tree(&ir_object);
 
     let type_info = type_inference::narrow_signatures_to_fixed_point(&mut ir_object, type_info);
 
-    // Late inline pass: now that parameter narrowing has propagated through the IR and
-    // simplification has folded any newly exposed constants, some wrapper functions have shrunk
-    // below the inline thresholds. Re-estimate function sizes and run the inliner again to catch
-    // these, followed by simplify + dedup to clean up the inlined bodies. This is intentionally
-    // separate from the early inliner: the early pass exposes intra-procedural opportunities that
-    // drive the rest of the pipeline; the late pass collects the per-function shrinkage produced
-    // by every subsequent optimization (mem_opt, compound_outlining, guard_narrow, full type
-    // narrowing).
     let type_info = run_late_inline_loop(&mut ir_object, &mut inline_results, type_info);
 
     let heap_opt = ir_object.analyze_heap();
@@ -175,6 +149,31 @@ pub fn translate_yul_object(
     })
 }
 
+/// When `NEWYORK_DUMP_IR` is set, dump this post-`optimize_object_tree` IR snapshot into the
+/// caller-provided debug output directory. If the variable is set but no debug output directory
+/// was configured, skip the dump rather than writing to a hardcoded path.
+fn dump_ir_snapshot_if_requested(
+    ir_object: &ir::Object,
+    debug_output_directory: Option<&std::path::Path>,
+) {
+    if std::env::var(NEWYORK_DUMP_IR_ENV)
+        .map(|value| value == "1")
+        .unwrap_or(false)
+    {
+        if let Some(directory) = debug_output_directory {
+            use std::io::Write;
+            let mut dump_path = directory.to_owned();
+            dump_path.push(format!(
+                "newyork_ir_{}.txt",
+                ir_object.name.replace('/', "_")
+            ));
+            if let Ok(mut file) = std::fs::File::create(&dump_path) {
+                let _ = write!(file, "{}", print_object(ir_object));
+            }
+        }
+    }
+}
+
 /// Maximum number of late inline + simplify + narrow iterations.
 ///
 /// One round captures every additional inline the cost model can make once the pipeline's other
@@ -185,11 +184,24 @@ const LATE_INLINE_ITERATIONS: u32 = 1;
 
 /// Runs a fixed-point loop of late inline + simplify + dedup + type narrow.
 ///
-/// After the early inline + heap + mem_opt + compound_outlining + guard_narrow + first round of
-/// param narrowing has completed, many wrapper helpers have collapsed to a handful of statements.
-/// The early inliner couldn't act on them because they were still wrapped in pre-simplify noise;
+/// Now that parameter narrowing has propagated through the IR and simplification has folded any
+/// newly exposed constants, some wrapper functions have shrunk below the inline thresholds. After
+/// the early inline + heap + mem_opt + compound_outlining + guard_narrow + first round of param
+/// narrowing has completed, many wrapper helpers have collapsed to a handful of statements. The
+/// early inliner couldn't act on them because they were still wrapped in pre-simplify noise;
 /// running the inliner again at this point — with re-estimated function sizes and on top of the
 /// narrowed signatures — picks up the residue.
+///
+/// This is intentionally separate from the early inliner: the early pass exposes intra-procedural
+/// opportunities that drive the rest of the pipeline; the late pass collects the per-function
+/// shrinkage produced by every subsequent optimization (mem_opt, compound_outlining, guard_narrow,
+/// full type narrowing).
+///
+/// Within the loop, compound outlining + guard narrowing are re-run after inlining because the
+/// inlined bodies expose new keccak256_pair+sload pairs and overflow checks that the early pass
+/// couldn't see across the call boundary. A final size refresh follows the loop so LLVM-level
+/// inline hints (set during codegen) see the post-simplify, post-narrow shape rather than the
+/// larger pre-cleanup estimates that `inline_functions` last set internally.
 ///
 /// The function takes ownership of `type_info` so we can reseed it after the inlined IR is in
 /// place; the returned `TypeInference` reflects the final state used for downstream codegen.
@@ -205,9 +217,6 @@ fn run_late_inline_loop(
         let mut simplifier = Simplifier::new();
         simplifier.simplify_object(ir_object);
 
-        // Re-run compound outlining + guard narrowing after inlining: the
-        // inlined bodies expose new keccak256_pair+sload pairs and overflow
-        // checks that the early pass couldn't see across the call boundary.
         compound_outlining::outline_compounds_in_object(ir_object);
         guard_narrow::narrow_guards_in_object(ir_object);
         let mut simplifier_post = Simplifier::new();
@@ -220,9 +229,6 @@ fn run_late_inline_loop(
         type_info.infer_object_tree(ir_object);
         type_info = type_inference::narrow_signatures_to_fixed_point(ir_object, type_info);
     }
-    // Final size refresh so LLVM-level inline hints (set during codegen) see
-    // the post-simplify, post-narrow shape rather than the larger pre-cleanup
-    // estimates that `inline_functions` last set internally.
     inline::estimate_function_sizes(ir_object);
     type_info
 }

@@ -1736,6 +1736,12 @@ fn count_custom_error_reverts_in_block(block: &Block, counts: &mut BTreeMap<usiz
     });
 }
 
+/// Reports whether the block evaluates `msize()` anywhere.
+///
+/// `For::condition` is the only expression position the IR does not materialize into a preceding
+/// `Let`, so `for_each_statement` never surfaces it as a `value`; it is therefore inspected
+/// explicitly. A bare `for {} msize() {}` keeps `msize` only in the condition. Missing it makes
+/// native stores skip the heap-size watermark update, and `msize` then reads stale.
 fn has_msize_in_block(block: &Block) -> bool {
     let mut found = false;
     for_each_statement(&block.statements, &mut |statement| match statement {
@@ -1744,11 +1750,6 @@ fn has_msize_in_block(block: &Block) -> bool {
                 found = true;
             }
         }
-        // `For::condition` is the only expression position the IR does not
-        // materialize into a preceding `Let`, so `for_each_statement` never
-        // surfaces it as a `value` above. A bare `for {} msize() {}` keeps
-        // `msize` here; missing it makes native stores skip the heap-size
-        // watermark update and `msize` then reads stale.
         Statement::For { condition, .. } => {
             if matches!(condition, Expression::MSize) {
                 found = true;

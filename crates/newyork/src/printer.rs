@@ -151,11 +151,19 @@ impl<'a> Printer<'a> {
         self.output.push('\n');
     }
 
+    /// Writes an IR object and its subobjects.
+    ///
+    /// FunctionIds are per-object (see ir::FunctionId docs); swap in this
+    /// object's name table for the duration of the walk and restore on exit
+    /// so subobjects don't print the parent's names or fall through to
+    /// `func_<id>` on collisions.
+    ///
+    /// Subobjects have their own ValueId namespace and a matching
+    /// `TypeInference` in `sub_inferences` (same order as `subobjects`,
+    /// mirroring codegen). Swap to the child's inference for the duration
+    /// of the walk so subobject value ids aren't looked up in the parent
+    /// map — where they'd be absent and default to i1. Restore on exit.
     fn write_object(&mut self, object: &'a Object) {
-        // FunctionIds are per-object (see ir::FunctionId docs); swap in this
-        // object's name table for the duration of the walk and restore on exit
-        // so subobjects don't print the parent's names or fall through to
-        // `func_<id>` on collisions.
         let saved_function_names = std::mem::take(&mut self.function_names);
         for (id, function) in &object.functions {
             self.function_names.insert(*id, &function.name);
@@ -197,11 +205,6 @@ impl<'a> Printer<'a> {
 
         for (index, subobject) in object.subobjects.iter().enumerate() {
             self.write_newline();
-            // Subobjects have their own ValueId namespace and a matching
-            // `TypeInference` in `sub_inferences` (same order as `subobjects`,
-            // mirroring codegen). Swap to the child's inference for the duration
-            // of the walk so subobject value ids aren't looked up in the parent
-            // map — where they'd be absent and default to i1. Restore on exit.
             let saved_inferred_types = self.inferred_types;
             self.inferred_types = self
                 .inferred_types
@@ -563,9 +566,6 @@ impl<'a> Printer<'a> {
                 self.output.push_str(" }");
                 self.write_newline();
 
-                // Everything that makes up the loop is indented one level under
-                // the `for` header so the condition, post and body blocks line
-                // up and their braces match.
                 self.indent += 1;
 
                 if !condition_statements.is_empty() {
@@ -1170,15 +1170,18 @@ impl<'a> Printer<'a> {
         self.output.push(']');
     }
 
+    /// Writes a value id, annotating it with its display type when type
+    /// annotations are enabled.
+    ///
+    /// Pointers and void are never narrowed by type inference, so keep the
+    /// statically assigned type. For integers, prefer the post-narrow
+    /// inferred width when inference is attached; otherwise fall back to the
+    /// static type. The default i256 width is suppressed to reduce noise.
     fn write_value(&mut self, value: &Value) {
         self.write_value_id(value.id);
         if !self.config.show_types {
             return;
         }
-        // Pointers and void are never narrowed by type inference, so keep the
-        // statically assigned type. For integers, prefer the post-narrow
-        // inferred width when inference is attached; otherwise fall back to the
-        // static type. The default i256 width is suppressed to reduce noise.
         let display_type = match (self.inferred_types, value.value_type) {
             (Some(inference), Type::Int(_)) => Type::Int(inference.inferred_width(value.id)),
             _ => value.value_type,
@@ -1340,6 +1343,9 @@ mod tests {
     use super::*;
     use num::BigUint;
 
+    /// Without type info the binding carries no annotation: bindings store no
+    /// type of their own. With inference attached, the i8 literal binding is
+    /// annotated with its post-narrow inferred width.
     #[test]
     fn binding_shows_inferred_narrow_width() {
         use crate::type_inference::TypeInference;
@@ -1353,14 +1359,10 @@ mod tests {
             },
         });
 
-        // Without type info the binding carries no annotation: bindings store no
-        // type of their own.
         let plain = print_object(&object);
         assert!(plain.contains("let v0 := 0xff"), "got: {plain}");
         assert!(!plain.contains("v0: i"), "got: {plain}");
 
-        // With inference attached, the i8 literal binding is annotated with its
-        // post-narrow inferred width.
         let mut inference = TypeInference::new();
         inference.infer_object(&object);
         assert_eq!(inference.inferred_width(ValueId(0)), BitWidth::I8);
@@ -1368,14 +1370,18 @@ mod tests {
         assert!(typed.contains("let v0: i8 := 0xff"), "got: {typed}");
     }
 
+    /// Parent and subobject both bind ValueId(0), but to literals of
+    /// different widths. Because each object has its own ValueId namespace
+    /// and its own inference, the subobject's v0 must be annotated from the
+    /// subobject inference (i64), not the parent's (i8).
+    ///
+    /// Parent v0 is the i8 literal; subobject v0 is the i64 literal. If the
+    /// subobject were printed against the parent inference it would wrongly
+    /// show i8 (or default to i1 for ids the parent never saw).
     #[test]
     fn subobject_bindings_use_subobject_inference() {
         use crate::type_inference::TypeInference;
 
-        // Parent and subobject both bind ValueId(0), but to literals of
-        // different widths. Because each object has its own ValueId namespace
-        // and its own inference, the subobject's v0 must be annotated from the
-        // subobject inference (i64), not the parent's (i8).
         let mut parent = Object::new("Parent".to_string());
         parent.code.statements.push(Statement::Let {
             bindings: vec![ValueId(0)],
@@ -1404,9 +1410,6 @@ mod tests {
             .expect("subobject section present")
             .1;
 
-        // Parent v0 is the i8 literal; subobject v0 is the i64 literal. If the
-        // subobject were printed against the parent inference it would wrongly
-        // show i8 (or default to i1 for ids the parent never saw).
         assert!(
             output.contains("let v0: i8 := 0xff\n"),
             "parent binding should be i8:\n{output}"
@@ -1417,6 +1420,9 @@ mod tests {
         );
     }
 
+    /// The post-region input variables must not be dropped. The header sits at
+    /// column 0; condition/post/body are indented one level under it, with
+    /// matching open/close braces at that level.
     #[test]
     fn for_loop_prints_post_inputs_with_aligned_braces() {
         let for_statement = Statement::For {
@@ -1432,13 +1438,10 @@ mod tests {
 
         let output = print_statement(&for_statement);
 
-        // The post-region input variables must not be dropped.
         assert!(
             output.contains("post (v2) {"),
             "post inputs should be printed:\n{output}"
         );
-        // Header at column 0; condition/post/body indented one level under it,
-        // with matching open/close braces at that level.
         assert!(output.contains("for { v1 := v0 }\n"), "got:\n{output}");
         assert!(output.contains("\n    condition: v1\n"), "got:\n{output}");
         assert!(
@@ -1448,10 +1451,10 @@ mod tests {
         assert!(output.contains("\n    body {\n    }\n"), "got:\n{output}");
     }
 
+    /// Arguments must go through write_value so they pick up type-width
+    /// annotations like every other value, rather than being hand-formatted.
     #[test]
     fn custom_error_revert_args_use_write_value() {
-        // Arguments must go through write_value so they pick up type-width
-        // annotations like every other value, rather than being hand-formatted.
         let statement = Statement::CustomErrorRevert {
             selector: BigUint::from(0x12345678u64) << CUSTOM_ERROR_SELECTOR_SHIFT_BITS,
             arguments: vec![
@@ -1543,12 +1546,12 @@ mod tests {
         assert!(output.contains("/* calls: 1, size: 5 */"));
     }
 
+    /// Regression test for a printer bug where subobject Call expressions
+    /// resolved against the parent's function-name map: ids missing in the
+    /// parent printed as `func_<id>`, and id collisions printed the parent's
+    /// name (e.g. `extract_byte_array_length()` from a subobject).
     #[test]
     fn test_subobject_function_names_are_scoped() {
-        // Regression test for a printer bug where subobject Call expressions
-        // resolved against the parent's function-name map: ids missing in the
-        // parent printed as `func_<id>`, and id collisions printed the parent's
-        // name (e.g. `extract_byte_array_length()` from a subobject).
         let parent_only = Function {
             id: FunctionId(0),
             name: "parent_only".to_string(),

@@ -740,8 +740,6 @@ fn promote_one_yield(
         return;
     };
 
-    // Make sure `target` is defined at the guard's top scope before yielding it; if it lives in a
-    // deeper nested guard, promote it out of that one first.
     let promoted = {
         let Statement::If { then_region, .. } = &mut statements[if_index] else {
             unreachable!("position matched an If")
@@ -755,7 +753,6 @@ fn promote_one_yield(
         }
     };
 
-    // Choose a dominating false-edge placeholder.
     let existing_input = match &statements[if_index] {
         Statement::If { inputs, .. } => inputs.first().copied(),
         _ => unreachable!(),
@@ -1532,6 +1529,11 @@ pub(crate) const SHRINK_PREDICTION_FORCED_INLINE_SIZE: usize = 1;
 /// propagation through call boundaries — necessary because most newyork
 /// helpers carry `noinline` for code-size reasons, which blocks LLVM's IPO
 /// from baking constants into the function bodies.
+///
+/// Never eliminates every parameter — the function is left with at least one
+/// input slot so the call-site arity matches non-zero. Yul allows zero-arg
+/// functions, so this isn't strictly necessary, but it keeps the change
+/// conservative and the diff smaller.
 pub(crate) fn eliminate_constant_parameters(object: &mut Object) -> usize {
     use std::collections::BTreeMap;
 
@@ -1615,10 +1617,6 @@ pub(crate) fn eliminate_constant_parameters(object: &mut Object) -> usize {
             continue;
         };
 
-        // Don't eliminate every parameter — leave the function with at least
-        // one input slot so the call-site arity matches non-zero. (Yul allows
-        // zero-arg functions, so this isn't strictly necessary, but it keeps
-        // the change conservative and the diff smaller.)
         if entries.len() >= function.parameters.len() {
             entries.truncate(function.parameters.len().saturating_sub(1));
             if entries.is_empty() {
@@ -1695,8 +1693,7 @@ pub(crate) fn inline_by_shrink_prediction(object: &mut Object) -> usize {
     let mut block_literals: BTreeMap<u32, (num::BigUint, Type)> = BTreeMap::new();
     collect_top_level_literals(&object.code.statements, &mut block_literals);
 
-    // For each (function, callsite) → ordered list of (param_idx → literal)
-    // for the args known at the call site.
+    /// The `param_idx → literal` args known at a single call site.
     type LiteralArgs = BTreeMap<usize, (num::BigUint, Type)>;
     let mut sites_per_callee: BTreeMap<FunctionId, Vec<LiteralArgs>> = BTreeMap::new();
 
@@ -1758,9 +1755,6 @@ pub(crate) fn inline_by_shrink_prediction(object: &mut Object) -> usize {
         return total;
     }
 
-    // Lower size_estimate below ALWAYS_INLINE_SIZE_THRESHOLD so the next
-    // `inline_functions` pass picks these as AlwaysInline, reusing the
-    // canonical inliner rather than duplicating its logic.
     for function_id in &force_inline {
         if let Some(function) = object.functions.get_mut(function_id) {
             function.size_estimate = SHRINK_PREDICTION_FORCED_INLINE_SIZE;
@@ -1866,6 +1860,10 @@ where
 /// `Let id = Literal v` bindings in `literals`. Control-flow children are visited
 /// with a cloned `literals` map so each branch's own bindings stay local while still
 /// inheriting the enclosing block's literals.
+///
+/// Unlike `If`'s condition (a `Value`), a `For` condition is an `Expression` and may
+/// itself be a top-level call, evaluated after `condition_statements`. It is recorded
+/// so its arguments are analysed.
 pub(crate) fn visit_calls_inner<F>(
     statements: &[Statement],
     literals: &mut std::collections::BTreeMap<u32, (num::BigUint, Type)>,
@@ -1928,9 +1926,6 @@ pub(crate) fn visit_calls_inner<F>(
             } => {
                 let saved = literals.clone();
                 visit_calls_inner(condition_statements, literals, record);
-                // Unlike `If`'s condition (a `Value`), a `For` condition is an
-                // `Expression` and may itself be a top-level call, evaluated after
-                // `condition_statements`. Record it so its arguments are analysed.
                 if let Expression::Call {
                     function,
                     arguments,
@@ -1955,6 +1950,10 @@ pub(crate) fn visit_calls_inner<F>(
 /// Trim arguments from every Call expression in the statement list whose
 /// callee appears in `drops`. `drops[fid]` is the ascending list of argument
 /// indices to remove.
+///
+/// A `For` condition is an `Expression` and may be a top-level call; it must be
+/// trimmed too, else dropping the callee's parameter leaves this site passing too
+/// many arguments.
 pub(crate) fn trim_call_arguments(
     statements: &mut [Statement],
     drops: &std::collections::BTreeMap<FunctionId, Vec<usize>>,
@@ -2007,9 +2006,6 @@ pub(crate) fn trim_call_arguments(
                 ..
             } => {
                 trim_call_arguments(condition_statements, drops);
-                // A `For` condition is an `Expression` and may be a top-level call;
-                // it must be trimmed too, else dropping the callee's parameter leaves
-                // this site passing too many arguments.
                 if let Expression::Call {
                     function,
                     arguments,
@@ -2110,7 +2106,6 @@ mod tests {
         use revive_yul::lexer::Lexer;
         use revive_yul::parser::statement::object::Object as YulObject;
 
-        // `x` is assigned two guard levels deep, after two sequential `leave`s.
         let nested = r#"
 object "T" {
     code {
@@ -2124,7 +2119,6 @@ object "T" {
     object "T_deployed" { code { stop() } }
 }
 "#;
-        // Void function (no returns, hence the guard has no inputs) with a `leave`.
         let void = r#"
 object "T" {
     code {
@@ -2351,6 +2345,10 @@ object "T" {
         assert!(object.functions.contains_key(&FunctionId::new(0)));
     }
 
+    /// The `medium` function (size 50, 15 callers): with `NEVER_INLINE_CALL_COUNT_THRESHOLD`
+    /// at 100, this drops to the cost-benefit branch which rejects it (cost 700, benefit 0) so
+    /// it ends up `CostBenefit` rather than `NeverInline`. Both effectively keep the body intact
+    /// and tell LLVM not to inline; the distinction matters only for trace dumps.
     #[test]
     fn test_inline_decisions() {
         let mut object = Object::new("test".to_string());
@@ -2386,11 +2384,6 @@ object "T" {
             decisions.get(&FunctionId::new(0)),
             Some(&InlineDecision::AlwaysInline)
         );
-        // medium (size 50, 15 callers): with NEVER_INLINE_CALL_COUNT_THRESHOLD
-        // now at 100, this drops to the cost-benefit branch which rejects it
-        // (cost 700, benefit 0) so it ends up CostBenefit rather than
-        // NeverInline. Both effectively keep the body intact and tell LLVM
-        // not to inline; the distinction matters only for trace dumps.
         assert_eq!(
             decisions.get(&FunctionId::new(1)),
             Some(&InlineDecision::CostBenefit)

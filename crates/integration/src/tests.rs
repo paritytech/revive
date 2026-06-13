@@ -2211,8 +2211,8 @@ fn for_init_block_variable_scope() {
     }
 }
 
-/// PR #1 comment #issuecomment-453: newyork `narrow_function_params` narrowed a
-/// parameter on the strength of a use reached only on a conditional path. A
+/// `narrow_function_params` must not narrow a parameter on the strength of a
+/// use reached only on a conditional path. A
 /// memory-offset parameter used only inside `if c` was narrowed to i64, so the
 /// call boundary's checked truncation trapped on a `p >= 2^64` argument even when
 /// EVM skips the store (`c == 0`). See `contracts/ParamCondNarrow.yul`:
@@ -2238,14 +2238,14 @@ fn param_conditional_offset_narrowing_spurious_trap() {
     run_differential(actions);
 }
 
-/// PR #1 comment #issuecomment-448: newyork forward inference widened an
-/// `if`/`switch` output only from the then/else region yields, never from
-/// `inputs` — but on a missing else/default edge codegen routes `inputs` to
-/// `outputs`. The `leave`-elimination wrapper builds that shape (`else_region`
-/// None, non-empty outputs), so an output carrying the wide pre-`leave` value
-/// was inferred at the narrow fall-through width and truncated. See
-/// `contracts/LeaveWideOutput.yul`: `f(2^200)` leaves with a full-width `ret`
-/// that must survive, not collapse to its low byte (`2^200 mod 256 == 0`).
+/// Forward inference must widen an `if`/`switch` output from `inputs`, not only
+/// from the then/else region yields: on a missing else/default edge codegen
+/// routes `inputs` straight to `outputs`. The `leave`-elimination wrapper builds
+/// that shape (`else_region` None, non-empty outputs), so an output carrying the
+/// wide pre-`leave` value was inferred at the narrow fall-through width and
+/// truncated. See `contracts/LeaveWideOutput.yul`: `f(2^200)` leaves with a
+/// full-width `ret` that must survive, not collapse to its low byte
+/// (`2^200 mod 256 == 0`).
 #[test]
 fn leave_edge_output_width_inferred_from_inputs() {
     let mut data = vec![0u8; 32];
@@ -2263,8 +2263,8 @@ fn leave_edge_output_width_inferred_from_inputs() {
     run_differential(actions);
 }
 
-/// PR #1 comment #issuecomment-451 (N4): newyork forward inference gave a
-/// `FreePointerSlot` `mload` width I32 unconditionally. When a non-sbrk-bounded
+/// Forward inference gave a `FreePointerSlot` `mload` width I32
+/// unconditionally. When a non-sbrk-bounded
 /// write taints 0x40 (`fmp_could_be_unbounded`), codegen loads the full FMP word
 /// but inference still said I32, so `gt(v, 0xffffffff)` truncated the live value
 /// to 32 bits. See `contracts/FmpUnboundedCompare.yul`: with `v = 2^40` the
@@ -2688,8 +2688,8 @@ fn msize_read_ops() {
     run_differential(actions);
 }
 
-/// Regression (N23): a bare `msize()` for-loop condition is the one expression
-/// position the IR does not materialize into a preceding `let`, so the msize
+/// A bare `msize()` for-loop condition is the one expression position the IR
+/// does not materialize into a preceding `let`, so the msize
 /// scan must inspect `For::condition` directly. Missing it makes native stores
 /// skip the heap-size watermark update, so `msize()` reads stale 0, the guarded
 /// body is skipped, and `ran` diverges from the EVM reference. See
@@ -2710,7 +2710,7 @@ fn msize_in_for_condition() {
     run_differential(actions);
 }
 
-/// Regression (N18 FMP): a `for` loop whose body bumps the free-memory pointer must re-read
+/// A `for` loop whose body bumps the free-memory pointer must re-read
 /// `mload(0x40)` each iteration. FMP propagation used to forward the pre-loop constant into the
 /// body, rewriting the loop-top `mload(0x40)` to iteration 1's pointer so every iteration aliased
 /// the first allocation. With n=3 the three slots must read [1, 2, 3]; the aliasing bug yields
@@ -2731,7 +2731,7 @@ fn for_loop_fmp_realloc() {
     run_differential(actions);
 }
 
-/// Regression (N18 FMP): an `if`/`switch` branch that calls an allocating internal function bumps
+/// An `if`/`switch` branch that calls an allocating internal function bumps
 /// the free-memory pointer, so a tracked FMP constant must be invalidated after the branch. Region
 /// FMP invalidation used to be tag-only (direct FMP store / external call / create) and missed the
 /// `fmp_writers` call case that straight-line propagation already honored, so the post-branch
@@ -2753,7 +2753,7 @@ fn branch_calls_allocator_fmp() {
     run_differential(actions);
 }
 
-/// Regression (N16): the callvalue-check hoist must not fire when a no-match path lacks the check.
+/// The callvalue-check hoist must not fire when a no-match path lacks the check.
 /// All cases are non-payable (revert on value) but there is no default, so a no-match selector falls
 /// through and must accept value. Hoisting the cases' `if callvalue() { revert }` above the switch
 /// would make the (sel=99, value=1) call spuriously revert instead of writing 0xff. See
@@ -2774,7 +2774,7 @@ fn switch_callvalue_no_match_fallthrough() {
     run_differential(actions);
 }
 
-/// Regression (N20 ICE): hoisting the callvalue check drains each branch's `let cv = callvalue()`
+/// Hoisting the callvalue check drains each branch's `let cv = callvalue()`
 /// definition. Environment CSE may have rewritten a later `callvalue()` in the branch to reuse that
 /// binding, so the drain must redirect such uses to the hoisted binding or the IR references an
 /// undefined value and the validator panics during compilation. Compiling and running at all
@@ -2795,7 +2795,7 @@ fn switch_callvalue_cse_dangling() {
     run_differential(actions);
 }
 
-/// Regression (N13): the panic-pattern outliner must not collapse a window that contains a
+/// The panic-pattern outliner must not collapse a window that contains a
 /// side-effecting call. `inner()` reverts with 0xdeadbeef before the panic revert; dropping it and
 /// emitting PanicRevert would revert with the wrong payload. EVM reverts with 0xdeadbeef; the bug
 /// reverts with the Panic(0x11) data. See PanicOutlineCall.yul.
@@ -2813,7 +2813,7 @@ fn panic_outline_preserves_call() {
     run_differential(actions);
 }
 
-/// Regression (N20 ICE): when the panic-pattern outliner truncates a branch's window, a pure
+/// When the panic-pattern outliner truncates a branch's window, a pure
 /// binding it drops may still be referenced by the branch region's yield. The truncate must
 /// zero-rebind such values (mirroring eliminate_dead_code) or compilation fails the SSA validator.
 /// Compiling at all exercises the fix. See PanicOutlineYield.yul.
@@ -2833,7 +2833,7 @@ fn panic_outline_yield_rescue() {
     run_differential(actions);
 }
 
-/// Regression (N14): the panic-pattern outliner must honor last-write-wins. The selector store is
+/// The panic-pattern outliner must honor last-write-wins. The selector store is
 /// overwritten by a later `mstore(0, 0xdeadbeef)`, so the EVM revert data starts with 0xdeadbeef;
 /// collapsing to a canonical Panic(0x11) (selector 0x4e487b71) would emit the wrong payload. See
 /// PanicOverwriteSelector.yul.
@@ -2854,7 +2854,7 @@ fn panic_outline_overwritten_selector() {
     run_differential(actions);
 }
 
-/// Regression (N15): the custom-error outliner's reverse scan must keep the latest store per
+/// The custom-error outliner's reverse scan must keep the latest store per
 /// payload offset (EVM last-write-wins). The argument word is written twice (0xaaaa then 0xbbbb);
 /// the revert must carry 0xbbbb, not the earlier 0xaaaa. See CustomErrorDupArg.yul.
 #[test]
@@ -2871,7 +2871,7 @@ fn custom_error_duplicate_argument() {
     run_differential(actions);
 }
 
-/// Regression (N19): a constant memory offset past the heap must trap (out-of-gas), not take the
+/// A constant memory offset past the heap must trap (out-of-gas), not take the
 /// inline unchecked-GEP path and write out of the fixed heap global. `mstore(0xFFFFFFF0, x)` runs the
 /// EVM out of gas (memory expansion); the bug would silently write out of bounds and fall through to
 /// the sstore. See HugeConstOffsetStore.yul.
@@ -2891,7 +2891,7 @@ fn store_huge_const_offset_traps() {
     run_differential(actions);
 }
 
-/// Regression (N19): a `return` with a constant offset range past the heap must trap, not take the
+/// A `return` with a constant offset range past the heap must trap, not take the
 /// inline unchecked seal_return path and read one-past-heap into the returndata (information leak).
 /// `return(0x20000, 0x20)` reads exactly at the 128 KiB heap end. The check is PVM-only (non-
 /// differential): EVM cheaply zero-expands such a moderate range, whereas PVM's bounded heap must
@@ -2919,7 +2919,7 @@ fn return_past_heap_const_offset_traps() {
     .run();
 }
 
-/// Regression (N12): the callvalue-check outline must not replace a data-carrying revert with empty
+/// The callvalue-check outline must not replace a data-carrying revert with empty
 /// `revert(0,0)`. Here the revert operands come from an enclosing scope (calldata), so the then-region
 /// is not a zero revert. With value sent, the contract reverts returning memory[0x80, 0xa0) = 0xdeadbeef;
 /// the bug would outline it to an empty revert, dropping the data. See CallvalueRevertData.yul.

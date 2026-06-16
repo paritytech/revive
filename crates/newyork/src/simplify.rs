@@ -59,7 +59,8 @@ pub struct SimplifyResults {
 /// - `SelfBalance`: changes when the contract sends or receives value.
 ///
 /// Hash expressions (`Keccak256*`) take operands and so aren't `EnvRead`
-/// candidates by shape; see `HASH_CSE_NOTE.md` for the separate CSE story.
+/// candidates by shape; their common-subexpression elimination is handled
+/// separately.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum EnvRead {
     Address,

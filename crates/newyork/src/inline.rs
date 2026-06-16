@@ -24,13 +24,18 @@
 //!
 //! # Pipeline position
 //!
-//! `inline_functions` is invoked twice:
+//! `inline_functions` is invoked three times:
 //!
 //! 1. **Early** — at the start of `optimize_object_tree`, before simplify /
 //!    mem_opt / compound_outlining / guard_narrow. The IR is full of redundant
 //!    `Let` bindings and unfolded arithmetic; the thresholds above were
-//!    empirically calibrated to that shape (see `INLINER.md`).
-//! 2. **Late** — after the parameter narrowing fixed point, via
+//!    empirically calibrated to that shape.
+//! 2. **Shrink-prediction** — near the end of `optimize_object_tree`, via
+//!    [`inline_by_shrink_prediction`]. After simplify / mem_opt /
+//!    compound_outlining / guard_narrow have run, that pass force-inlines
+//!    functions whose predicted post-substitution size beats their keep-cost by
+//!    lowering their `size_estimate` and re-running `inline_functions`.
+//! 3. **Late** — after the parameter narrowing fixed point, via
 //!    `run_late_inline_loop` in `lib.rs`. By then every other pass has
 //!    canonicalized the IR; many helper functions have collapsed to a handful
 //!    of statements. Refreshing `size_estimate` with [`estimate_function_sizes`]
@@ -77,7 +82,7 @@ const SMALL_FUNCTION_BONUS_SIZE_THRESHOLD: usize = 10;
 /// Maximum call count for which the few-callsites bonus applies. The cost term
 /// `(call_count - 1) * size` grows linearly with callers, so 2–3 is the regime
 /// where the bonus can plausibly offset it. Calibrated alongside the rest of
-/// the cost model in commit 6ea5672c ("Improve the inliner") — see INLINER.md.
+/// the cost model in commit 6ea5672c ("Improve the inliner").
 const FEW_CALLS_BONUS_CALL_THRESHOLD: usize = 3;
 
 /// Maximum Leave count for the few-callsites bonus to apply. Each Leave becomes
@@ -90,8 +95,8 @@ const FEW_CALLS_BONUS_LEAVE_THRESHOLD: usize = 1;
 /// ([`FEW_CALLS_BONUS_CALL_THRESHOLD`]) and few Leaves
 /// ([`FEW_CALLS_BONUS_LEAVE_THRESHOLD`]). Retuned from 10 to 15 in commit
 /// 6ea5672c as part of an end-to-end cost-model retune that landed −8.95% on
-/// the OZ corpus. INLINER.md records that the model is at a local optimum on
-/// this axis, so don't perturb in isolation without re-running the corpus.
+/// the OZ corpus. The model is at a local optimum on this axis, so don't
+/// perturb in isolation without re-running the corpus.
 const FEW_CALLS_BONUS: usize = 15;
 
 /// Results of the call graph analysis.
@@ -137,8 +142,7 @@ pub enum InlineDecision {
     /// leaves the function intact; downstream codegen also marks multi-call
     /// `CostBenefit` functions with LLVM `NoInline` so the LLVM inliner does
     /// not undo the decision by inlining at every call site (a behavior that
-    /// regressed code size on the PolkaVM target — see iter38 in
-    /// `RALPH_TASK.md`).
+    /// regressed code size on the PolkaVM target).
     CostBenefit,
 }
 

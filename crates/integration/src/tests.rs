@@ -550,8 +550,7 @@ fn fmp_revert_native_mode_corrupts_revert_data() {
 /// arbitrary i256 at memory[0x40..0x60]. Fixed by gating on
 /// `!heap_opt.fmp_could_be_unbounded()`, a precise static detector
 /// that only trips when an `mstore(0x40, _)` writes from a source
-/// `is_trusted_fmp_source` cannot prove sbrk-bounded. See
-/// `project_round3_fmp_native_bugs.md` Bug #15a.
+/// `is_trusted_fmp_source` cannot prove sbrk-bounded.
 #[test]
 fn fmp_load_range_proof_corrupts_non_bounded_value() {
     let mut actions = instantiate("contracts/FmpRangeProofBug.sol", "FmpRangeProofBug");
@@ -570,8 +569,7 @@ fn fmp_load_range_proof_corrupts_non_bounded_value() {
 /// the InlineNative-mode MStore at `to_llvm.rs` previously truncated
 /// any `mstore(0x40, _)` value to i32 unconditionally. Fixed by
 /// gating the i32 truncation on `!heap_opt.fmp_could_be_unbounded()`,
-/// the same precise static gate used for Bug #15a's range proof. See
-/// `project_round3_fmp_native_bugs.md` Bug #15b.
+/// the same precise static gate used for Bug #15a's range proof.
 #[test]
 fn fmp_native_store_truncates_non_bounded_value() {
     let mut actions = instantiate("contracts/FmpNativeStoreBug.sol", "FmpNativeStoreBug");
@@ -2037,10 +2035,10 @@ fn safe_truncate_int_to_xlen_works() {
 }
 
 // ---------------------------------------------------------------------------
-// Round-2 audit (2026-06-01): newly found soundness divergences. Each test
-// FAILS differentially against the EVM reference under RESOLC_USE_NEWYORK=1
-// and documents an unfixed bug (see AUDIT_FINDINGS_ROUND2.md). They are
-// expected-failing until the corresponding fix lands in a later round.
+// Round-2 audit (2026-06-01): soundness divergences against the EVM reference
+// originally found under RESOLC_USE_NEWYORK=1. Each test reproduced a specific
+// newyork miscompile; the corresponding fixes have since landed, so these are
+// kept as regression guards.
 // ---------------------------------------------------------------------------
 
 /// Bug #6: newyork fuzzy function deduplication merges two functions that
@@ -3617,7 +3615,7 @@ fn generative_mem_fuzz() {
 }
 
 #[test]
-#[ignore = "R4-#5: newyork -O3 emits a duplicate-entry jump table; resolc's unconditional disassemble (build/mod.rs:90) panics. Unfixed; see project_round4_audit."]
+#[ignore = "R4-#5: newyork -O3 emits a duplicate-entry jump table; resolc's unconditional disassemble (build/mod.rs:90) panics. Unfixed."]
 fn mem27_repro() {
     let mut actions = instantiate_yul("contracts/Mem27.yul", "Mem27");
     actions.push(Call {
@@ -3767,7 +3765,7 @@ fn generative_cf_fuzz() {
             }
             // Otherwise it is a known polkavm-toolchain crash on newyork's -O3/cycles
             // code layout (R4-#5 disassembler ICE / program-17 linker overflow).
-            // Tolerated so this stays a semantic-regression guard; see audit doc.
+            // Tolerated so this stays a semantic-regression guard.
             eprintln!("GENCF tolerated toolchain crash at program {program}");
         }
     }

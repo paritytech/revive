@@ -105,7 +105,10 @@ pub struct MemoryOptimizer {
     /// A store is dead if it's overwritten before being read.
     dead_store_indices: BTreeSet<usize>,
     /// Pending stores that haven't been read yet.
-    /// Maps word-aligned offset to the index in the current statement list.
+    /// Maps the exact static store offset (not word-aligned) to the index in the current
+    /// statement list. The exact offset is required by the overlap checks in
+    /// [`Self::invalidate_state_overlapping_store`] and by [`Self::eliminate_dead_store_at`],
+    /// which reconstruct each store's 32-byte write range as `[key, key + 32)`.
     pending_stores: BTreeMap<u64, usize>,
 }
 
@@ -601,7 +604,7 @@ impl MemoryOptimizer {
                 if let Some(static_offset) = self.try_get_static_offset(&offset) {
                     let word_offset = word_align(static_offset);
 
-                    self.pending_stores.remove(&word_offset);
+                    self.pending_stores.remove(&static_offset);
 
                     if let Some(tracked) = self.memory_state.get_mut(&word_offset) {
                         if tracked.offset == static_offset {

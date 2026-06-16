@@ -543,6 +543,26 @@ fn fmp_revert_native_mode_corrupts_revert_data() {
     run_differential(actions);
 }
 
+/// Regression test for the mem_opt dead-store-elimination key mismatch:
+/// `MemoryOptimizer.pending_stores` is keyed by the exact store offset, but the
+/// load handler removed entries by the word-aligned offset. A store at the
+/// non-word-aligned offset `0x104`, read by an exact `mload(0x104)` and observed
+/// by an overlapping `mload(0x108)`, was wrongly dead-eliminated at the later
+/// same-offset overwrite, so `mload(0x108)` read fresh memory instead of the
+/// stored value. Fixed by removing the exact `static_offset` key on load. See
+/// `contracts/MemOptOverlapDeadStore.yul`.
+#[test]
+fn mem_opt_overlapping_load_dead_store_elimination() {
+    let mut actions = instantiate_yul(
+        "contracts/MemOptOverlapDeadStore.yul",
+        "MemOptOverlapDeadStore",
+    );
+    let mut data = vec![0x11u8; 32];
+    data.extend_from_slice(&[0x22u8; 32]);
+    push_call(&mut actions, TestAddress::Instantiated(0), data);
+    run_differential(actions);
+}
+
 /// Bug #15a regression test: `to_llvm.rs::Expression::MLoad` applies
 /// a range-proof truncation on any FMP-slot mload, assuming
 /// `FMP < heap_size`. Sound for Solidity-convention FMP updates via

@@ -15,11 +15,11 @@
 //! # Inlining Policy
 //!
 //! - **Always inline**: Functions called exactly once with size below
-//!   `SINGLE_CALL_INLINE_SIZE_THRESHOLD`, or any function with size below
-//!   `ALWAYS_INLINE_SIZE_THRESHOLD` and no `Leave` statements
+//!   [`SINGLE_CALL_INLINE_SIZE_THRESHOLD`], or any function with size below
+//!   [`ALWAYS_INLINE_SIZE_THRESHOLD`] and no `Leave` statements
 //! - **Never inline**: Recursive functions, functions with size at or above
-//!   `NEVER_INLINE_SIZE_THRESHOLD`, or functions called from
-//!   `NEVER_INLINE_CALL_COUNT_THRESHOLD`+ sites
+//!   [`NEVER_INLINE_SIZE_THRESHOLD`], or functions called from
+//!   [`NEVER_INLINE_CALL_COUNT_THRESHOLD`]+ sites
 //! - **Cost-benefit**: For everything else, inline if benefit > cost
 //!
 //! # Pipeline position
@@ -37,6 +37,8 @@
 //!    before the call lets the cost model see the post-simplify shape, so the
 //!    same thresholds catch newly tiny wrappers that the early pass left
 //!    behind.
+
+#![allow(rustdoc::private_intra_doc_links)]
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -347,7 +349,7 @@ impl InlineRemapper {
     }
 
     /// Clones the source statements and rewrites every `ValueId` (definitions and
-    /// uses) through `remap_value_id`. Used to inline a function body at a
+    /// uses) through [`Self::remap_value_id`]. Used to inline a function body at a
     /// call site with a fresh SSA namespace.
     fn remap_statements(&mut self, source: &[Statement]) -> Vec<Statement> {
         let mut statements = source.to_vec();
@@ -705,7 +707,7 @@ fn region_defines_value(region: &Region, target: ValueId) -> bool {
 }
 
 /// After leave elimination, some original yield values may be inside guard Ifs
-/// (created by `wrap_remaining_in_guard`). This function promotes those values
+/// (created by [`wrap_remaining_in_guard`]). This function promotes those values
 /// to be additional outputs of the guard If, so they're accessible at the outer scope.
 fn promote_yields_from_guards(
     statements: &mut Vec<Statement>,
@@ -2080,7 +2082,7 @@ mod tests {
     use crate::ir::{CallKind, CreateKind};
     use num::BigUint;
 
-    /// `collect_top_scope_definitions` and `region_defines_value` must recognize the result values of
+    /// [`collect_top_scope_definitions`] and [`region_defines_value`] must recognize the result values of
     /// `ExternalCall`/`Create` statements as definitions. Omitting them made leave-elimination
     /// yield promotion fail to locate a yield defined by a call/create result, producing a
     /// use-before-definition ICE (via the late inliner). Mirrors `Statement::for_each_value_id_def`.
@@ -2385,7 +2387,7 @@ object "T" {
         assert!(object.functions.contains_key(&FunctionId::new(0)));
     }
 
-    /// The `medium` function (size 50, 15 callers): with `NEVER_INLINE_CALL_COUNT_THRESHOLD`
+    /// The `medium` function (size 50, 15 callers): with [`NEVER_INLINE_CALL_COUNT_THRESHOLD`]
     /// at 100, this drops to the cost-benefit branch which rejects it (cost 700, benefit 0) so
     /// it ends up `CostBenefit` rather than `NeverInline`. Both effectively keep the body intact
     /// and tell LLVM not to inline; the distinction matters only for trace dumps.

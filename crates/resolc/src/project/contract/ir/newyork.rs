@@ -186,83 +186,79 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             None,
         )?;
 
-        if self.yul_object.identifier.ends_with("_deployed") {
-            context.set_code_type(PolkaVMCodeType::Runtime);
+        // `NewYork` always wraps the top-level (deploy) object; the runtime
+        // `_deployed` object is emitted as a subobject by `generate_object`,
+        // which sets the runtime code type itself.
+        assert!(
+            !self.yul_object.identifier.ends_with("_deployed"),
+            "ICE: newyork into_llvm expected the top-level object, got `{}`",
+            self.yul_object.identifier,
+        );
 
-            let mut codegen = LlvmCodegen::new(
-                heap_opt.clone(),
-                type_info.clone(),
-                inline_decisions.clone(),
-            );
-            codegen
-                .generate_object(&ir_object, context)
-                .map_err(|e| anyhow::anyhow!("newyork LLVM codegen: {e}"))?;
-        } else {
-            context.set_code_type(PolkaVMCodeType::Deploy);
+        context.set_code_type(PolkaVMCodeType::Deploy);
 
-            revive_llvm_context::PolkaVMEntryFunction::default().into_llvm(context)?;
+        revive_llvm_context::PolkaVMEntryFunction::default().into_llvm(context)?;
 
-            revive_llvm_context::PolkaVMLoadImmutableDataFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMStoreImmutableDataFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMLoadImmutableDataFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMStoreImmutableDataFunction.into_llvm(context)?;
 
-            if use_native_heap {
-                revive_llvm_context::PolkaVMLoadHeapWordNativeFunction.declare(context)?;
-                revive_llvm_context::PolkaVMStoreHeapWordNativeFunction.declare(context)?;
-                revive_llvm_context::PolkaVMLoadHeapWordNativeFunction.into_llvm(context)?;
-                revive_llvm_context::PolkaVMStoreHeapWordNativeFunction.into_llvm(context)?;
-            }
-            revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
-
-            revive_llvm_context::PolkaVMLoadStorageWordFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMStoreStorageWordFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMLoadTransientStorageWordFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMStoreTransientStorageWordFunction.into_llvm(context)?;
-
-            revive_llvm_context::PolkaVMWordToPointerFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMExitFunction.into_llvm(context)?;
-
-            revive_llvm_context::PolkaVMEventLogFunction::<0>.into_llvm(context)?;
-            revive_llvm_context::PolkaVMEventLogFunction::<1>.into_llvm(context)?;
-            revive_llvm_context::PolkaVMEventLogFunction::<2>.into_llvm(context)?;
-            revive_llvm_context::PolkaVMEventLogFunction::<3>.into_llvm(context)?;
-            revive_llvm_context::PolkaVMEventLogFunction::<4>.into_llvm(context)?;
-
-            revive_llvm_context::PolkaVMDivisionFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMSignedDivisionFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMRemainderFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMSignedRemainderFunction.into_llvm(context)?;
-
-            revive_llvm_context::PolkaVMSbrkFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMKeccak256TwoWordsFunction.into_llvm(context)?;
-            if has_keccak_single {
-                revive_llvm_context::PolkaVMKeccak256OneWordFunction.declare(context)?;
-                revive_llvm_context::PolkaVMKeccak256OneWordFunction.into_llvm(context)?;
-            }
-            revive_llvm_context::PolkaVMCallValueFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMCallValueNonzeroFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMCallDataLoadFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMCallerFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMRevertEmptyFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMRevertFunction.into_llvm(context)?;
-            revive_llvm_context::PolkaVMRevertPanicFunction.into_llvm(context)?;
-
-            if heap_op_count > SBRK_NOINLINE_THRESHOLD {
-                if let Some(sbrk_func) = context.get_function("__sbrk_internal", false) {
-                    revive_llvm_context::PolkaVMFunction::set_attributes(
-                        context.llvm(),
-                        sbrk_func.borrow().declaration(),
-                        &[revive_llvm_context::PolkaVMAttribute::NoInline],
-                        true,
-                    );
-                }
-            }
-
-            let mut codegen = LlvmCodegen::new(heap_opt, type_info, inline_decisions);
-            codegen
-                .generate_object(&ir_object, context)
-                .map_err(|e| anyhow::anyhow!("newyork LLVM codegen: {e}"))?;
+        if use_native_heap {
+            revive_llvm_context::PolkaVMLoadHeapWordNativeFunction.declare(context)?;
+            revive_llvm_context::PolkaVMStoreHeapWordNativeFunction.declare(context)?;
+            revive_llvm_context::PolkaVMLoadHeapWordNativeFunction.into_llvm(context)?;
+            revive_llvm_context::PolkaVMStoreHeapWordNativeFunction.into_llvm(context)?;
         }
+        revive_llvm_context::PolkaVMLoadHeapWordFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMStoreHeapWordFunction.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMLoadStorageWordFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMStoreStorageWordFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMLoadTransientStorageWordFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMStoreTransientStorageWordFunction.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMWordToPointerFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMExitFunction.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMEventLogFunction::<0>.into_llvm(context)?;
+        revive_llvm_context::PolkaVMEventLogFunction::<1>.into_llvm(context)?;
+        revive_llvm_context::PolkaVMEventLogFunction::<2>.into_llvm(context)?;
+        revive_llvm_context::PolkaVMEventLogFunction::<3>.into_llvm(context)?;
+        revive_llvm_context::PolkaVMEventLogFunction::<4>.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMDivisionFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMSignedDivisionFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMRemainderFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMSignedRemainderFunction.into_llvm(context)?;
+
+        revive_llvm_context::PolkaVMSbrkFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMKeccak256TwoWordsFunction.into_llvm(context)?;
+        if has_keccak_single {
+            revive_llvm_context::PolkaVMKeccak256OneWordFunction.declare(context)?;
+            revive_llvm_context::PolkaVMKeccak256OneWordFunction.into_llvm(context)?;
+        }
+        revive_llvm_context::PolkaVMCallValueFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMCallValueNonzeroFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMCallDataLoadFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMCallerFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMRevertEmptyFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMRevertFunction.into_llvm(context)?;
+        revive_llvm_context::PolkaVMRevertPanicFunction.into_llvm(context)?;
+
+        if heap_op_count > SBRK_NOINLINE_THRESHOLD {
+            if let Some(sbrk_func) = context.get_function("__sbrk_internal", false) {
+                revive_llvm_context::PolkaVMFunction::set_attributes(
+                    context.llvm(),
+                    sbrk_func.borrow().declaration(),
+                    &[revive_llvm_context::PolkaVMAttribute::NoInline],
+                    true,
+                );
+            }
+        }
+
+        let mut codegen = LlvmCodegen::new(heap_opt, type_info, inline_decisions);
+        codegen
+            .generate_object(&ir_object, context)
+            .map_err(|e| anyhow::anyhow!("newyork LLVM codegen: {e}"))?;
 
         context.set_debug_location(
             self.yul_object.location.line,

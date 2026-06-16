@@ -587,18 +587,14 @@ fn bytecode_object(output: &SolcStandardJsonOutput, path: &str, name: &str) -> S
 /// pipeline, and the field is off by default (the disabled fixture omits it).
 #[test]
 fn pvm_codegen_newyork_input_setting() {
-    let enabled = execute_resolc_with_stdin_input(
-        &[JSON_OPTION],
-        STANDARD_JSON_NEWYORK_ENABLED_PATH,
-    );
+    let enabled =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NEWYORK_ENABLED_PATH);
     assert_command_success(
         &enabled,
         "the newyork-enabled standard JSON input should build",
     );
-    let disabled = execute_resolc_with_stdin_input(
-        &[JSON_OPTION],
-        STANDARD_JSON_NEWYORK_DISABLED_PATH,
-    );
+    let disabled =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NEWYORK_DISABLED_PATH);
     assert_command_success(&disabled, "the stock standard JSON input should build");
 
     let enabled_output = to_solc_standard_json_output(&enabled.stdout);
@@ -617,10 +613,8 @@ fn pvm_codegen_newyork_input_setting() {
 /// and produces the same bytecode as the `settings.polkavm.newyork` input field.
 #[test]
 fn pvm_codegen_newyork_cli_flag() {
-    let stock = execute_resolc_with_stdin_input(
-        &[JSON_OPTION],
-        STANDARD_JSON_NEWYORK_DISABLED_PATH,
-    );
+    let stock =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NEWYORK_DISABLED_PATH);
     assert_command_success(&stock, "the stock standard JSON input should build");
     let flagged = execute_resolc_with_stdin_input(
         &[JSON_OPTION, "--newyork"],
@@ -640,10 +634,8 @@ fn pvm_codegen_newyork_cli_flag() {
         "--newyork should select a different pipeline than the default"
     );
 
-    let via_field = execute_resolc_with_stdin_input(
-        &[JSON_OPTION],
-        STANDARD_JSON_NEWYORK_ENABLED_PATH,
-    );
+    let via_field =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NEWYORK_ENABLED_PATH);
     assert_command_success(
         &via_field,
         "the newyork-enabled standard JSON input should build",

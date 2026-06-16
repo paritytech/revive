@@ -88,7 +88,3 @@ When `differential: true`, actions run on both EVM and PVM, asserting identical 
 - Avoid pinning when possible
 - Always include `Cargo.lock` in PRs
 - Don't run `cargo update` with other changes (separate PR)
-
-## Rust Version
-
-Minimum supported: 1.85.0 (specified in workspace)

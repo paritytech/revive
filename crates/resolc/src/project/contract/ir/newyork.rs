@@ -44,13 +44,10 @@ impl NewYork {
 
     /// Translate the Yul AST to newyork IR with heap optimization analysis.
     ///
-    /// `debug_output_directory` is forwarded so the `NEWYORK_DUMP_IR` mid-pipeline IR snapshot is
-    /// written into `--debug-output-dir` (or skipped when none is configured).
-    fn translate_to_ir(
-        &self,
-        debug_output_directory: Option<&std::path::Path>,
-    ) -> anyhow::Result<TranslationResult> {
-        revive_newyork::translate_yul_object(&self.yul_object, debug_output_directory)
+    /// `capture_ir_snapshot` requests the mid-pipeline IR snapshot, which is dumped via
+    /// [`revive_llvm_context::DebugConfig`] when a debug output directory is configured.
+    fn translate_to_ir(&self, capture_ir_snapshot: bool) -> anyhow::Result<TranslationResult> {
+        revive_newyork::translate_yul_object(&self.yul_object, capture_ir_snapshot)
             .map_err(|e| anyhow::anyhow!("newyork IR translation: {e}"))
     }
 }
@@ -85,25 +82,13 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
 
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
         let translation_result =
-            self.translate_to_ir(context.debug_config().output_directory.as_deref())?;
+            self.translate_to_ir(context.debug_config().output_directory.is_some())?;
         let ir_object = translation_result.object;
         let heap_opt = translation_result.heap_opt;
         let type_info = translation_result.type_info;
         let mem_opt = translation_result.mem_opt;
+        let ir_snapshot = translation_result.ir_snapshot;
 
-        // Dump the final, fully optimized IR annotated with the inferred type
-        // widths so the narrow pass's effect is visible in the dump.
-        if crate::is_env_enabled(crate::RESOLC_DEBUG_IR_ENV) {
-            if let Some(output_directory) = context.debug_config().output_directory.as_ref() {
-                use std::io::Write;
-                let ir_text = revive_newyork::print_object_with_types(&ir_object, &type_info);
-                let mut file_path = output_directory.to_owned();
-                file_path.push(format!("{}.newyork.txt", ir_object.name.replace('/', "_")));
-                if let Ok(mut f) = std::fs::File::create(&file_path) {
-                    let _ = writeln!(f, "{}", ir_text);
-                }
-            }
-        }
         let inline_decisions: std::collections::BTreeMap<u32, revive_newyork::InlineDecision> =
             translation_result
                 .inline_results
@@ -117,58 +102,45 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
         let has_keccak_single = keccak_single_count >= KECCAK_SINGLE_THRESHOLD;
         let use_native_heap = heap_opt.all_native();
 
-        if crate::is_env_enabled(crate::RESOLC_DEBUG_HEAP_ENV) {
-            if let Some(output_directory) = context.debug_config().output_directory.as_ref() {
-                use std::io::Write;
-                let mut log_path = output_directory.to_owned();
-                log_path.push(crate::HEAP_DEBUG_LOG_FILE);
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&log_path)
-                {
-                    let _ = writeln!(
-                        file,
-                        "HEAP_OPT [{}]: all_native={}, total={}, unknown={}, tainted={}, escaping={}, native_regions={:?}, native_offsets={:?}, dynamic_escapes={}, dynamic_accesses={}",
-                        ir_object.name,
-                        use_native_heap,
-                        heap_opt.total_accesses,
-                        heap_opt.unknown_accesses,
-                        heap_opt.tainted_count,
-                        heap_opt.escaping_count,
-                        heap_opt.native_safe_regions,
-                        heap_opt.native_safe_offsets,
-                        heap_opt.has_dynamic_escapes,
-                        heap_opt.has_dynamic_accesses,
-                    );
-                }
-            }
+        // Dump the newyork debug artifacts into the debug output directory, when configured.
+        // The final IR is annotated with the inferred type widths so the narrow pass's effect is
+        // visible; the snapshot is the IR before the late passes.
+        context.debug_config().dump_newyork(
+            None,
+            &revive_newyork::print_object_with_types(&ir_object, &type_info),
+        )?;
+        if let Some(snapshot) = ir_snapshot.as_ref() {
+            context
+                .debug_config()
+                .dump_newyork(Some("snapshot"), snapshot)?;
         }
-
-        if crate::is_env_enabled(crate::RESOLC_DEBUG_MEM_ENV) {
-            if let Some(output_directory) = context.debug_config().output_directory.as_ref() {
-                use std::io::Write;
-                let mut log_path = output_directory.to_owned();
-                log_path.push(crate::MEM_DEBUG_LOG_FILE);
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&log_path)
-                {
-                    let _ = writeln!(
-                        file,
-                        "MEM_OPT [{}]: loads_eliminated={}, stores_eliminated={}, values_tracked={}, keccak_pairs_fused={}, keccak_singles_fused={}, fmp_loads_eliminated={}",
-                        ir_object.name,
-                        mem_opt.loads_eliminated,
-                        mem_opt.stores_eliminated,
-                        mem_opt.values_tracked,
-                        mem_opt.keccak_pairs_fused,
-                        mem_opt.keccak_singles_fused,
-                        mem_opt.fmp_loads_eliminated,
-                    );
-                }
-            }
-        }
+        context.debug_config().dump_newyork(
+            Some("heap"),
+            &format!(
+                "all_native={}, total={}, unknown={}, tainted={}, escaping={}, native_regions={:?}, native_offsets={:?}, dynamic_escapes={}, dynamic_accesses={}",
+                use_native_heap,
+                heap_opt.total_accesses,
+                heap_opt.unknown_accesses,
+                heap_opt.tainted_count,
+                heap_opt.escaping_count,
+                heap_opt.native_safe_regions,
+                heap_opt.native_safe_offsets,
+                heap_opt.has_dynamic_escapes,
+                heap_opt.has_dynamic_accesses,
+            ),
+        )?;
+        context.debug_config().dump_newyork(
+            Some("mem"),
+            &format!(
+                "loads_eliminated={}, stores_eliminated={}, values_tracked={}, keccak_pairs_fused={}, keccak_singles_fused={}, fmp_loads_eliminated={}",
+                mem_opt.loads_eliminated,
+                mem_opt.stores_eliminated,
+                mem_opt.values_tracked,
+                mem_opt.keccak_pairs_fused,
+                mem_opt.keccak_singles_fused,
+                mem_opt.fmp_loads_eliminated,
+            ),
+        )?;
 
         if let Some(debug_info) = context.debug_info() {
             let di_builder = debug_info.builder();

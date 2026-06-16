@@ -118,18 +118,7 @@ pub fn build_solidity_with_options(
         return Ok(output);
     }
     let use_newyork = cfg!(feature = "newyork");
-    let debug_config = if crate::is_env_enabled(crate::RESOLC_DEBUG_BLOB_ENV) {
-        let suffix = if use_newyork { "newyork" } else { "yul" };
-        DebugConfig::new(
-            Some(std::path::PathBuf::from(format!(
-                "/tmp/debug_llvm_{}",
-                suffix
-            ))),
-            optimizer_settings.middle_end_as_string() != "z",
-        )
-    } else {
-        DebugConfig::new(None, optimizer_settings.middle_end_as_string() != "z")
-    };
+    let debug_config = DebugConfig::new(None, optimizer_settings.middle_end_as_string() != "z");
     let linker_symbols = libraries.as_linker_symbols()?;
     let build = Project::try_from_standard_json_output(
         &mut output,
@@ -425,17 +414,6 @@ pub fn compile_blob_with_options(
         .as_str();
     let blob = hex::decode(bytecode).expect("hex encoding should always be valid");
     assert_eq!(&blob[..3], b"PVM");
-
-    if crate::is_env_enabled(crate::RESOLC_DEBUG_BLOB_ENV) {
-        eprintln!(
-            "DEBUG [{}]: blob size={}, first_bytes={:?}, use_newyork={}",
-            contract_name,
-            blob.len(),
-            &blob[..20.min(blob.len())],
-            use_newyork
-        );
-        std::fs::write(format!("/tmp/debug_blob_{}.pvm", contract_name), &blob).ok();
-    }
 
     PVM_BLOB_CACHE.lock().unwrap().insert(id, blob.clone());
 

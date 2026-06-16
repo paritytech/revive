@@ -2182,7 +2182,7 @@ object "T" {
             let mut lexer = Lexer::new(source.to_owned());
             let yul_object =
                 YulObject::parse(&mut lexer, None).expect("the Yul object should parse");
-            crate::translate_yul_object(&yul_object, None)
+            crate::translate_yul_object(&yul_object, false)
                 .expect("translation should succeed without a validator ICE");
         }
     }

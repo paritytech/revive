@@ -71,42 +71,14 @@ pub(crate) mod version;
 /// The rayon worker stack size.
 pub const RAYON_WORKER_STACK_SIZE: usize = 64 * 1024 * 1024;
 
-/// Returns whether the toggle environment variable `name` is enabled.
-///
-/// A toggle is enabled only when set to exactly `"1"` (not merely present). Every
-/// `RESOLC_*`/`NEWYORK_*` debug/dump toggle below is resolved through this so they
-/// all behave the same way — a user disables one by setting it to e.g. `0` rather
-/// than unsetting the variable.
-pub fn is_env_enabled(name: &str) -> bool {
-    std::env::var(name)
-        .map(|value| value == "1")
-        .unwrap_or(false)
+/// The name of the IR pipeline, used for the `resolc_pipeline` standard JSON output field.
+pub fn pipeline_name(use_newyork: bool) -> &'static str {
+    if use_newyork {
+        "newyork"
+    } else {
+        "yul"
+    }
 }
-
-/// File name (within the debug output directory) for the heap-optimization log
-/// appended to by [`RESOLC_DEBUG_HEAP_ENV`].
-pub const HEAP_DEBUG_LOG_FILE: &str = "resolc_heap_debug.log";
-
-/// File name (within the debug output directory) for the memory-optimization log
-/// appended to by [`RESOLC_DEBUG_MEM_ENV`].
-pub const MEM_DEBUG_LOG_FILE: &str = "resolc_mem_debug.log";
-
-/// Environment variable: when set to `"1"`, dumps compiled blobs and metadata for newyork
-/// investigations (test harness only).
-pub const RESOLC_DEBUG_BLOB_ENV: &str = "RESOLC_DEBUG_BLOB";
-
-/// Environment variable: when set to `"1"`, writes the post-narrowing newyork IR (annotated
-/// with inferred type widths) for every compiled object to `<object>.newyork.txt` in the
-/// debug output directory.
-pub const RESOLC_DEBUG_IR_ENV: &str = "RESOLC_DEBUG_IR";
-
-/// Environment variable: when set to `"1"`, appends the heap-optimization analysis result for
-/// every compiled object to [`HEAP_DEBUG_LOG_FILE`] in the debug output directory.
-pub const RESOLC_DEBUG_HEAP_ENV: &str = "RESOLC_DEBUG_HEAP";
-
-/// Environment variable: when set to `"1"`, appends the memory-optimization statistics for
-/// every compiled object to [`MEM_DEBUG_LOG_FILE`] in the debug output directory.
-pub const RESOLC_DEBUG_MEM_ENV: &str = "RESOLC_DEBUG_MEM";
 
 /// Runs the Yul mode.
 ///
@@ -276,6 +248,7 @@ pub fn standard_json<T: Compiler>(
         include_paths,
         allow_paths,
     )?;
+    solc_output.resolc_pipeline = Some(pipeline_name(use_newyork).to_owned());
 
     if language == SolcStandardJsonInputLanguage::Yul {
         let solc_output = solc.validate_yul_standard_json(&mut solc_input, messages)?;

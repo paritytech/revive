@@ -44,6 +44,9 @@ pub struct Output {
     /// The `resolc` compiler version.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub revive_version: Option<String>,
+    /// The IR pipeline that produced the output: `"newyork"` or `"yul"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resolc_pipeline: Option<String>,
 }
 
 #[cfg(feature = "resolc")]
@@ -80,6 +83,7 @@ impl Output {
             version: None,
             long_version: None,
             revive_version: None,
+            resolc_pipeline: None,
         }
     }
 
@@ -95,6 +99,7 @@ impl Output {
             version: None,
             long_version: None,
             revive_version: None,
+            resolc_pipeline: None,
         }
     }
 

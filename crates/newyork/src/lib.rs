@@ -31,12 +31,6 @@
 //! - [`inline`] - Function inlining with custom heuristics for PolkaVM
 #![deny(clippy::all)]
 
-/// Environment variable: when set to `"1"`, dumps the newyork IR for every translated object to
-/// `newyork_ir_<object>.txt` inside the caller-provided debug output directory
-/// (`--debug-output-dir`), after the intra-object optimization passes have run. When the variable
-/// is set but no debug output directory was configured, the dump is skipped.
-pub const NEWYORK_DUMP_IR_ENV: &str = "NEWYORK_DUMP_IR";
-
 pub mod from_yul;
 pub mod guard_narrow;
 pub mod heap_opt;
@@ -89,6 +83,9 @@ pub struct TranslationResult {
     pub mem_opt: MemOptResults,
     /// Inlining results (which functions were inlined and removed).
     pub inline_results: InlineResults,
+    /// The IR printed after the intra-object optimization passes, before the late passes.
+    /// `Some` only when `capture_ir_snapshot` was requested.
+    pub ir_snapshot: Option<String>,
 }
 
 /// Translates a Yul object to newyork IR.
@@ -103,20 +100,20 @@ pub struct TranslationResult {
 /// use revive_yul::parser::statement::object::Object;
 ///
 /// let yul_object: Object = /* parse yul */;
-/// let result = translate_yul_object(&yul_object, None)?;
+/// let result = translate_yul_object(&yul_object, false)?;
 /// let ir_object = result.object;
 /// let heap_opt = result.heap_opt;
 /// ```
 pub fn translate_yul_object(
     yul_object: &revive_yul::parser::statement::object::Object,
-    debug_output_directory: Option<&std::path::Path>,
+    capture_ir_snapshot: bool,
 ) -> Result<TranslationResult, TranslationError> {
     let mut translator = YulTranslator::new();
     let mut ir_object = translator.translate_object(yul_object)?;
 
     let (mut inline_results, mem_opt_results) = optimize_object_tree(&mut ir_object);
 
-    dump_ir_snapshot_if_requested(&ir_object, debug_output_directory);
+    let ir_snapshot = capture_ir_snapshot.then(|| print_object(&ir_object));
 
     let mut type_info = TypeInference::new();
     type_info.infer_object_tree(&ir_object);
@@ -146,32 +143,8 @@ pub fn translate_yul_object(
         type_info,
         mem_opt: mem_opt_results,
         inline_results,
+        ir_snapshot,
     })
-}
-
-/// When `NEWYORK_DUMP_IR` is set, dump this post-`optimize_object_tree` IR snapshot into the
-/// caller-provided debug output directory. If the variable is set but no debug output directory
-/// was configured, skip the dump rather than writing to a hardcoded path.
-fn dump_ir_snapshot_if_requested(
-    ir_object: &ir::Object,
-    debug_output_directory: Option<&std::path::Path>,
-) {
-    if std::env::var(NEWYORK_DUMP_IR_ENV)
-        .map(|value| value == "1")
-        .unwrap_or(false)
-    {
-        if let Some(directory) = debug_output_directory {
-            use std::io::Write;
-            let mut dump_path = directory.to_owned();
-            dump_path.push(format!(
-                "newyork_ir_{}.txt",
-                ir_object.name.replace('/', "_")
-            ));
-            if let Ok(mut file) = std::fs::File::create(&dump_path) {
-                let _ = write!(file, "{}", print_object(ir_object));
-            }
-        }
-    }
 }
 
 /// Maximum number of late inline + simplify + narrow iterations.

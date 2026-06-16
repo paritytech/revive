@@ -432,7 +432,7 @@ pub fn compile_blob_with_options(
             contract_name,
             blob.len(),
             &blob[..20.min(blob.len())],
-            std::env::var(crate::RESOLC_USE_NEWYORK_ENV).unwrap_or_default()
+            use_newyork
         );
         std::fs::write(format!("/tmp/debug_blob_{}.pvm", contract_name), &blob).ok();
     }

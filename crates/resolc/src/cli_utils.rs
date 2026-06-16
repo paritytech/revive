@@ -62,6 +62,13 @@ pub const STANDARD_JSON_NEWYORK_ENABLED_PATH: &str =
 /// `settings.polkavm.newyork` field, so it compiles through the stock pipeline.
 pub const STANDARD_JSON_NEWYORK_DISABLED_PATH: &str =
     "src/tests/data/standard_json/newyork_disabled.json";
+/// A `"language": "Yul"` standard JSON fixture enabling newyork via `settings.polkavm.newyork`.
+pub const STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH: &str =
+    "src/tests/data/standard_json/yul_newyork_enabled.json";
+/// The same Yul source as [`STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH`] without the
+/// `settings.polkavm.newyork` field, so it compiles through the stock pipeline.
+pub const STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH: &str =
+    "src/tests/data/standard_json/yul_newyork_disabled.json";
 /// The standard JSON PVM codegen for all files on a per-file basis test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.

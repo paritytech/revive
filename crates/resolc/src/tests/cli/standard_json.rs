@@ -12,6 +12,7 @@ use crate::cli_utils::{
     STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
     STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
     STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH,
+    STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH, STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH,
     STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
 };
 
@@ -646,5 +647,28 @@ fn pvm_codegen_newyork_cli_flag() {
         flagged_bytecode,
         bytecode_object(&via_field_output, "C.sol", "C"),
         "--newyork and settings.polkavm.newyork should select the same pipeline"
+    );
+}
+
+/// `settings.polkavm.newyork` also selects the newyork pipeline for `"language": "Yul"`
+/// standard JSON input: the same Yul source yields different bytecode than the stock pipeline.
+#[test]
+fn pvm_codegen_newyork_yul_input() {
+    let enabled =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH);
+    assert_command_success(&enabled, "the newyork-enabled Yul standard JSON input should build");
+    let disabled =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH);
+    assert_command_success(&disabled, "the stock Yul standard JSON input should build");
+
+    let enabled_output = to_solc_standard_json_output(&enabled.stdout);
+    let disabled_output = to_solc_standard_json_output(&disabled.stdout);
+    assert_no_errors(&enabled_output);
+    assert_no_errors(&disabled_output);
+
+    assert_ne!(
+        bytecode_object(&enabled_output, "Test", "Test"),
+        bytecode_object(&disabled_output, "Test", "Test"),
+        "settings.polkavm.newyork should select a different pipeline for Yul input"
     );
 }

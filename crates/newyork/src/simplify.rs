@@ -159,6 +159,24 @@ impl Simplifier {
         }
     }
 
+    /// Clears the per-function analysis state before simplifying the next function.
+    ///
+    /// The value-id-keyed caches (`constants`, `copies`, `unary_definitions`,
+    /// `binary_definitions`) cannot collide across functions because `ValueId`s are
+    /// globally unique, but the `env_reads` cache is keyed by [`EnvRead`] and *would*
+    /// leak an out-of-scope value into the next function if it were not reset. Clearing
+    /// all of them keeps the intent explicit: any new per-function map added to
+    /// `Simplifier` belongs here too. `next_value_id` is deliberately not reset (it must
+    /// keep advancing to preserve globally unique ids) and `statistics` accumulates over
+    /// the whole object.
+    fn clear_per_function_state(&mut self) {
+        self.constants.clear();
+        self.copies.clear();
+        self.unary_definitions.clear();
+        self.binary_definitions.clear();
+        self.env_reads.clear();
+    }
+
     /// Simplifies an entire object in place.
     pub fn simplify_object(&mut self, object: &mut Object) -> SimplifyResults {
         self.next_value_id = ValueId(object.find_max_value_id() + 1);
@@ -168,10 +186,7 @@ impl Simplifier {
             eliminate_dead_code_in_statements(&mut object.code.statements, &BTreeSet::new());
 
         for function in object.functions.values_mut() {
-            self.constants.clear();
-            self.copies.clear();
-            self.unary_definitions.clear();
-            self.env_reads.clear();
+            self.clear_per_function_state();
             function.body.statements =
                 self.simplify_statements(std::mem::take(&mut function.body.statements));
 

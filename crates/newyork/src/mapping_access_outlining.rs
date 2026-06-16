@@ -1,4 +1,4 @@
-//! Compound outlining pass for newyork IR.
+//! Mapping-access outlining pass for newyork IR.
 //!
 //! This pass detects multi-statement patterns in the IR and replaces them
 //! with compound IR nodes that get lowered to single outlined function calls.
@@ -15,7 +15,7 @@ use crate::ir::{Block, Expression, Object, Region, Statement, Value};
 
 /// Statistics from the compound outlining pass.
 #[derive(Default, Debug)]
-pub struct CompoundOutliningStatistics {
+pub struct MappingAccessOutliningStatistics {
     /// Number of mapping sload patterns replaced.
     pub mapping_sloads: usize,
     /// Number of mapping sstore patterns replaced.
@@ -23,8 +23,8 @@ pub struct CompoundOutliningStatistics {
 }
 
 /// Run compound outlining on an entire object tree (including subobjects).
-pub fn outline_compounds_in_object(object: &mut Object) -> CompoundOutliningStatistics {
-    let mut statistics = CompoundOutliningStatistics::default();
+pub fn outline_mapping_accesses_in_object(object: &mut Object) -> MappingAccessOutliningStatistics {
+    let mut statistics = MappingAccessOutliningStatistics::default();
 
     outline_block(&mut object.code, &mut statistics);
     for function in object.functions.values_mut() {
@@ -32,7 +32,7 @@ pub fn outline_compounds_in_object(object: &mut Object) -> CompoundOutliningStat
     }
 
     for sub_object in &mut object.subobjects {
-        let sub_object_statistics = outline_compounds_in_object(sub_object);
+        let sub_object_statistics = outline_mapping_accesses_in_object(sub_object);
         statistics.mapping_sloads += sub_object_statistics.mapping_sloads;
         statistics.mapping_sstores += sub_object_statistics.mapping_sstores;
     }
@@ -50,7 +50,7 @@ pub fn outline_compounds_in_object(object: &mut Object) -> CompoundOutliningStat
 /// would delete the keccak definition while the outer reference still points at it, producing a
 /// use-before-definition that the IR validator rejects (a compiler ICE on valid input). The
 /// whole-block count sees the outer use and leaves such hashes alone.
-fn outline_block(block: &mut Block, statistics: &mut CompoundOutliningStatistics) {
+fn outline_block(block: &mut Block, statistics: &mut MappingAccessOutliningStatistics) {
     let use_counts = count_value_uses(&block.statements);
     for statement in &mut block.statements {
         outline_nested_regions(statement, &use_counts, statistics);
@@ -62,7 +62,7 @@ fn outline_block(block: &mut Block, statistics: &mut CompoundOutliningStatistics
 fn outline_nested_regions(
     statement: &mut Statement,
     use_counts: &BTreeMap<u32, usize>,
-    statistics: &mut CompoundOutliningStatistics,
+    statistics: &mut MappingAccessOutliningStatistics,
 ) {
     match statement {
         Statement::If {
@@ -106,7 +106,7 @@ fn outline_nested_regions(
 fn outline_region(
     region: &mut Region,
     use_counts: &BTreeMap<u32, usize>,
-    statistics: &mut CompoundOutliningStatistics,
+    statistics: &mut MappingAccessOutliningStatistics,
 ) {
     for statement in &mut region.statements {
         outline_nested_regions(statement, use_counts, statistics);
@@ -140,7 +140,7 @@ fn count_value_uses(statements: &[Statement]) -> BTreeMap<u32, usize> {
 fn outline_statements(
     statements: &mut Vec<Statement>,
     use_counts: &BTreeMap<u32, usize>,
-    statistics: &mut CompoundOutliningStatistics,
+    statistics: &mut MappingAccessOutliningStatistics,
 ) {
     let mut keccak_definitions: BTreeMap<u32, (usize, Value, Value)> = BTreeMap::new();
     for (index, statement) in statements.iter().enumerate() {
@@ -305,7 +305,7 @@ mod tests {
             data: BTreeMap::new(),
         };
 
-        let statistics = outline_compounds_in_object(&mut object);
+        let statistics = outline_mapping_accesses_in_object(&mut object);
 
         assert_eq!(
             statistics.mapping_sloads, 0,
@@ -351,7 +351,7 @@ mod tests {
             data: BTreeMap::new(),
         };
 
-        let statistics = outline_compounds_in_object(&mut object);
+        let statistics = outline_mapping_accesses_in_object(&mut object);
 
         assert_eq!(
             statistics.mapping_sloads, 1,

@@ -27,12 +27,12 @@
 //! `inline_functions` is invoked three times:
 //!
 //! 1. **Early** — at the start of `optimize_object_tree`, before simplify /
-//!    mem_opt / compound_outlining / guard_narrow. The IR is full of redundant
+//!    mem_opt / mapping_access_outlining / guard_narrow. The IR is full of redundant
 //!    `Let` bindings and unfolded arithmetic; the thresholds above were
 //!    empirically calibrated to that shape.
 //! 2. **Shrink-prediction** — near the end of `optimize_object_tree`, via
 //!    [`inline_by_shrink_prediction`]. After simplify / mem_opt /
-//!    compound_outlining / guard_narrow have run, that pass force-inlines
+//!    mapping_access_outlining / guard_narrow have run, that pass force-inlines
 //!    functions whose predicted post-substitution size beats their keep-cost by
 //!    lowering their `size_estimate` and re-running `inline_functions`.
 //! 3. **Late** — after the parameter narrowing fixed point, via

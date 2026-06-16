@@ -37,12 +37,12 @@
 /// is set but no debug output directory was configured, the dump is skipped.
 pub const NEWYORK_DUMP_IR_ENV: &str = "NEWYORK_DUMP_IR";
 
-pub mod compound_outlining;
 pub mod from_yul;
 pub mod guard_narrow;
 pub mod heap_opt;
 pub mod inline;
 pub mod ir;
+pub mod mapping_access_outlining;
 pub mod mem_opt;
 pub mod printer;
 pub mod simplify;
@@ -186,7 +186,7 @@ const LATE_INLINE_ITERATIONS: u32 = 1;
 ///
 /// Now that parameter narrowing has propagated through the IR and simplification has folded any
 /// newly exposed constants, some wrapper functions have shrunk below the inline thresholds. After
-/// the early inline + heap + mem_opt + compound_outlining + guard_narrow + first round of param
+/// the early inline + heap + mem_opt + mapping_access_outlining + guard_narrow + first round of param
 /// narrowing has completed, many wrapper helpers have collapsed to a handful of statements. The
 /// early inliner couldn't act on them because they were still wrapped in pre-simplify noise;
 /// running the inliner again at this point — with re-estimated function sizes and on top of the
@@ -194,7 +194,7 @@ const LATE_INLINE_ITERATIONS: u32 = 1;
 ///
 /// This is intentionally separate from the early inliner: the early pass exposes intra-procedural
 /// opportunities that drive the rest of the pipeline; the late pass collects the per-function
-/// shrinkage produced by every subsequent optimization (mem_opt, compound_outlining, guard_narrow,
+/// shrinkage produced by every subsequent optimization (mem_opt, mapping_access_outlining, guard_narrow,
 /// full type narrowing).
 ///
 /// Within the loop, compound outlining + guard narrowing are re-run after inlining because the
@@ -217,7 +217,7 @@ fn run_late_inline_loop(
         let mut simplifier = Simplifier::new();
         simplifier.simplify_object(ir_object);
 
-        compound_outlining::outline_compounds_in_object(ir_object);
+        mapping_access_outlining::outline_mapping_accesses_in_object(ir_object);
         guard_narrow::narrow_guards_in_object(ir_object);
         let mut simplifier_post = Simplifier::new();
         simplifier_post.simplify_object(ir_object);
@@ -291,7 +291,7 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
     let mut simplifier2 = Simplifier::new();
     simplifier2.simplify_object(object);
 
-    compound_outlining::outline_compounds_in_object(object);
+    mapping_access_outlining::outline_mapping_accesses_in_object(object);
     guard_narrow::narrow_guards_in_object(object);
 
     let mut simplifier3 = Simplifier::new();

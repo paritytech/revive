@@ -3227,7 +3227,7 @@ fn escape_byteorder_sweep() {
 
 /// Differential sweep over storage + mapping-slot fusion. Performs >= 9
 /// mapping-style sstores in the `let h := keccak256(..); sstore(h, _)` form so
-/// compound_outlining's keccak256_pair+sstore -> mapping_sstore fusion (T9)
+/// mapping_access_outlining's keccak256_pair+sstore -> mapping_sstore fusion (T9)
 /// triggers, plus a fused mapping_sload read-back. The differential runner
 /// compares the full resulting storage state between newyork-PVM and solc-EVM,
 /// so any fused slot/value mis-computation shows as a storage mismatch.

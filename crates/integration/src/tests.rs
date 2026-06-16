@@ -1643,9 +1643,9 @@ fn nested_function_forward_declared() {
     // `outer` calls `inner`, defined within its own body, and returns `inner()`'s
     // result (42). Guards the newyork "Undefined function: inner" bug, where the
     // first pass failed to forward-declare nested functions (see `collect_functions`
-    // in crates/newyork/src/from_yul.rs). `compile_yul_blob` honours
-    // `RESOLC_USE_NEWYORK`, so this exercises whichever pipeline is under test and
-    // panics if compilation fails.
+    // in crates/newyork/src/from_yul.rs). `compile_yul_blob` uses the newyork
+    // pipeline when the crate is built with the `newyork` feature, so this exercises
+    // whichever pipeline is under test and panics if compilation fails.
     let code = compile_yul_blob(
         "Test",
         r#"object "Test" {
@@ -1716,8 +1716,9 @@ fn for_condition_call_argument_trimmed() {
     // condition `cond(i, 5)` is one of those call sites; before the fix it was left
     // untrimmed, producing a call with the wrong argument count (a hard error under
     // newyork) and the analysis could have dropped a parameter whose value actually
-    // varied at that site. `compile_yul_blob` honours `RESOLC_USE_NEWYORK`, so this
-    // exercises whichever pipeline is under test and panics if compilation fails.
+    // varied at that site. `compile_yul_blob` uses the newyork pipeline when the
+    // crate is built with the `newyork` feature, so this exercises whichever pipeline
+    // is under test and panics if compilation fails.
     //
     // warmup `cond(0, 5)` = 1, plus the loop body adds i for i in 0..5 (= 10), so the
     // returned value is 11.
@@ -2056,7 +2057,7 @@ fn safe_truncate_int_to_xlen_works() {
 
 // ---------------------------------------------------------------------------
 // Round-2 audit (2026-06-01): soundness divergences against the EVM reference
-// originally found under RESOLC_USE_NEWYORK=1. Each test reproduced a specific
+// originally found with the newyork pipeline. Each test reproduced a specific
 // newyork miscompile; the corresponding fixes have since landed, so these are
 // kept as regression guards.
 // ---------------------------------------------------------------------------

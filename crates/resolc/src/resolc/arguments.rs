@@ -67,8 +67,7 @@ pub struct Arguments {
     /// Route Yul lowering through the experimental newyork IR pipeline.
     ///
     /// Orthogonal to the input mode: composes with `--yul`, `--standard-json`,
-    /// `--combined-json`, and the default Solidity mode. Equivalent to setting
-    /// the `RESOLC_USE_NEWYORK=1` environment variable or the
+    /// `--combined-json`, and the default Solidity mode. Equivalent to setting the
     /// `settings.polkavm.newyork` field in standard JSON input. Off by default.
     #[arg(long = "newyork")]
     pub newyork: bool,

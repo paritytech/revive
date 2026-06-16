@@ -159,18 +159,6 @@ pub fn execute_command(
     arguments: &[&str],
     stdin_file_path: Option<&str>,
 ) -> CommandResult {
-    execute_command_with_removed_env(command, arguments, stdin_file_path, &[])
-}
-
-/// Like [`execute_command`], but removes the `remove_env` variables from the child
-/// process environment. Used to keep the newyork-pipeline tests independent of the
-/// ambient `RESOLC_USE_NEWYORK` gate that `make test` sets on this branch.
-fn execute_command_with_removed_env(
-    command: &str,
-    arguments: &[&str],
-    stdin_file_path: Option<&str>,
-    remove_env: &[&str],
-) -> CommandResult {
     log::trace!(
         "executing command: '{command} {}{}'",
         arguments.join(" "),
@@ -183,16 +171,13 @@ fn execute_command_with_removed_env(
         Some(path) => Stdio::from(File::open(path).unwrap()),
         None => Stdio::null(),
     };
-    let mut builder = Command::new(command);
-    builder
+    let result = Command::new(command)
         .args(arguments)
         .stdin(stdin_config)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    for variable in remove_env {
-        builder.env_remove(variable);
-    }
-    let result = builder.output().unwrap();
+        .stderr(Stdio::piped())
+        .output()
+        .unwrap();
 
     CommandResult {
         stdout: String::from_utf8_lossy(&result.stdout).to_string(),
@@ -200,22 +185,6 @@ fn execute_command_with_removed_env(
         success: result.status.success(),
         code: result.status.code().unwrap(),
     }
-}
-
-/// Executes `resolc` with `arguments` and the file at `stdin_file_path` passed to `stdin`,
-/// with `RESOLC_USE_NEWYORK` removed from the environment. This makes the newyork pipeline
-/// selectable solely by the `--newyork` flag or the standard JSON `settings.polkavm.newyork`
-/// field, regardless of the ambient gate used by `make test` on this branch.
-pub fn execute_resolc_with_stdin_input_without_newyork_env(
-    arguments: &[&str],
-    stdin_file_path: &str,
-) -> CommandResult {
-    execute_command_with_removed_env(
-        "resolc",
-        arguments,
-        Some(stdin_file_path),
-        &[crate::RESOLC_USE_NEWYORK_ENV],
-    )
 }
 
 /// Asserts that the exit codes of executing `solc` and `resolc` are equal.

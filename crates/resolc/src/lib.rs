@@ -71,29 +71,12 @@ pub(crate) mod version;
 /// The rayon worker stack size.
 pub const RAYON_WORKER_STACK_SIZE: usize = 64 * 1024 * 1024;
 
-/// Environment variable: when set to `"1"`, routes Yul lowering through the newyork IR
-/// pipeline instead of the default `solc`/Yul path. Equivalent to passing `--newyork`
-/// on the command line; the CLI flag and the env var are OR-ed by
-/// [`resolve_use_newyork`].
-pub const RESOLC_USE_NEWYORK_ENV: &str = "RESOLC_USE_NEWYORK";
-
-/// Returns whether the newyork IR pipeline should be used.
-///
-/// The newyork pipeline is enabled if either the `--newyork` CLI flag is set
-/// (passed in as `cli_flag`) or the [`RESOLC_USE_NEWYORK_ENV`] env var is set
-/// to `"1"`. This is the single resolution point for the flag — every entry
-/// point in this module takes a `use_newyork: bool` that callers compute via
-/// this helper.
-pub fn resolve_use_newyork(cli_flag: bool) -> bool {
-    cli_flag || is_env_enabled(RESOLC_USE_NEWYORK_ENV)
-}
-
 /// Returns whether the toggle environment variable `name` is enabled.
 ///
 /// A toggle is enabled only when set to exactly `"1"` (not merely present). Every
-/// `RESOLC_*`/`NEWYORK_*` toggle ([`RESOLC_USE_NEWYORK_ENV`] and the debug/dump
-/// vars below) is resolved through this so they all behave the same way — a user
-/// disables one by setting it to e.g. `0` rather than unsetting the variable.
+/// `RESOLC_*`/`NEWYORK_*` debug/dump toggle below is resolved through this so they
+/// all behave the same way — a user disables one by setting it to e.g. `0` rather
+/// than unsetting the variable.
 pub fn is_env_enabled(name: &str) -> bool {
     std::env::var(name)
         .map(|value| value == "1")

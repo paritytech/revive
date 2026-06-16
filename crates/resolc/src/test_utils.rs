@@ -117,7 +117,7 @@ pub fn build_solidity_with_options(
     if output.has_errors() {
         return Ok(output);
     }
-    let use_newyork = crate::resolve_use_newyork(false);
+    let use_newyork = cfg!(feature = "newyork");
     let debug_config = if crate::is_env_enabled(crate::RESOLC_DEBUG_BLOB_ENV) {
         let suffix = if use_newyork { "newyork" } else { "yul" };
         DebugConfig::new(
@@ -259,7 +259,7 @@ pub fn build_solidity_and_detect_missing_libraries<T: ToString>(
         libraries,
         &solc_version,
         &DEBUG_CONFIG,
-        crate::resolve_use_newyork(false),
+        false,
     )?;
 
     let missing_libraries = project.get_missing_libraries(&deployed_libraries);
@@ -386,7 +386,7 @@ pub fn compile_blob_with_options(
     optimizer_settings: OptimizerSettings,
     libraries: SolcStandardJsonInputSettingsLibraries,
 ) -> Vec<u8> {
-    let use_newyork = crate::resolve_use_newyork(false);
+    let use_newyork = cfg!(feature = "newyork");
 
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
@@ -564,7 +564,7 @@ pub fn compile_yul_blob_with_options(
     yul_source: &str,
     optimizer_settings: OptimizerSettings,
 ) -> Vec<u8> {
-    let use_newyork = crate::resolve_use_newyork(false);
+    let use_newyork = cfg!(feature = "newyork");
     let id = CachedBlob {
         contract_name: contract_name.to_owned(),
         opt: optimizer_settings.middle_end_as_string(),

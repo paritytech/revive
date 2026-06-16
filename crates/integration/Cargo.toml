@@ -7,6 +7,9 @@ repository.workspace = true
 authors.workspace = true
 description = "revive compiler integration test cases"
 
+[features]
+newyork = ["resolc/newyork"]
+
 [dependencies]
 alloy-primitives = { workspace = true }
 alloy-sol-types = { workspace = true }

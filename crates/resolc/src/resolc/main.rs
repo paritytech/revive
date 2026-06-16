@@ -134,7 +134,7 @@ fn main_inner(
         PolkaVMTarget::PVM,
         resolc::DEFAULT_EXECUTABLE_NAME,
         optimizer_settings.level_middle_end_size,
-        resolc::resolve_use_newyork(arguments.newyork),
+        arguments.newyork,
         &arguments.llvm_arguments,
     );
 
@@ -180,7 +180,7 @@ fn main_inner(
         Some(arguments.stack_size),
     );
 
-    let use_newyork = resolc::resolve_use_newyork(arguments.newyork);
+    let use_newyork = arguments.newyork;
 
     let build = if arguments.yul {
         resolc::yul(

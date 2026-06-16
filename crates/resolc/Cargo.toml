@@ -54,6 +54,7 @@ tempfile = { workspace = true }
 [features]
 parallel = ["rayon", "revive-solc-json-interface/parallel"]
 default = ["parallel"]
+newyork = []
 
 [[bench]]
 name = "compile"

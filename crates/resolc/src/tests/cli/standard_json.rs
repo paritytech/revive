@@ -7,8 +7,7 @@ use revive_solc_json_interface::{
 
 use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
-    execute_resolc_with_stdin_input_without_newyork_env, execute_solc_with_stdin_input,
-    STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
+    execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
     STANDARD_JSON_NEWYORK_DISABLED_PATH, STANDARD_JSON_NEWYORK_ENABLED_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
     STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
@@ -588,7 +587,7 @@ fn bytecode_object(output: &SolcStandardJsonOutput, path: &str, name: &str) -> S
 /// pipeline, and the field is off by default (the disabled fixture omits it).
 #[test]
 fn pvm_codegen_newyork_input_setting() {
-    let enabled = execute_resolc_with_stdin_input_without_newyork_env(
+    let enabled = execute_resolc_with_stdin_input(
         &[JSON_OPTION],
         STANDARD_JSON_NEWYORK_ENABLED_PATH,
     );
@@ -596,7 +595,7 @@ fn pvm_codegen_newyork_input_setting() {
         &enabled,
         "the newyork-enabled standard JSON input should build",
     );
-    let disabled = execute_resolc_with_stdin_input_without_newyork_env(
+    let disabled = execute_resolc_with_stdin_input(
         &[JSON_OPTION],
         STANDARD_JSON_NEWYORK_DISABLED_PATH,
     );
@@ -618,12 +617,12 @@ fn pvm_codegen_newyork_input_setting() {
 /// and produces the same bytecode as the `settings.polkavm.newyork` input field.
 #[test]
 fn pvm_codegen_newyork_cli_flag() {
-    let stock = execute_resolc_with_stdin_input_without_newyork_env(
+    let stock = execute_resolc_with_stdin_input(
         &[JSON_OPTION],
         STANDARD_JSON_NEWYORK_DISABLED_PATH,
     );
     assert_command_success(&stock, "the stock standard JSON input should build");
-    let flagged = execute_resolc_with_stdin_input_without_newyork_env(
+    let flagged = execute_resolc_with_stdin_input(
         &[JSON_OPTION, "--newyork"],
         STANDARD_JSON_NEWYORK_DISABLED_PATH,
     );
@@ -641,7 +640,7 @@ fn pvm_codegen_newyork_cli_flag() {
         "--newyork should select a different pipeline than the default"
     );
 
-    let via_field = execute_resolc_with_stdin_input_without_newyork_env(
+    let via_field = execute_resolc_with_stdin_input(
         &[JSON_OPTION],
         STANDARD_JSON_NEWYORK_ENABLED_PATH,
     );

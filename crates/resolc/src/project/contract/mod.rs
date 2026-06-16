@@ -73,7 +73,7 @@ impl Contract {
         identifier_paths: BTreeMap<String, String>,
     ) -> anyhow::Result<ContractBuild> {
         let llvm = inkwell::context::Context::create();
-        let mut optimizer = Optimizer::new(optimizer_settings);
+        let optimizer = Optimizer::new(optimizer_settings);
         let metadata = Metadata::new(
             self.metadata_json,
             solc_version
@@ -91,37 +91,30 @@ impl Contract {
         };
         debug_config.set_contract_path(&self.identifier.full_path);
 
+        let full_path = self.identifier.full_path.as_str();
         let build = match self.ir {
-            IR::Yul(mut yul) => {
-                let module = llvm.create_module(self.identifier.full_path.as_str());
-                let mut context =
-                    PolkaVMContext::new(&llvm, module, optimizer, debug_config, memory_config);
-                context.set_solidity_data(PolkaVMContextSolidityData::default());
-                let yul_data = PolkaVMContextYulData::new(identifier_paths);
-                context.set_yul_data(yul_data);
-
-                yul.declare(&mut context)?;
-                yul.into_llvm(&mut context)
-                    .map_err(|error| anyhow::anyhow!("LLVM IR generator: {error}"))?;
-
-                context.build(self.identifier.full_path.as_str(), metadata_bytes)?
-            }
-            IR::NewYork(mut newyork) => {
-                optimizer.enable_newyork_pipeline();
-                let module = llvm.create_module(self.identifier.full_path.as_str());
-                let mut context =
-                    PolkaVMContext::new(&llvm, module, optimizer, debug_config, memory_config);
-                context.set_solidity_data(PolkaVMContextSolidityData::default());
-                let yul_data = PolkaVMContextYulData::new(identifier_paths);
-                context.set_yul_data(yul_data);
-
-                newyork.declare(&mut context)?;
-                newyork
-                    .into_llvm(&mut context)
-                    .map_err(|error| anyhow::anyhow!("NewYork IR generator: {error}"))?;
-
-                context.build(self.identifier.full_path.as_str(), metadata_bytes)?
-            }
+            IR::Yul(yul) => compile_ir(
+                yul,
+                &llvm,
+                optimizer,
+                false,
+                debug_config,
+                memory_config,
+                identifier_paths,
+                full_path,
+                metadata_bytes,
+            )?,
+            IR::NewYork(newyork) => compile_ir(
+                newyork,
+                &llvm,
+                optimizer,
+                true,
+                debug_config,
+                memory_config,
+                identifier_paths,
+                full_path,
+                metadata_bytes,
+            )?,
         };
 
         Ok(ContractBuild::new(
@@ -142,4 +135,41 @@ impl Contract {
             .filter(|library| !deployed_libraries.contains(library))
             .collect::<BTreeSet<String>>()
     }
+}
+
+/// Lowers an IR object to an LLVM module and links it into a PolkaVM build.
+///
+/// Shared by the `Yul` and `NewYork` arms of [`Contract::compile`], which differ
+/// only in whether the newyork optimizer pipeline is enabled and in the error
+/// label attached to a codegen failure.
+fn compile_ir<T: PolkaVMWriteLLVM>(
+    mut ir: T,
+    llvm: &inkwell::context::Context,
+    mut optimizer: Optimizer,
+    use_newyork: bool,
+    debug_config: DebugConfig,
+    memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+    identifier_paths: BTreeMap<String, String>,
+    full_path: &str,
+    metadata_bytes: Option<Keccak256>,
+) -> anyhow::Result<revive_llvm_context::PolkaVMBuild> {
+    if use_newyork {
+        optimizer.enable_newyork_pipeline();
+    }
+
+    let module = llvm.create_module(full_path);
+    let mut context = PolkaVMContext::new(llvm, module, optimizer, debug_config, memory_config);
+    context.set_solidity_data(PolkaVMContextSolidityData::default());
+    context.set_yul_data(PolkaVMContextYulData::new(identifier_paths));
+
+    ir.declare(&mut context)?;
+    let generator_error_label = if use_newyork {
+        "NewYork IR generator"
+    } else {
+        "LLVM IR generator"
+    };
+    ir.into_llvm(&mut context)
+        .map_err(|error| anyhow::anyhow!("{generator_error_label}: {error}"))?;
+
+    context.build(full_path, metadata_bytes)
 }

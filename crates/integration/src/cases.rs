@@ -601,7 +601,11 @@ mod tests {
 
     #[test]
     fn codesize() {
-        let path = "codesize.json";
+        let path = if cfg!(feature = "newyork") {
+            "codesize_newyork.json"
+        } else {
+            "codesize.json"
+        };
 
         let existing = File::open(path)
             .map(|file| {

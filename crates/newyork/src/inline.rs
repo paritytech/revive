@@ -794,10 +794,13 @@ fn promote_one_yield(
         then_region,
         inputs,
         outputs,
+        else_region: None,
         ..
     } = &mut statements[if_index]
     else {
-        unreachable!()
+        unreachable!(
+            "promote_one_yield only runs on leave-elimination guard Ifs, which have no else-region"
+        )
     };
     then_region.yields.push(promoted);
     let new_out = fresh_id(next_id);

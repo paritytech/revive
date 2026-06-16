@@ -236,9 +236,6 @@ impl Simplifier {
         }
     }
 
-    /// Runs only DCE (dead code elimination) on an object without the full simplification pass.
-    ///
-    /// This is useful after late-stage passes (mem_opt, keccak folding) that leave
     /// Simplifies a block in place.
     fn simplify_block(&mut self, block: &mut Block) {
         block.statements = self.simplify_statements(std::mem::take(&mut block.statements));
@@ -3160,7 +3157,7 @@ fn fuzzy_canonicalize_function(function: &crate::ir::Function) -> Vec<u8> {
     buffer
 }
 
-fn fuzzy_encode_expressionession(
+fn fuzzy_encode_expression(
     canon: &mut Canonicalizer,
     expression: &Expression,
     buffer: &mut Vec<u8>,
@@ -3249,7 +3246,7 @@ fn fuzzy_encode_statement(
             for binding in bindings {
                 canon.encode_value_id(*binding, buffer);
             }
-            fuzzy_encode_expressionession(canon, value, buffer, literal_counter);
+            fuzzy_encode_expression(canon, value, buffer, literal_counter);
         }
         Statement::SStore {
             key,
@@ -3347,7 +3344,7 @@ fn fuzzy_encode_statement(
             for statement in condition_statements {
                 fuzzy_encode_statement(canon, statement, buffer, literal_counter);
             }
-            fuzzy_encode_expressionession(canon, condition, buffer, literal_counter);
+            fuzzy_encode_expression(canon, condition, buffer, literal_counter);
             fuzzy_encode_region(canon, body, buffer, literal_counter);
             fuzzy_encode_region(canon, post, buffer, literal_counter);
             buffer.push(outputs.len() as u8);
@@ -3361,7 +3358,7 @@ fn fuzzy_encode_statement(
         }
         Statement::Expression(expression) => {
             buffer.push(0x89);
-            fuzzy_encode_expressionession(canon, expression, buffer, literal_counter);
+            fuzzy_encode_expression(canon, expression, buffer, literal_counter);
         }
         _ => {
             canon.encode_statement(statement, buffer);

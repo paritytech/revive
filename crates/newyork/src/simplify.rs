@@ -2194,6 +2194,22 @@ pub fn deduplicate_functions(object: &mut Object) -> usize {
         redirect_calls_in_block(&mut function.body, &redirects);
     }
 
+    // Fold each duplicate's call sites into its canonical so call_count stays accurate
+    // for the NoInline decision in set_inline_attributes.
+    let mut merged_calls: BTreeMap<FunctionId, usize> = BTreeMap::new();
+    for (duplicate_id, canonical_id) in &redirects {
+        let calls = object
+            .functions
+            .get(duplicate_id)
+            .map_or(0, |function| function.call_count);
+        *merged_calls.entry(*canonical_id).or_default() += calls;
+    }
+    for (canonical_id, calls) in merged_calls {
+        if let Some(canonical) = object.functions.get_mut(&canonical_id) {
+            canonical.call_count += calls;
+        }
+    }
+
     for duplicate_id in redirects.keys() {
         object.functions.remove(duplicate_id);
     }
@@ -3110,6 +3126,18 @@ pub fn deduplicate_functions_fuzzy(object: &mut Object) -> usize {
                     &mut next_value_id,
                 );
             }
+        }
+
+        // Fold the removed duplicates' call sites into the canonical so call_count stays
+        // accurate for the NoInline decision in set_inline_attributes.
+        let merged_calls: usize = group
+            .iter()
+            .skip(1)
+            .filter_map(|function_id| object.functions.get(function_id))
+            .map(|function| function.call_count)
+            .sum();
+        if let Some(canonical) = object.functions.get_mut(&canonical_id) {
+            canonical.call_count += merged_calls;
         }
 
         for &function_id in group.iter().skip(1) {

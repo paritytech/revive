@@ -539,10 +539,7 @@ pub enum Statement {
     },
 
     /// Transient storage store.
-    TStore {
-        key: Value,
-        value: Value,
-    },
+    TStore { key: Value, value: Value },
 
     /// Structured if with explicit yields.
     If {
@@ -608,23 +605,15 @@ pub enum Statement {
     },
 
     /// Revert execution, returning the data at `[offset, offset + length)`.
-    Revert {
-        offset: Value,
-        length: Value,
-    },
+    Revert { offset: Value, length: Value },
     /// Halt execution successfully, returning the data at `[offset, offset + length)`.
-    Return {
-        offset: Value,
-        length: Value,
-    },
+    Return { offset: Value, length: Value },
     /// Halt execution successfully with no return data.
     Stop,
     /// Abort execution with the invalid instruction, consuming all remaining gas.
     Invalid,
     /// Destroy the current account, sending its balance to `address`.
-    SelfDestruct {
-        address: Value,
-    },
+    SelfDestruct { address: Value },
 
     /// Solidity panic revert: emits `Panic(uint256)` ABI encoding and reverts.
     /// Equivalent to: mstore(0, 0x4e487b71...), mstore(4, code), revert(0, 0x24).

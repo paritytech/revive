@@ -18,18 +18,6 @@
 //! 2. **Explicit Types with Address Spaces** - Every value has a known bit-width
 //! 3. **Pure Expressions vs Effectful Statements** - Enables easier reasoning
 //! 4. **Semantic Annotations** - Storage/memory operations tagged with region info
-//!
-//! # Modules
-//!
-//! - [`ir`] - Core IR data structures (types, values, statements, expressions)
-//! - [`ssa`] - SSA builder for variable tracking and phi-node insertion
-//! - [`from_yul`] - Translation from Yul AST to newyork IR
-//! - [`to_llvm`] - LLVM code generation from newyork IR
-//! - [`type_inference`] - Type inference pass for narrowing integer widths
-//! - [`heap_opt`] - Heap optimization for partial big-endian emulation
-//! - [`mem_opt`] - Memory optimization (load-after-store, dead store elimination)
-//! - [`inline`] - Function inlining with custom heuristics for PolkaVM
-#![deny(clippy::all)]
 
 pub mod from_yul;
 pub mod guard_narrow;

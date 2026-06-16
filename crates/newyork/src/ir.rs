@@ -607,16 +607,21 @@ pub enum Statement {
         return_values: Vec<Value>,
     },
 
+    /// Revert execution, returning the data at `[offset, offset + length)`.
     Revert {
         offset: Value,
         length: Value,
     },
+    /// Halt execution successfully, returning the data at `[offset, offset + length)`.
     Return {
         offset: Value,
         length: Value,
     },
+    /// Halt execution successfully with no return data.
     Stop,
+    /// Abort execution with the invalid instruction, consuming all remaining gas.
     Invalid,
+    /// Destroy the current account, sending its balance to `address`.
     SelfDestruct {
         address: Value,
     },
@@ -662,6 +667,7 @@ pub enum Statement {
         value: Value,
     },
 
+    /// External call, dispatched by `kind`; `result` receives the success flag.
     ExternalCall {
         kind: CallKind,
         gas: Value,
@@ -674,6 +680,7 @@ pub enum Statement {
         result: ValueId,
     },
 
+    /// Deploy a new contract, dispatched by `kind`; `result` receives the address.
     Create {
         kind: CreateKind,
         value: Value,
@@ -683,33 +690,39 @@ pub enum Statement {
         result: ValueId,
     },
 
+    /// Emit a log with `topics` over the data at `[offset, offset + length)`.
     Log {
         offset: Value,
         length: Value,
         topics: Vec<Value>,
     },
 
+    /// Copy the contract's own code into memory.
     CodeCopy {
         destination: Value,
         offset: Value,
         length: Value,
     },
+    /// Copy `address`'s code into memory.
     ExtCodeCopy {
         address: Value,
         destination: Value,
         offset: Value,
         length: Value,
     },
+    /// Copy the last external call's return data into memory.
     ReturnDataCopy {
         destination: Value,
         offset: Value,
         length: Value,
     },
+    /// Copy from the object's data section into memory.
     DataCopy {
         destination: Value,
         offset: Value,
         length: Value,
     },
+    /// Copy call data into memory.
     CallDataCopy {
         destination: Value,
         offset: Value,

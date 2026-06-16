@@ -272,6 +272,7 @@ pub fn standard_json<T: Compiler>(
     let optimizer_settings = OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?;
     let detect_missing_libraries =
         solc_input.settings.detect_missing_libraries || detect_missing_libraries;
+    let use_newyork = use_newyork || solc_input.settings.polkavm.newyork.unwrap_or(false);
     debug_config.emit_debug_info = solc_input
         .settings
         .polkavm

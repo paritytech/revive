@@ -1,0 +1,12 @@
+{
+    "language": "Solidity",
+    "sources": {
+        "C.sol": {
+            "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\ncontract C { function f(uint256 a, uint256 b) public pure returns (uint256) { unchecked { return a + b * 3; } } }"
+        }
+    },
+    "settings": {
+        "optimizer": { "enabled": true, "mode": "z" },
+        "outputSelection": { "*": { "*": ["evm.bytecode"] } }
+    }
+}

@@ -52,6 +52,16 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
 /// These contracts are similar to ones used in an example project.
 pub const STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH: &str =
     "src/tests/data/standard_json/pvm_codegen_all_wildcard.json";
+/// A standard JSON fixture enabling the newyork pipeline via `settings.polkavm.newyork`.
+///
+/// Shares the same source as [`STANDARD_JSON_NEWYORK_DISABLED_PATH`] so the two
+/// can be compared to confirm the input field selects a different pipeline.
+pub const STANDARD_JSON_NEWYORK_ENABLED_PATH: &str =
+    "src/tests/data/standard_json/newyork_enabled.json";
+/// The same source as [`STANDARD_JSON_NEWYORK_ENABLED_PATH`] without the
+/// `settings.polkavm.newyork` field, so it compiles through the stock pipeline.
+pub const STANDARD_JSON_NEWYORK_DISABLED_PATH: &str =
+    "src/tests/data/standard_json/newyork_disabled.json";
 /// The standard JSON PVM codegen for all files on a per-file basis test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.
@@ -149,6 +159,18 @@ pub fn execute_command(
     arguments: &[&str],
     stdin_file_path: Option<&str>,
 ) -> CommandResult {
+    execute_command_with_removed_env(command, arguments, stdin_file_path, &[])
+}
+
+/// Like [`execute_command`], but removes the `remove_env` variables from the child
+/// process environment. Used to keep the newyork-pipeline tests independent of the
+/// ambient `RESOLC_USE_NEWYORK` gate that `make test` sets on this branch.
+fn execute_command_with_removed_env(
+    command: &str,
+    arguments: &[&str],
+    stdin_file_path: Option<&str>,
+    remove_env: &[&str],
+) -> CommandResult {
     log::trace!(
         "executing command: '{command} {}{}'",
         arguments.join(" "),
@@ -161,13 +183,16 @@ pub fn execute_command(
         Some(path) => Stdio::from(File::open(path).unwrap()),
         None => Stdio::null(),
     };
-    let result = Command::new(command)
+    let mut builder = Command::new(command);
+    builder
         .args(arguments)
         .stdin(stdin_config)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .unwrap();
+        .stderr(Stdio::piped());
+    for variable in remove_env {
+        builder.env_remove(variable);
+    }
+    let result = builder.output().unwrap();
 
     CommandResult {
         stdout: String::from_utf8_lossy(&result.stdout).to_string(),
@@ -175,6 +200,22 @@ pub fn execute_command(
         success: result.status.success(),
         code: result.status.code().unwrap(),
     }
+}
+
+/// Executes `resolc` with `arguments` and the file at `stdin_file_path` passed to `stdin`,
+/// with `RESOLC_USE_NEWYORK` removed from the environment. This makes the newyork pipeline
+/// selectable solely by the `--newyork` flag or the standard JSON `settings.polkavm.newyork`
+/// field, regardless of the ambient gate used by `make test` on this branch.
+pub fn execute_resolc_with_stdin_input_without_newyork_env(
+    arguments: &[&str],
+    stdin_file_path: &str,
+) -> CommandResult {
+    execute_command_with_removed_env(
+        "resolc",
+        arguments,
+        Some(stdin_file_path),
+        &[crate::RESOLC_USE_NEWYORK_ENV],
+    )
 }
 
 /// Asserts that the exit codes of executing `solc` and `resolc` are equal.

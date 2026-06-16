@@ -17,6 +17,9 @@ pub struct PolkaVM {
     /// Instruct LLVM to emit debug information.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub debug_information: Option<bool>,
+    /// Route Yul lowering through the experimental newyork IR pipeline. Off by default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub newyork: Option<bool>,
 }
 
 impl PolkaVM {
@@ -24,6 +27,7 @@ impl PolkaVM {
         Self {
             memory_config,
             debug_information: Some(debug_information),
+            newyork: None,
         }
     }
 }

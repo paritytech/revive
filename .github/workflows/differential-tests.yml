@@ -138,9 +138,9 @@ jobs:
     env:
       # Commit SHA that produced the polkadot-sdk crate pinned in Cargo.toml,
       # obtained from the crate's .cargo_vcs_info.json via:
-      # curl -sL https://crates.io/api/v1/crates/polkadot-sdk/<VERSION>/download | tar xzO '*/.cargo_vcs_info.json'
-      # Current version: 2603.0.0
-      POLKADOT_SDK_REF: "c56b086a3cfcb3a48b75fd1ef9c77ad9b7408b95"
+      # curl -sL -A "user-agent" https://crates.io/api/v1/crates/polkadot-sdk/<VERSION>/download | tar xzO polkadot-sdk-<VERSION>/.cargo_vcs_info.json
+      # Current version: 2604.2.0
+      POLKADOT_SDK_REF: "54095b130013902aaaa33a69dbbf980144764afb"
       RUSTFLAGS: "-Awarnings"
     steps:
       - name: Checkout revive

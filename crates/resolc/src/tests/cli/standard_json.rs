@@ -656,7 +656,10 @@ fn pvm_codegen_newyork_cli_flag() {
 fn pvm_codegen_newyork_yul_input() {
     let enabled =
         execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH);
-    assert_command_success(&enabled, "the newyork-enabled Yul standard JSON input should build");
+    assert_command_success(
+        &enabled,
+        "the newyork-enabled Yul standard JSON input should build",
+    );
     let disabled =
         execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH);
     assert_command_success(&disabled, "the stock Yul standard JSON input should build");

@@ -4,11 +4,11 @@ A per-operation reference for the newyork IR: textual syntax, operand and result
 
 ## How to read this reference
 
-This appendix enumerates every operation the newyork IR supports. It is a lookup, not a walkthrough: each entry is self-contained and intended to be reachable by anchor.
+This reference page enumerates every operation the newyork IR supports. It is a lookup, not a walkthrough: each entry is self-contained and intended to be reachable by anchor.
 
 Operations are grouped by function (memory and storage writes, pure expressions, control flow, and so on) rather than alphabetically. Jump to a specific operation from the [operation index](#operation-index) below, or use the sidebar.
 
-Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either `Expression` or `Statement` in `ir.rs`. The textual rendering used by debug dumps and by this appendix is produced by the printer in `printer.rs`. Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.
+Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either `Expression` or `Statement` in `ir.rs`. The textual rendering used by debug dumps and by this reference page is produced by the printer in `printer.rs`. Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.
 
 ### Entry format
 
@@ -197,17 +197,17 @@ Every value in the IR carries a `Type`. The operation entries below refer to wid
 
 ### `Type`
 
-The umbrella enum. Three variants:
+The umbrella enum, with these variants:
 
 | Variant | Printed as | Description |
 |---|---|---|
-| `Int(BitWidth)` | `i1`, `i8`, …, `i256` | An integer at one of seven widths; see [BitWidth](#bitwidth). |
+| `Int(BitWidth)` | `i1`, `i8`, …, `i256` | An integer at one of the [BitWidth](#bitwidth) widths. |
 | `Ptr(AddressSpace)` | `ptr<heap>`, `ptr<stack>`, `ptr<storage>`, `ptr<code>` | A pointer tagged with its address space; see [AddressSpace](#addressspace). |
 | `Void` | `void` | Unit type. Used for statements that produce no value and for `void`-returning functions. |
 
 ### `BitWidth`
 
-The seven rungs of integer width. Newly minted values default to `I256`; type inference narrows them down to one of the lower rungs when it can prove the upper bits are zero or unused.
+The rungs of integer width. Newly minted values default to `I256`; type inference narrows them down to one of the lower rungs when it can prove the upper bits are zero or unused.
 
 | Variant | Printed as | Typical use |
 |---|---|---|
@@ -497,7 +497,7 @@ let v2 := sdiv(v0, v1)
 
 | Result | Purity |
 |---|---|
-| `width(lhs)` | Pure |
+| `max(width(lhs), width(rhs))` — a negative divisor can push the result to full width | Pure |
 
 #### Annotations
 
@@ -632,7 +632,8 @@ and($lhs[: <type>], $rhs[: <type>])
 
 ```text
 let v2 := and(v0, v1)
-let v3 := and(v0, 0xff)     // type inference narrows result to i8
+let v3: i8 := 0xff              // mask constant gets its own let-binding, narrowed to i8
+let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear bits
 ```
 
 #### Operands
@@ -831,7 +832,7 @@ let v2 := sar(v0, v1)
 
 | Result | Purity |
 |---|---|
-| Same shape as [`shr`](#shr) forward inference (constant shift narrows the result; non-constant falls back to `width(rhs)`). | Pure |
+| `width(rhs)` — unlike [`shr`](#shr), sign-extension means a constant shift cannot narrow the result | Pure |
 
 #### Annotations
 
@@ -1395,7 +1396,7 @@ None.
 
 #### Description
 
-Compute the Keccak-256 hash of `length` bytes of emulated EVM linear memory starting at `offset`. The general-purpose hashing primitive; the two specialized variants below cover the common scratch-space patterns more compactly.
+Compute the Keccak-256 hash of `length` bytes of emulated EVM linear memory starting at `offset`. The general-purpose hashing primitive; the specialized variants below cover the common scratch-space patterns more compactly.
 
 #### Syntax
 
@@ -1432,7 +1433,7 @@ None.
 
 #### Description
 
-Compound hash of two 256-bit words. Equivalent to `mstore(0, word0); mstore(32, word1); keccak256(0, 64)` but emitted as a single outlined call after the keccak-fusion pass recognizes the pattern. The mapping-key idiom; see also [`mapping_sload`](#mapping_sload).
+Compound hash of two 256-bit words. Equivalent to `mstore(0, word0); mstore(32, word1); keccak256(0, 64)` but emitted as a single outlined call after `mem_opt`'s keccak fusion recognizes the pattern. The mapping-key idiom; see also [`mapping_sload`](#mapping_sload).
 
 #### Syntax
 
@@ -1469,7 +1470,7 @@ None.
 
 #### Description
 
-Compound hash of a single 256-bit word. Equivalent to `mstore(0, word0); keccak256(0, 32)` but emitted as a single outlined call after the keccak-fusion pass.
+Compound hash of a single 256-bit word. Equivalent to `mstore(0, word0); keccak256(0, 32)` but emitted as a single outlined call after `mem_opt`'s keccak fusion.
 
 #### Syntax
 
@@ -1675,7 +1676,7 @@ None.
 
 #### Description
 
-Remaining gas at the point of evaluation. Modelled as a pure expression for IR purposes; in practice it changes between evaluations, so any simplifier that deduplicates pure expressions must respect `gas` as a barrier.
+Remaining gas at the point of evaluation. Modeled as a pure expression for IR purposes; in practice it changes between evaluations, so any simplifier that deduplicates pure expressions must respect `gas` as a barrier.
 
 #### Syntax
 
@@ -2035,7 +2036,7 @@ let v1 := blockhash(v0)
 
 | Name | Type | Notes |
 |---|---|---|
-| `number` | `i256` | Block number; forward analysis widens to at least `i64`. |
+| `number` | `i256` | Block number; forward analysis widens to `i256`. |
 
 #### Result and purity
 
@@ -2191,7 +2192,7 @@ None.
 
 #### Description
 
-Length of the most recently returned data buffer from a sub-call, in bytes. Modelled as pure per IR but reflects the last `ExternalCall` / `Create` result; consumers must respect that ordering.
+Length of the most recently returned data buffer from a sub-call, in bytes. Modeled as pure per IR but reflects the last `ExternalCall` / `Create` result; consumers must respect that ordering.
 
 #### Syntax
 
@@ -2485,7 +2486,7 @@ None. The IR does not track a static slot for `tload`.
 
 #### Description
 
-Compound load for a Solidity mapping element. Equivalent to `mstore(0, key); mstore(32, slot); sload(keccak256(0, 64))` but emitted as a single outlined call after the `compound_outlining` pass recognizes the pattern (it fuses a `keccak256_pair` — itself produced by `mem_opt`'s keccak fusion — followed by an `sload` whose key has a single consumer). Only valid when the intermediate hash is used exclusively by this load.
+Compound load for a Solidity mapping element. Equivalent to `mstore(0, key); mstore(32, slot); sload(keccak256(0, 64))` but emitted as a single outlined call after the `mapping_access_outlining` pass recognizes the pattern (it fuses a `keccak256_pair` — itself produced by `mem_opt`'s keccak fusion — followed by an `sload` whose key has a single consumer). Only valid when the intermediate hash is used exclusively by this load.
 
 #### Syntax
 
@@ -2701,7 +2702,7 @@ let v4, v5 := returns_two(v0)           // multi-return via let multi-binding
 
 ## Memory and storage writes
 
-The six operations in this section all modify external state: emulated EVM linear memory, persistent storage, or transient storage. They are statements (not expressions) and they are never pure. Simplification and deduplication never reorder them with respect to each other or with respect to reverts; the memory passes treat them as the side-effect boundary for their analyses.
+The operations in this section all modify external state: emulated EVM linear memory, persistent storage, or transient storage. They are statements (not expressions) and they are never pure. Simplification and deduplication never reorder them with respect to each other or with respect to reverts; the memory passes treat them as the side-effect boundary for their analyses.
 
 ### `mstore`
 
@@ -2910,7 +2911,7 @@ None. Unlike `sstore`, the IR does not track a static slot for `tstore`: transie
 
 #### Description
 
-Compound store for a Solidity mapping element. Equivalent to the three-operation sequence `mstore(0, key); mstore(32, slot); sstore(keccak256(0, 64), value)` but emitted as a single outlined statement after the `compound_outlining` pass recognizes the pattern (it fuses a `keccak256_pair` followed by an `sstore` whose key has a single consumer). Only valid when the intermediate hash is not observed by any other statement.
+Compound store for a Solidity mapping element. Equivalent to `mstore(0, key); mstore(32, slot); sstore(keccak256(0, 64), value)` but emitted as a single outlined statement after the `mapping_access_outlining` pass recognizes the pattern (it fuses a `keccak256_pair` followed by an `sstore` whose key has a single consumer). Only valid when the intermediate hash is not observed by any other statement.
 
 #### Syntax
 
@@ -2944,7 +2945,7 @@ None. `mapping_sstore` deliberately drops the `static_slot` annotation that the 
 
 ## Bulk copies
 
-Multi-byte memory copies from the five EVM-accessible byte sources (code, external code, returndata, embedded data, and calldata) into emulated EVM linear memory. All five take the same shape: a destination memory offset, a source offset, and a length. They are effectful and act as opaque barriers to the memory passes.
+Multi-byte memory copies from the EVM-accessible byte sources (code, external code, returndata, embedded data, and calldata) into emulated EVM linear memory. They all take the same shape: a destination memory offset, a source offset, and a length. They are effectful and act as opaque barriers to the memory passes.
 
 ### `codecopy`
 
@@ -3139,7 +3140,7 @@ None.
 
 ## Bindings and wrappers
 
-The statements that bind SSA values, hold loose expressions evaluated for their side effects, and write to immutable storage. Every pure expression in the appendix's earlier sections appears on the right-hand side of one of these statements (almost always `let`).
+The statements that bind SSA values, hold loose expressions evaluated for their side effects, and write to immutable storage. Every pure expression in this reference's earlier sections appears on the right-hand side of one of these statements (almost always `let`).
 
 ### `let`
 
@@ -3255,7 +3256,7 @@ setimmutable("MyContract.owner", v0: i160)
 
 ## Structured control flow
 
-The IR's control flow is structured: `if`, `switch`, and `for` are statements with explicit nested regions, each carrying input values and yielding output values. The three jump-like statements (`break`, `continue`, `leave`) are scoped to their nearest enclosing construct. Nested blocks create lexical scope without otherwise changing control flow.
+The IR's control flow is structured: `if`, `switch`, and `for` are statements with explicit nested regions, each carrying input values and yielding output values. The jump-like statements (`break`, `continue`, `leave`) are scoped to their nearest enclosing construct. Nested blocks create lexical scope without otherwise changing control flow.
 
 ### `if`
 
@@ -3373,30 +3374,30 @@ Structured loop with explicit loop-carried variables. Each iteration evaluates `
 
 ```text
 for { $variable_0 := $initial_0[, …] }
-    [// condition_statements:
+    [// condition statements:
         …]
-    $condition
-    { // post
+    condition: $condition
+    post [($post_input_variable_0[, …])] {
         …
     }
-{
-    … body …
-}
+    body {
+        … body …
+    }
 ```
 
 #### Example
 
 ```text
 for { v1 := 0x0 }
-    lt(v1, 0xa)
-    { // post
-        let v3 := add(v1, 0x1)
-        yield v3
+    condition: lt(v1, 0xa)
+    post (v3) {
+        let v4 := add(v1, 0x1)
+        yield v4
     }
-{
-    sstore(v1, v2)
-    yield v1
-}
+    body {
+        sstore(v1, v2)
+        yield v1
+    }
 ```
 
 #### Operands
@@ -3405,7 +3406,7 @@ for { v1 := 0x0 }
 |---|---|---|
 | `initial_values` | `Vec<Value>` | Starting values for the loop-carried variables. |
 | `loop_variables` | `Vec<ValueId>` | SSA ids visible inside condition, body, and post. |
-| `condition_statements` | `Vec<Statement>` | Statements evaluated each iteration *before* the condition expression; emitted into the loop header block. Printed only when non-empty, behind a `// condition_statements:` comment. |
+| `condition_statements` | `Vec<Statement>` | Statements evaluated each iteration *before* the condition expression; emitted into the loop header block. Printed only when non-empty, behind a `// condition statements:` comment. |
 | `condition` | `Expression` | Re-evaluated each iteration; non-zero continues, zero exits. |
 | `body` | `Region` | Loop body; yields current loop-carried values. |
 | `post_input_variables` | `Vec<ValueId>` | Input SSA ids for the post region (one per loop-carried variable); receive the body's yielded values merged with continue-site values via phi nodes in the LLVM codegen. |
@@ -3439,12 +3440,12 @@ break
 #### Example
 
 ```text
-if v0 { break }
+if v0 { break [v1, v2] }
 ```
 
 #### Operands
 
-None in the printed form; the IR's `values: Vec<Value>` field carries the loop-carried values internally.
+The loop-carried `values: Vec<Value>` print in brackets when non-empty (e.g. `break [v1, v2]`).
 
 #### Result and purity
 
@@ -3473,12 +3474,12 @@ continue
 #### Example
 
 ```text
-if v0 { continue }
+if v0 { continue [v1, v2] }
 ```
 
 #### Operands
 
-None in the printed form; the IR's `values` field carries the loop-carried values internally.
+The loop-carried `values` print in brackets when non-empty (e.g. `continue [v1, v2]`).
 
 #### Result and purity
 
@@ -3568,7 +3569,7 @@ None.
 
 ## External interaction
 
-Statements that cross the contract boundary: external calls (four kinds), contract creation (two kinds), and event log emission. All produce or rely on external state and act as barriers to memory and storage analyses.
+Statements that cross the contract boundary: external calls, contract creation, and event log emission. All produce or rely on external state and act as barriers to memory and storage analyses.
 
 ### `call`
 
@@ -3618,7 +3619,7 @@ None.
 
 #### Description
 
-Deprecated EVM opcode that executes the callee's code in the caller's context but with the callee's storage. Preserved for Solidity compatibility; new code should use [`delegatecall`](#delegatecall).
+Deprecated EVM opcode that executes the callee's code in the caller's context but with the callee's storage. Not supported by the newyork backend (codegen rejects it); use [`delegatecall`](#delegatecall) instead.
 
 #### Syntax
 
@@ -3827,7 +3828,7 @@ None.
 
 ## Termination
 
-Statements that end the current call frame. Three plain forms (`return`, `revert`, `stop`), two unconditional traps (`invalid`, `selfdestruct`), and three outlined revert variants that encode common Solidity error patterns into single nodes that can be deduplicated across call sites.
+Statements that end the current call frame. Plain forms (`return`, `revert`, `stop`), unconditional traps (`invalid`, `selfdestruct`), and outlined revert variants (`panic_revert`, `error_string_revert`, `custom_error_revert`) that encode common Solidity error patterns into single nodes that can be deduplicated across call sites.
 
 ### `return`
 
@@ -4086,7 +4087,7 @@ None — the string length and data are compile-time fields, not SSA operands.
 
 #### Description
 
-Outlined Solidity custom-error revert. Encodes the error selector (left-shifted by 224 bits) and zero to three argument values into scratch memory and reverts. No FMP load is needed; the encoding uses the scratch region at offset `0`.
+Outlined Solidity custom-error revert. Encodes the error selector (left-shifted by 224 bits) and zero or more argument values into scratch memory and reverts. No FMP load is needed; the encoding uses the scratch region at offset `0`.
 
 #### Syntax
 
@@ -4097,14 +4098,14 @@ custom_error_revert(0x<hex>, [$arg_0, $arg_1, …])
 #### Example
 
 ```text
-custom_error_revert(0xa28c4c1100000000000000000000000000000000000000000000000000000000, [v0, v1])
+custom_error_revert(0xa28c4c11, [v0, v1])
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `arguments` | `Vec<Value>` | 0–3 argument values; the selector is a compile-time field. |
+| `arguments` | `Vec<Value>` | Zero or more argument values; the selector is a compile-time field. |
 
 #### Result and purity
 
@@ -4116,4 +4117,4 @@ custom_error_revert(0xa28c4c1100000000000000000000000000000000000000000000000000
 
 | Source field | Printed as |
 |---|---|
-| `selector: BigUint` | The 4-byte error selector shifted left by 224 bits, printed in hex in the first syntax position. |
+| `selector: BigUint` | The 4-byte error selector in hex, in the first syntax position. The selector is stored left-shifted by 224 bits; the printer right-shifts it back and prints the bare 4-byte value. |

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a6a49a5a.js";
+            window.path_to_searchindex_js = "../searchindex-5ce1788e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-1290cc30.js"></script>
@@ -177,9 +177,9 @@
                         <h1 id="newyork-ir-reference"><a class="header" href="#newyork-ir-reference">newyork IR reference</a></h1>
 <p>A per-operation reference for the newyork IR: textual syntax, operand and result types, purity, region and static-slot annotations, and examples.</p>
 <h2 id="how-to-read-this-reference"><a class="header" href="#how-to-read-this-reference">How to read this reference</a></h2>
-<p>This appendix enumerates every operation the newyork IR supports. It is a lookup, not a walkthrough: each entry is self-contained and intended to be reachable by anchor.</p>
+<p>This reference page enumerates every operation the newyork IR supports. It is a lookup, not a walkthrough: each entry is self-contained and intended to be reachable by anchor.</p>
 <p>Operations are grouped by function (memory and storage writes, pure expressions, control flow, and so on) rather than alphabetically. Jump to a specific operation from the <a href="#operation-index">operation index</a> below, or use the sidebar.</p>
-<p>Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either <code>Expression</code> or <code>Statement</code> in <code>ir.rs</code>. The textual rendering used by debug dumps and by this appendix is produced by the printer in <code>printer.rs</code>. Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.</p>
+<p>Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either <code>Expression</code> or <code>Statement</code> in <code>ir.rs</code>. The textual rendering used by debug dumps and by this reference page is produced by the printer in <code>printer.rs</code>. Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.</p>
 <h3 id="entry-format"><a class="header" href="#entry-format">Entry format</a></h3>
 <p>Each operation entry has the same shape:</p>
 <div class="table-wrapper">
@@ -370,21 +370,21 @@
 <h2 id="type-system"><a class="header" href="#type-system">Type system</a></h2>
 <p>Every value in the IR carries a <code>Type</code>. The operation entries below refer to widths (<code>i1</code>…<code>i256</code>), address spaces (<code>ptr&lt;heap&gt;</code>, etc.), and memory regions (<code>scratch</code>, etc.) by their printed form; this section is the reference for those names.</p>
 <h3 id="type"><a class="header" href="#type"><code>Type</code></a></h3>
-<p>The umbrella enum. Three variants:</p>
+<p>The umbrella enum, with these variants:</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Variant</th><th>Printed as</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>Int(BitWidth)</code></td><td><code>i1</code>, <code>i8</code>, …, <code>i256</code></td><td>An integer at one of seven widths; see <a href="#bitwidth">BitWidth</a>.</td></tr>
+<tr><td><code>Int(BitWidth)</code></td><td><code>i1</code>, <code>i8</code>, …, <code>i256</code></td><td>An integer at one of the <a href="#bitwidth">BitWidth</a> widths.</td></tr>
 <tr><td><code>Ptr(AddressSpace)</code></td><td><code>ptr&lt;heap&gt;</code>, <code>ptr&lt;stack&gt;</code>, <code>ptr&lt;storage&gt;</code>, <code>ptr&lt;code&gt;</code></td><td>A pointer tagged with its address space; see <a href="#addressspace">AddressSpace</a>.</td></tr>
 <tr><td><code>Void</code></td><td><code>void</code></td><td>Unit type. Used for statements that produce no value and for <code>void</code>-returning functions.</td></tr>
 </tbody>
 </table>
 </div>
 <h3 id="bitwidth"><a class="header" href="#bitwidth"><code>BitWidth</code></a></h3>
-<p>The seven rungs of integer width. Newly minted values default to <code>I256</code>; type inference narrows them down to one of the lower rungs when it can prove the upper bits are zero or unused.</p>
+<p>The rungs of integer width. Newly minted values default to <code>I256</code>; type inference narrows them down to one of the lower rungs when it can prove the upper bits are zero or unused.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -664,7 +664,7 @@ let v2 := 0x80: i64         // narrowed by type inference
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td><code>width(lhs)</code></td><td>Pure</td></tr>
+<tr><td><code>max(width(lhs), width(rhs))</code> — a negative divisor can push the result to full width</td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
@@ -784,7 +784,8 @@ let v2 := 0x80: i64         // narrowed by type inference
 </code></pre>
 <h4 id="example-10"><a class="header" href="#example-10">Example</a></h4>
 <pre><code class="language-text">let v2 := and(v0, v1)
-let v3 := and(v0, 0xff)     // type inference narrows result to i8
+let v3: i8 := 0xff              // mask constant gets its own let-binding, narrowed to i8
+let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear bits
 </code></pre>
 <h4 id="operands-10"><a class="header" href="#operands-10">Operands</a></h4>
 <div class="table-wrapper">
@@ -980,7 +981,7 @@ let v3 := and(v0, 0xff)     // type inference narrows result to i8
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td>Same shape as <a href="#shr"><code>shr</code></a> forward inference (constant shift narrows the result; non-constant falls back to <code>width(rhs)</code>).</td><td>Pure</td></tr>
+<tr><td><code>width(rhs)</code> — unlike <a href="#shr"><code>shr</code></a>, sign-extension means a constant shift cannot narrow the result</td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
@@ -1511,7 +1512,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <h3 id="keccak256"><a class="header" href="#keccak256"><code>keccak256</code></a></h3>
 <p>(<code>Expression::Keccak256</code>)</p>
 <h4 id="description-31"><a class="header" href="#description-31">Description</a></h4>
-<p>Compute the Keccak-256 hash of <code>length</code> bytes of emulated EVM linear memory starting at <code>offset</code>. The general-purpose hashing primitive; the two specialized variants below cover the common scratch-space patterns more compactly.</p>
+<p>Compute the Keccak-256 hash of <code>length</code> bytes of emulated EVM linear memory starting at <code>offset</code>. The general-purpose hashing primitive; the specialized variants below cover the common scratch-space patterns more compactly.</p>
 <h4 id="syntax-31"><a class="header" href="#syntax-31">Syntax</a></h4>
 <pre><code class="language-text">keccak256($offset[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
@@ -1546,7 +1547,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <h3 id="keccak256_pair"><a class="header" href="#keccak256_pair"><code>keccak256_pair</code></a></h3>
 <p>(<code>Expression::Keccak256Pair</code>)</p>
 <h4 id="description-32"><a class="header" href="#description-32">Description</a></h4>
-<p>Compound hash of two 256-bit words. Equivalent to <code>mstore(0, word0); mstore(32, word1); keccak256(0, 64)</code> but emitted as a single outlined call after the keccak-fusion pass recognizes the pattern. The mapping-key idiom; see also <a href="#mapping_sload"><code>mapping_sload</code></a>.</p>
+<p>Compound hash of two 256-bit words. Equivalent to <code>mstore(0, word0); mstore(32, word1); keccak256(0, 64)</code> but emitted as a single outlined call after <code>mem_opt</code>’s keccak fusion recognizes the pattern. The mapping-key idiom; see also <a href="#mapping_sload"><code>mapping_sload</code></a>.</p>
 <h4 id="syntax-32"><a class="header" href="#syntax-32">Syntax</a></h4>
 <pre><code class="language-text">keccak256_pair($word0[: &lt;type&gt;], $word1[: &lt;type&gt;])
 </code></pre>
@@ -1581,7 +1582,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <h3 id="keccak256_single"><a class="header" href="#keccak256_single"><code>keccak256_single</code></a></h3>
 <p>(<code>Expression::Keccak256Single</code>)</p>
 <h4 id="description-33"><a class="header" href="#description-33">Description</a></h4>
-<p>Compound hash of a single 256-bit word. Equivalent to <code>mstore(0, word0); keccak256(0, 32)</code> but emitted as a single outlined call after the keccak-fusion pass.</p>
+<p>Compound hash of a single 256-bit word. Equivalent to <code>mstore(0, word0); keccak256(0, 32)</code> but emitted as a single outlined call after <code>mem_opt</code>’s keccak fusion.</p>
 <h4 id="syntax-33"><a class="header" href="#syntax-33">Syntax</a></h4>
 <pre><code class="language-text">keccak256_single($word0[: &lt;type&gt;])
 </code></pre>
@@ -1740,7 +1741,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <h3 id="gas"><a class="header" href="#gas"><code>gas</code></a></h3>
 <p>(<code>Expression::Gas</code>)</p>
 <h4 id="description-39"><a class="header" href="#description-39">Description</a></h4>
-<p>Remaining gas at the point of evaluation. Modelled as a pure expression for IR purposes; in practice it changes between evaluations, so any simplifier that deduplicates pure expressions must respect <code>gas</code> as a barrier.</p>
+<p>Remaining gas at the point of evaluation. Modeled as a pure expression for IR purposes; in practice it changes between evaluations, so any simplifier that deduplicates pure expressions must respect <code>gas</code> as a barrier.</p>
 <h4 id="syntax-39"><a class="header" href="#syntax-39">Syntax</a></h4>
 <pre><code class="language-text">gas()
 </code></pre>
@@ -2013,7 +2014,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>number</code></td><td><code>i256</code></td><td>Block number; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>number</code></td><td><code>i256</code></td><td>Block number; forward analysis widens to <code>i256</code>.</td></tr>
 </tbody>
 </table>
 </div>
@@ -2142,7 +2143,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <h3 id="returndatasize"><a class="header" href="#returndatasize"><code>returndatasize</code></a></h3>
 <p>(<code>Expression::ReturnDataSize</code>)</p>
 <h4 id="description-54"><a class="header" href="#description-54">Description</a></h4>
-<p>Length of the most recently returned data buffer from a sub-call, in bytes. Modelled as pure per IR but reflects the last <code>ExternalCall</code> / <code>Create</code> result; consumers must respect that ordering.</p>
+<p>Length of the most recently returned data buffer from a sub-call, in bytes. Modeled as pure per IR but reflects the last <code>ExternalCall</code> / <code>Create</code> result; consumers must respect that ordering.</p>
 <h4 id="syntax-54"><a class="header" href="#syntax-54">Syntax</a></h4>
 <pre><code class="language-text">returndatasize()
 </code></pre>
@@ -2418,7 +2419,7 @@ let v2 := sload(v3) /* slot: 0x0 */
 <h3 id="mapping_sload"><a class="header" href="#mapping_sload"><code>mapping_sload</code></a></h3>
 <p>(<code>Expression::MappingSLoad</code>)</p>
 <h4 id="description-62"><a class="header" href="#description-62">Description</a></h4>
-<p>Compound load for a Solidity mapping element. Equivalent to <code>mstore(0, key); mstore(32, slot); sload(keccak256(0, 64))</code> but emitted as a single outlined call after the <code>compound_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> — itself produced by <code>mem_opt</code>’s keccak fusion — followed by an <code>sload</code> whose key has a single consumer). Only valid when the intermediate hash is used exclusively by this load.</p>
+<p>Compound load for a Solidity mapping element. Equivalent to <code>mstore(0, key); mstore(32, slot); sload(keccak256(0, 64))</code> but emitted as a single outlined call after the <code>mapping_access_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> — itself produced by <code>mem_opt</code>’s keccak fusion — followed by an <code>sload</code> whose key has a single consumer). Only valid when the intermediate hash is used exclusively by this load.</p>
 <h4 id="syntax-62"><a class="header" href="#syntax-62">Syntax</a></h4>
 <pre><code class="language-text">mapping_sload($key[: &lt;type&gt;], $slot[: &lt;type&gt;])
 </code></pre>
@@ -2631,7 +2632,7 @@ let v4, v5 := returns_two(v0)           // multi-return via let multi-binding
 </table>
 </div>
 <h2 id="memory-and-storage-writes-1"><a class="header" href="#memory-and-storage-writes-1">Memory and storage writes</a></h2>
-<p>The six operations in this section all modify external state: emulated EVM linear memory, persistent storage, or transient storage. They are statements (not expressions) and they are never pure. Simplification and deduplication never reorder them with respect to each other or with respect to reverts; the memory passes treat them as the side-effect boundary for their analyses.</p>
+<p>The operations in this section all modify external state: emulated EVM linear memory, persistent storage, or transient storage. They are statements (not expressions) and they are never pure. Simplification and deduplication never reorder them with respect to each other or with respect to reverts; the memory passes treat them as the side-effect boundary for their analyses.</p>
 <h3 id="mstore"><a class="header" href="#mstore"><code>mstore</code></a></h3>
 <p>(<code>Statement::MStore</code>)</p>
 <h4 id="description-68"><a class="header" href="#description-68">Description</a></h4>
@@ -2844,7 +2845,7 @@ sstore(v2, v3) /* slot: 0x0 */
 <h3 id="mapping_sstore"><a class="header" href="#mapping_sstore"><code>mapping_sstore</code></a></h3>
 <p>(<code>Statement::MappingSStore</code>)</p>
 <h4 id="description-73"><a class="header" href="#description-73">Description</a></h4>
-<p>Compound store for a Solidity mapping element. Equivalent to the three-operation sequence <code>mstore(0, key); mstore(32, slot); sstore(keccak256(0, 64), value)</code> but emitted as a single outlined statement after the <code>compound_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> followed by an <code>sstore</code> whose key has a single consumer). Only valid when the intermediate hash is not observed by any other statement.</p>
+<p>Compound store for a Solidity mapping element. Equivalent to <code>mstore(0, key); mstore(32, slot); sstore(keccak256(0, 64), value)</code> but emitted as a single outlined statement after the <code>mapping_access_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> followed by an <code>sstore</code> whose key has a single consumer). Only valid when the intermediate hash is not observed by any other statement.</p>
 <h4 id="syntax-73"><a class="header" href="#syntax-73">Syntax</a></h4>
 <pre><code class="language-text">mapping_sstore($key[: &lt;type&gt;], $slot[: &lt;type&gt;], $value[: &lt;type&gt;])
 </code></pre>
@@ -2878,7 +2879,7 @@ sstore(v2, v3) /* slot: 0x0 */
 <h4 id="annotations-73"><a class="header" href="#annotations-73">Annotations</a></h4>
 <p>None. <code>mapping_sstore</code> deliberately drops the <code>static_slot</code> annotation that the original <code>sstore</code> may have carried, because the fused statement’s effective slot is the keccak hash of the key and the declared slot, which is never a compile-time constant.</p>
 <h2 id="bulk-copies-1"><a class="header" href="#bulk-copies-1">Bulk copies</a></h2>
-<p>Multi-byte memory copies from the five EVM-accessible byte sources (code, external code, returndata, embedded data, and calldata) into emulated EVM linear memory. All five take the same shape: a destination memory offset, a source offset, and a length. They are effectful and act as opaque barriers to the memory passes.</p>
+<p>Multi-byte memory copies from the EVM-accessible byte sources (code, external code, returndata, embedded data, and calldata) into emulated EVM linear memory. They all take the same shape: a destination memory offset, a source offset, and a length. They are effectful and act as opaque barriers to the memory passes.</p>
 <h3 id="codecopy"><a class="header" href="#codecopy"><code>codecopy</code></a></h3>
 <p>(<code>Statement::CodeCopy</code>)</p>
 <h4 id="description-74"><a class="header" href="#description-74">Description</a></h4>
@@ -3061,7 +3062,7 @@ sstore(v2, v3) /* slot: 0x0 */
 <h4 id="annotations-78"><a class="header" href="#annotations-78">Annotations</a></h4>
 <p>None.</p>
 <h2 id="bindings-and-wrappers-1"><a class="header" href="#bindings-and-wrappers-1">Bindings and wrappers</a></h2>
-<p>The statements that bind SSA values, hold loose expressions evaluated for their side effects, and write to immutable storage. Every pure expression in the appendix’s earlier sections appears on the right-hand side of one of these statements (almost always <code>let</code>).</p>
+<p>The statements that bind SSA values, hold loose expressions evaluated for their side effects, and write to immutable storage. Every pure expression in this reference’s earlier sections appears on the right-hand side of one of these statements (almost always <code>let</code>).</p>
 <h3 id="let"><a class="header" href="#let"><code>let</code></a></h3>
 <p>(<code>Statement::Let</code>)</p>
 <h4 id="description-79"><a class="header" href="#description-79">Description</a></h4>
@@ -3176,7 +3177,7 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 </table>
 </div>
 <h2 id="structured-control-flow-1"><a class="header" href="#structured-control-flow-1">Structured control flow</a></h2>
-<p>The IR’s control flow is structured: <code>if</code>, <code>switch</code>, and <code>for</code> are statements with explicit nested regions, each carrying input values and yielding output values. The three jump-like statements (<code>break</code>, <code>continue</code>, <code>leave</code>) are scoped to their nearest enclosing construct. Nested blocks create lexical scope without otherwise changing control flow.</p>
+<p>The IR’s control flow is structured: <code>if</code>, <code>switch</code>, and <code>for</code> are statements with explicit nested regions, each carrying input values and yielding output values. The jump-like statements (<code>break</code>, <code>continue</code>, <code>leave</code>) are scoped to their nearest enclosing construct. Nested blocks create lexical scope without otherwise changing control flow.</p>
 <h3 id="if"><a class="header" href="#if"><code>if</code></a></h3>
 <p>(<code>Statement::If</code>)</p>
 <h4 id="description-82"><a class="header" href="#description-82">Description</a></h4>
@@ -3283,27 +3284,27 @@ default {
 <p>Structured loop with explicit loop-carried variables. Each iteration evaluates <code>condition_statements</code> followed by <code>condition</code>; if the condition is non-zero, the <code>body</code> region runs, then the <code>post</code> region runs, and the loop iterates. Loop-carried variables are passed as SSA values through each region. <code>break</code> exits the loop and <code>continue</code> jumps to the post region.</p>
 <h4 id="syntax-84"><a class="header" href="#syntax-84">Syntax</a></h4>
 <pre><code class="language-text">for { $variable_0 := $initial_0[, …] }
-    [// condition_statements:
+    [// condition statements:
         …]
-    $condition
-    { // post
+    condition: $condition
+    post [($post_input_variable_0[, …])] {
         …
     }
-{
-    … body …
-}
+    body {
+        … body …
+    }
 </code></pre>
 <h4 id="example-84"><a class="header" href="#example-84">Example</a></h4>
 <pre><code class="language-text">for { v1 := 0x0 }
-    lt(v1, 0xa)
-    { // post
-        let v3 := add(v1, 0x1)
-        yield v3
+    condition: lt(v1, 0xa)
+    post (v3) {
+        let v4 := add(v1, 0x1)
+        yield v4
     }
-{
-    sstore(v1, v2)
-    yield v1
-}
+    body {
+        sstore(v1, v2)
+        yield v1
+    }
 </code></pre>
 <h4 id="operands-84"><a class="header" href="#operands-84">Operands</a></h4>
 <div class="table-wrapper">
@@ -3314,7 +3315,7 @@ default {
 <tbody>
 <tr><td><code>initial_values</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Starting values for the loop-carried variables.</td></tr>
 <tr><td><code>loop_variables</code></td><td><code>Vec&lt;ValueId&gt;</code></td><td>SSA ids visible inside condition, body, and post.</td></tr>
-<tr><td><code>condition_statements</code></td><td><code>Vec&lt;Statement&gt;</code></td><td>Statements evaluated each iteration <em>before</em> the condition expression; emitted into the loop header block. Printed only when non-empty, behind a <code>// condition_statements:</code> comment.</td></tr>
+<tr><td><code>condition_statements</code></td><td><code>Vec&lt;Statement&gt;</code></td><td>Statements evaluated each iteration <em>before</em> the condition expression; emitted into the loop header block. Printed only when non-empty, behind a <code>// condition statements:</code> comment.</td></tr>
 <tr><td><code>condition</code></td><td><code>Expression</code></td><td>Re-evaluated each iteration; non-zero continues, zero exits.</td></tr>
 <tr><td><code>body</code></td><td><code>Region</code></td><td>Loop body; yields current loop-carried values.</td></tr>
 <tr><td><code>post_input_variables</code></td><td><code>Vec&lt;ValueId&gt;</code></td><td>Input SSA ids for the post region (one per loop-carried variable); receive the body’s yielded values merged with continue-site values via phi nodes in the LLVM codegen.</td></tr>
@@ -3344,10 +3345,10 @@ default {
 <pre><code class="language-text">break
 </code></pre>
 <h4 id="example-85"><a class="header" href="#example-85">Example</a></h4>
-<pre><code class="language-text">if v0 { break }
+<pre><code class="language-text">if v0 { break [v1, v2] }
 </code></pre>
 <h4 id="operands-85"><a class="header" href="#operands-85">Operands</a></h4>
-<p>None in the printed form; the IR’s <code>values: Vec&lt;Value&gt;</code> field carries the loop-carried values internally.</p>
+<p>The loop-carried <code>values: Vec&lt;Value&gt;</code> print in brackets when non-empty (e.g. <code>break [v1, v2]</code>).</p>
 <h4 id="result-and-purity-85"><a class="header" href="#result-and-purity-85">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -3369,10 +3370,10 @@ default {
 <pre><code class="language-text">continue
 </code></pre>
 <h4 id="example-86"><a class="header" href="#example-86">Example</a></h4>
-<pre><code class="language-text">if v0 { continue }
+<pre><code class="language-text">if v0 { continue [v1, v2] }
 </code></pre>
 <h4 id="operands-86"><a class="header" href="#operands-86">Operands</a></h4>
-<p>None in the printed form; the IR’s <code>values</code> field carries the loop-carried values internally.</p>
+<p>The loop-carried <code>values</code> print in brackets when non-empty (e.g. <code>continue [v1, v2]</code>).</p>
 <h4 id="result-and-purity-86"><a class="header" href="#result-and-purity-86">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -3452,7 +3453,7 @@ leave                       // returns nothing (void function)
 <h4 id="annotations-88"><a class="header" href="#annotations-88">Annotations</a></h4>
 <p>None.</p>
 <h2 id="external-interaction-1"><a class="header" href="#external-interaction-1">External interaction</a></h2>
-<p>Statements that cross the contract boundary: external calls (four kinds), contract creation (two kinds), and event log emission. All produce or rely on external state and act as barriers to memory and storage analyses.</p>
+<p>Statements that cross the contract boundary: external calls, contract creation, and event log emission. All produce or rely on external state and act as barriers to memory and storage analyses.</p>
 <h3 id="call"><a class="header" href="#call"><code>call</code></a></h3>
 <p>(<code>Statement::ExternalCall</code> with <code>CallKind::Call</code>)</p>
 <h4 id="description-89"><a class="header" href="#description-89">Description</a></h4>
@@ -3496,7 +3497,7 @@ leave                       // returns nothing (void function)
 <h3 id="callcode"><a class="header" href="#callcode"><code>callcode</code></a></h3>
 <p>(<code>Statement::ExternalCall</code> with <code>CallKind::CallCode</code>)</p>
 <h4 id="description-90"><a class="header" href="#description-90">Description</a></h4>
-<p>Deprecated EVM opcode that executes the callee’s code in the caller’s context but with the callee’s storage. Preserved for Solidity compatibility; new code should use <a href="#delegatecall"><code>delegatecall</code></a>.</p>
+<p>Deprecated EVM opcode that executes the callee’s code in the caller’s context but with the callee’s storage. Not supported by the newyork backend (codegen rejects it); use <a href="#delegatecall"><code>delegatecall</code></a> instead.</p>
 <h4 id="syntax-90"><a class="header" href="#syntax-90">Syntax</a></h4>
 <pre><code class="language-text">let $result := callcode($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $value[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
 </code></pre>
@@ -3667,7 +3668,7 @@ log2(v0, v1, v2, v3)            // two topics
 <h4 id="annotations-95"><a class="header" href="#annotations-95">Annotations</a></h4>
 <p>None.</p>
 <h2 id="termination-1"><a class="header" href="#termination-1">Termination</a></h2>
-<p>Statements that end the current call frame. Three plain forms (<code>return</code>, <code>revert</code>, <code>stop</code>), two unconditional traps (<code>invalid</code>, <code>selfdestruct</code>), and three outlined revert variants that encode common Solidity error patterns into single nodes that can be deduplicated across call sites.</p>
+<p>Statements that end the current call frame. Plain forms (<code>return</code>, <code>revert</code>, <code>stop</code>), unconditional traps (<code>invalid</code>, <code>selfdestruct</code>), and outlined revert variants (<code>panic_revert</code>, <code>error_string_revert</code>, <code>custom_error_revert</code>) that encode common Solidity error patterns into single nodes that can be deduplicated across call sites.</p>
 <h3 id="return"><a class="header" href="#return"><code>return</code></a></h3>
 <p>(<code>Statement::Return</code>)</p>
 <h4 id="description-96"><a class="header" href="#description-96">Description</a></h4>
@@ -3894,12 +3895,12 @@ log2(v0, v1, v2, v3)            // two topics
 <h3 id="custom_error_revert"><a class="header" href="#custom_error_revert"><code>custom_error_revert</code></a></h3>
 <p>(<code>Statement::CustomErrorRevert</code>)</p>
 <h4 id="description-103"><a class="header" href="#description-103">Description</a></h4>
-<p>Outlined Solidity custom-error revert. Encodes the error selector (left-shifted by 224 bits) and zero to three argument values into scratch memory and reverts. No FMP load is needed; the encoding uses the scratch region at offset <code>0</code>.</p>
+<p>Outlined Solidity custom-error revert. Encodes the error selector (left-shifted by 224 bits) and zero or more argument values into scratch memory and reverts. No FMP load is needed; the encoding uses the scratch region at offset <code>0</code>.</p>
 <h4 id="syntax-103"><a class="header" href="#syntax-103">Syntax</a></h4>
 <pre><code class="language-text">custom_error_revert(0x&lt;hex&gt;, [$arg_0, $arg_1, …])
 </code></pre>
 <h4 id="example-103"><a class="header" href="#example-103">Example</a></h4>
-<pre><code class="language-text">custom_error_revert(0xa28c4c1100000000000000000000000000000000000000000000000000000000, [v0, v1])
+<pre><code class="language-text">custom_error_revert(0xa28c4c11, [v0, v1])
 </code></pre>
 <h4 id="operands-103"><a class="header" href="#operands-103">Operands</a></h4>
 <div class="table-wrapper">
@@ -3908,7 +3909,7 @@ log2(v0, v1, v2, v3)            // two topics
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>arguments</code></td><td><code>Vec&lt;Value&gt;</code></td><td>0–3 argument values; the selector is a compile-time field.</td></tr>
+<tr><td><code>arguments</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Zero or more argument values; the selector is a compile-time field.</td></tr>
 </tbody>
 </table>
 </div>
@@ -3930,7 +3931,7 @@ log2(v0, v1, v2, v3)            // two topics
 <tr><th>Source field</th><th>Printed as</th></tr>
 </thead>
 <tbody>
-<tr><td><code>selector: BigUint</code></td><td>The 4-byte error selector shifted left by 224 bits, printed in hex in the first syntax position.</td></tr>
+<tr><td><code>selector: BigUint</code></td><td>The 4-byte error selector in hex, in the first syntax position. The selector is stored left-shifted by 224 bits; the printer right-shifts it back and prints the bare 4-byte value.</td></tr>
 </tbody>
 </table>
 </div>
@@ -3970,6 +3971,22 @@ log2(v0, v1, v2, v3)            // two topics
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
 
 
         <script>

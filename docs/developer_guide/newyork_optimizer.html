@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-a6a49a5a.js";
+            window.path_to_searchindex_js = "../searchindex-5ce1788e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-1290cc30.js"></script>
@@ -178,7 +178,7 @@
 <p>The <code>newyork</code> crate (<code>crates/newyork/</code>) introduces an additional intermediate representation (IR) layer between Yul and LLVM IR. It enables domain-specific optimizations that neither <code>solc</code> nor LLVM can perform on their own, because they lack semantic knowledge about the cross-domain compilation from EVM to PolkaVM.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>The newyork optimizer is experimental. It is gated behind the <code>RESOLC_USE_NEWYORK=1</code> environment variable (for standard JSON mode) or the <code>--newyork</code> CLI flag, and not yet enabled by default.</p>
+<p>The newyork optimizer is experimental. It is gated behind the <code>--newyork</code> CLI flag or the <code>settings.polkavm.newyork</code> field in standard JSON input, and not yet enabled by default.</p>
 </blockquote>
 <h2 id="motivation"><a class="header" href="#motivation">Motivation</a></h2>
 <p>The EVM and PolkaVM are fundamentally different machines:</p>
@@ -206,13 +206,15 @@ Yul AST ──────────► │                  newyork IR       
                     │  3. dedup (exact + fuzzy)                        │
                     │  4. mem_opt + fmp_prop + keccak_fold             │
                     │  5. simplify (pass 2)                            │
-                    │  6. compound_outlining + guard_narrow            │
+                    │  6. mapping_access_outlining + guard_narrow      │
                     │  7. simplify (pass 3)                            │
                     │  8. dedup (exact + fuzzy, pass 2)                │
                     │  ── recursive on subobjects ──                   │
-                    │  9. heap_opt (analysis)                          │
-                    │ 10. type_inference (4 iterative rounds)          │
-                    │ 11. validate                                     │
+                    │  9. type_inference (iterative narrowing)         │
+                    │ 10. late inline loop: inline, simplify, outline, │
+                    │     guard-narrow, simplify, dedup, narrow        │
+                    │ 11. heap_opt (analysis)                          │
+                    │ 12. validate                                     │
                     └──────────────────────────────────────────────────┘
 </code></pre>
 <p>The optimizer runs the following passes in order:</p>
@@ -225,13 +227,14 @@ Yul AST ──────────► │                  newyork IR       
 <li><strong>Compound outlining</strong> – detects <code>keccak256_pair</code> + <code>sload</code>/<code>sstore</code> sequences and fuses them into <code>MappingSLoad</code>/<code>MappingSStore</code> IR nodes, eliminating intermediate hash values. <strong>Guard narrowing</strong> – detects <code>if gt(val, MASK) { revert }</code> and <code>iszero(eq(val, and(val, MASK)))</code> patterns and inserts AND-mask narrowing, giving type inference proof that values fit in fewer bits.</li>
 <li><strong>Simplify</strong> (pass 3) – propagates opportunities created by compound outlining and guard narrowing.</li>
 <li><strong>Function deduplication</strong> (pass 2) – catches new duplicates exposed by guard narrowing and compound outlining canonicalization.</li>
-<li><strong>Heap analysis</strong> – analyzes memory access patterns (alignment, static offsets, taintedness, escaping regions) to determine which accesses can use native little-endian layout, skipping byte-swap operations. Uses GCD-based alignment propagation and per-region taint tracking.</li>
 <li><strong>Type inference</strong> – narrows 256-bit values to smaller widths (<code>I1</code>, <code>I8</code>, <code>I32</code>, <code>I64</code>, <code>I128</code>, <code>I160</code>) where provable. Runs iteratively for up to 4 cascading refinement rounds, combining forward min-width propagation, backward use-context demands, transparent-operation demand propagation, and interprocedural parameter/return narrowing.</li>
+<li><strong>Late inline loop</strong> – now that narrowing and simplification have shrunk wrapper functions below the inline thresholds, re-runs inlining, simplification, mapping access outlining, guard narrowing, deduplication, and type inference to collect the residual opportunities.</li>
+<li><strong>Heap analysis</strong> – analyzes memory access patterns (alignment, static offsets, taintedness, escaping regions) to determine which accesses can use native little-endian layout, skipping byte-swap operations. Uses GCD-based alignment propagation and per-region taint tracking.</li>
 <li><strong>Validation</strong> – checks SSA well-formedness (use-before-def, multiple definitions), yield count consistency, and function reference correctness.</li>
 </ol>
-<p>Steps 1-8 run recursively on subobjects (deployed contract code), where optimization impact is greatest. Steps 9-11 run on the full object tree.</p>
+<p>Steps 1-8 run recursively on subobjects (deployed contract code), where optimization impact is greatest. Steps 9-12 run on the full object tree.</p>
 <h2 id="ir-design"><a class="header" href="#ir-design">IR design</a></h2>
-<p>The newyork IR is an SSA form with structured control flow, inspired by MLIR’s SCF dialect. Key design choices:</p>
+<p>The newyork IR is an SSA form with structured control flow, inspired by <a href="https://mlir.llvm.org/docs/Dialects/SCFDialect/">MLIR’s SCF dialect</a>. Key design choices:</p>
 <ul>
 <li><strong>Explicit types with address spaces</strong>: Every value carries a bit-width (<code>I1</code>, <code>I8</code>, <code>I32</code>, <code>I64</code>, <code>I128</code>, <code>I160</code>, <code>I256</code>) and pointers carry address space information (<code>Heap</code>, <code>Stack</code>, <code>Storage</code>, <code>Code</code>). All values start as <code>I256</code> and are narrowed by type inference.</li>
 <li><strong>Pure expressions vs. effectful statements</strong>: Expressions compute values without side effects; statements perform memory, storage, or control flow effects. This separation simplifies analysis and rewriting.</li>
@@ -244,7 +247,7 @@ Yul AST ──────────► │                  newyork IR       
 <p>EVM operates on 256-bit words, but most values in practice fit in 32 or 64 bits. The type inference pass performs bidirectional analysis:</p>
 <ul>
 <li><strong>Forward</strong>: computes minimum width from literal values and operation semantics (e.g., <code>add(I64, I8)</code> produces <code>I65</code>, rounded up to <code>I128</code>).</li>
-<li><strong>Backward use tracking</strong>: classifies each value’s uses into 9 context categories (<code>MemoryOffset</code>, <code>MemoryValue</code>, <code>StorageAccess</code>, <code>Comparison</code>, <code>Arithmetic</code>, <code>FunctionArg</code>, <code>FunctionReturn</code>, <code>ExternalCall</code>, <code>General</code>). All categories conservatively demand the full <code>I256</code> width by default; the categorisation is what enables the interprocedural phase to selectively relax the demand for narrowed function arguments. Earlier versions narrowed directly from the use category, but that was unsound for memory offsets — <code>mload(2^128)</code> aliased to <code>mload(0)</code> because the bounds check ran on an already-truncated value (commit <code>ccca38df</code>).</li>
+<li><strong>Backward use tracking</strong>: classifies each value’s uses into 9 context categories (<code>MemoryOffset</code>, <code>MemoryValue</code>, <code>StorageAccess</code>, <code>Comparison</code>, <code>Arithmetic</code>, <code>FunctionArg</code>, <code>FunctionReturn</code>, <code>ExternalCall</code>, <code>General</code>). All categories conservatively demand the full <code>I256</code> width by default; the categorization is what enables the interprocedural phase to selectively relax the demand for narrowed function arguments. Earlier versions narrowed directly from the use category, but that was unsound for memory offsets — <code>mload(2^128)</code> aliased to <code>mload(0)</code> because the bounds check ran on an already-truncated value (commit <code>ccca38df</code>).</li>
 <li><strong>Transparent demand propagation</strong>: for modular-arithmetic operations (<code>Add</code>, <code>Sub</code>, <code>Mul</code>, <code>And</code>, <code>Or</code>, <code>Xor</code>), propagates narrow demands backward through operands, exploiting the property that <code>trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N))</code>.</li>
 <li><strong>Interprocedural</strong>: iteratively narrows function parameter and return types in up to four rounds, combining four narrowing strategies — body-driven parameter narrowing, caller-driven parameter narrowing, forward-based return narrowing, and demand-based return narrowing — and re-running full inference between rounds. Parameters are clamped to at least <code>I32</code> (XLEN on PolkaVM).</li>
 </ul>
@@ -360,30 +363,30 @@ can observe it.</p>
 <p>Additionally, common exit patterns (revert with constant length, zero-value returns) are deduplicated into shared LLVM basic blocks, saving hundreds of instruction copies in large contracts.</p>
 <h2 id="codesize-results"><a class="header" href="#codesize-results">Codesize results</a></h2>
 <h3 id="integration-test-contracts"><a class="header" href="#integration-test-contracts">Integration test contracts</a></h3>
-<p>Reproducible with <code>cargo test --package revive-integration -- codesize</code>. The <code>main</code> column is the value committed to <code>crates/integration/codesize.json</code> on <code>main</code>; the <code>newyork</code> column is the value produced by the same test with <code>RESOLC_USE_NEWYORK=1</code> set, currently committed on this branch.</p>
+<p>Reproducible with <code>cargo test --package revive-integration -- codesize</code> for the <em>Via Yul IR</em> column (<code>crates/integration/codesize.json</code>) and <code>cargo test --package revive-integration --features newyork -- codesize</code> for the <em>Via newyork IR</em> column (<code>crates/integration/codesize_newyork.json</code>).</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Contract</th><th>main (bytes)</th><th>newyork (bytes)</th><th>Reduction</th></tr>
+<tr><th>Contract</th><th>Via Yul IR (bytes)</th><th>Via newyork IR (bytes)</th><th>Reduction</th></tr>
 </thead>
 <tbody>
-<tr><td>Baseline</td><td>870</td><td>479</td><td>−44.9%</td></tr>
-<tr><td>Computation</td><td>2,418</td><td>1,376</td><td>−43.1%</td></tr>
-<tr><td>DivisionArithmetics</td><td>9,327</td><td>7,192</td><td>−22.9%</td></tr>
-<tr><td>ERC20</td><td>17,160</td><td>10,138</td><td>−40.9%</td></tr>
-<tr><td>Events</td><td>1,662</td><td>1,279</td><td>−23.0%</td></tr>
-<tr><td>FibonacciIterative</td><td>1,427</td><td>949</td><td>−33.5%</td></tr>
-<tr><td>Flipper</td><td>2,240</td><td>1,123</td><td>−49.9%</td></tr>
-<tr><td>SHA1</td><td>8,009</td><td>6,286</td><td>−21.5%</td></tr>
+<tr><td>Baseline</td><td>838</td><td>493</td><td>−41.2%</td></tr>
+<tr><td>Computation</td><td>2,368</td><td>1,217</td><td>−48.6%</td></tr>
+<tr><td>DivisionArithmetics</td><td>11,444</td><td>7,370</td><td>−35.6%</td></tr>
+<tr><td>ERC20</td><td>18,057</td><td>8,726</td><td>−51.7%</td></tr>
+<tr><td>Events</td><td>1,614</td><td>909</td><td>−43.7%</td></tr>
+<tr><td>FibonacciIterative</td><td>1,373</td><td>969</td><td>−29.4%</td></tr>
+<tr><td>Flipper</td><td>2,205</td><td>1,058</td><td>−52.0%</td></tr>
+<tr><td>SHA1</td><td>7,830</td><td>6,264</td><td>−20.0%</td></tr>
 </tbody>
 </table>
 </div>
 <h3 id="openzeppelin-contracts"><a class="header" href="#openzeppelin-contracts">OpenZeppelin contracts</a></h3>
-<p>Measured by running <code>oz-tests/oz.sh</code> against real-world contracts generated with the OpenZeppelin Wizard. The numbers below are a development snapshot — there is no committed measurement file in the repo, so these may drift as the optimizer evolves; rerun the script for fresh figures.</p>
+<p>Measured against real-world contracts generated with the OpenZeppelin Wizard. The numbers below are a development snapshot.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Contract</th><th>newyork (bytes)</th></tr>
+<tr><th>Contract</th><th>Via newyork IR (bytes)</th></tr>
 </thead>
 <tbody>
 <tr><td>oz_gov</td><td>81,840</td></tr>
@@ -399,10 +402,11 @@ can observe it.</p>
 </table>
 </div>
 <p>For comparison, building the same contracts without the newyork optimizer at the equivalent snapshot produced <strong>563,526</strong> bytes total — a reduction of about <strong>−43%</strong> across the corpus.</p>
-<p>Per-contract reductions in the integration suite range from roughly <strong>−21%</strong> (SHA1, where the bulk of the work is the SHA-1 inner loop and offers little to optimise) to nearly <strong>−50%</strong> (Flipper, where the optimiser strips away most of Solidity’s dispatch and storage-access scaffolding).</p>
+<p>Per-contract reductions in the integration suite range from roughly <strong>−20%</strong> (SHA1, where the bulk of the work is the SHA-1 inner loop and offers little to optimize) to about <strong>−52%</strong> (Flipper, where the optimizer strips away most of Solidity’s dispatch and storage-access scaffolding).</p>
 <h2 id="development-history-and-challenges"><a class="header" href="#development-history-and-challenges">Development history and challenges</a></h2>
-<p>The newyork optimizer was developed over roughly three months — from early February 2026 through early May 2026 — largely through AI-assisted pair programming with Claude. The development progressed through several distinct phases:</p>
-<p><strong>Phase 1 – Initial scaffolding</strong>: The first draft established the core IR data structures, Yul-to-IR translation, and LLVM codegen. Early commits focused on getting a correct round-trip through the new pipeline.</p>
+<p>The first version of the newyork optimizer was authored collaboratively and reviewed extensively by the <code>revive</code> maintainers, as well as Claude Opus, Claude Fable, Qwen, Minimax and Deepseek LLMs, over a span of many months — from early February 2026 through mid-June 2026.</p>
+<p>The development progressed through several distinct phases:</p>
+<p><strong>Phase 1 – Initial scaffolding</strong>: The first draft established the core IR data structures, Yul-to-newyork-IR translation, and LLVM codegen. Early commits focused on getting a correct round-trip through the new pipeline.</p>
 <p><strong>Phase 2 – Optimization passes</strong>: Once the baseline was stable, optimization passes were added iteratively: inlining, simplification, memory optimization, function deduplication, keccak256 fusion, and type inference. Each pass was validated against differential tests comparing EVM and PVM execution.</p>
 <p><strong>Phase 3 – Soundness hardening</strong>: Several type inference and narrowing approaches turned out to be unsound and had to be reworked:</p>
 <ul>
@@ -411,6 +415,8 @@ can observe it.</p>
 <li>Backward demand-driven narrowing required multiple iterations to become provably safe.</li>
 </ul>
 <p><strong>Phase 4 – Measuring and tuning</strong>: Systematic measurement of OpenZeppelin contracts revealed which optimizations had the most impact and which approaches regressed performance.</p>
+<p>Throughout development the optimizer was validated against the existing integration and differential test suites (containing over 30,000 test cases), which run each contract on both EVM and PVM and assert identical state changes.</p>
+<p>The newyork compiler pipeline introduced no new regressions over these test suites. This was achieved by careful manual reviews and many LLM bughunt loops. Additionally, a final security review by Anthropic’s Fable 5 LLM found no remaining soundness issues. As with any new compiler feature, it should still be treated as experimental as of now.</p>
 <h3 id="approaches-that-did-not-work"><a class="header" href="#approaches-that-did-not-work">Approaches that did not work</a></h3>
 <div class="table-wrapper">
 <table>
@@ -422,6 +428,9 @@ can observe it.</p>
 <tr><td>NoInline on <code>__revive_int_truncate</code></td><td>+62% regression: PolkaVM call overhead exceeds inline cost</td></tr>
 <tr><td>Native FMP memory (inline sbrk)</td><td>Mixed: small contracts improved, large ones regressed from sbrk bloat</td></tr>
 <tr><td>Shared overflow trap block</td><td>Mixed: prevented LLVM from eliminating individual dead overflow checks</td></tr>
+<tr><td>Aggressive IR-level single-call inlining</td><td>Regressed large contracts (ERC20 +6.1%): merged bodies become monolithic functions LLVM can’t optimize, so large functions are deferred to LLVM’s inliner instead</td></tr>
+<tr><td>Type-inference narrowing of <code>mload(0x40)</code> to I32</td><td>Regressed small contracts (+252 bytes): conflicts with the codegen FMP range proof; the bound is exposed via a trunc→zext pair instead</td></tr>
+<tr><td>Full simplifier re-run after <code>mem_opt</code></td><td>Mixed: helped small ERC20 (−293 bytes) but regressed the OZ stablecoin (+72 bytes); replaced by a targeted keccak-only fold</td></tr>
 </tbody>
 </table>
 </div>
@@ -429,30 +438,28 @@ can observe it.</p>
 <h2 id="known-limitations-and-future-work"><a class="header" href="#known-limitations-and-future-work">Known limitations and future work</a></h2>
 <p>The following opportunities have been identified but are not yet implemented:</p>
 <ul>
-<li><strong>Bitwise algebraic simplifications</strong>: <code>BitAnd</code>, <code>BitOr</code>, <code>BitXor</code> identity patterns fall through without simplification.</li>
-<li><strong>Cross-control-flow memory optimization</strong>: Memory state is conservatively cleared at <code>if</code>/<code>switch</code>/<code>for</code> boundaries. Preserving state across simple branches would enable more load-after-store eliminations.</li>
+<li><strong>Memory optimization across loop boundaries</strong>: Tracked memory state is cleared around <code>for</code> loop condition, body, and post blocks, so load-after-store eliminations do not carry across loop iterations. Preserving loop-invariant state would recover more eliminations.</li>
 <li><strong>Adaptive inlining thresholds</strong>: Current thresholds are static constants. Profile-guided or contract-size-aware heuristics could improve decisions for diverse contract sizes.</li>
-<li><strong>Extended fuzzy deduplication</strong>: The current pass only compares functions by structure of <code>Let</code> bindings. Extending to consider literals inside <code>MStore</code>, <code>Return</code>, <code>Revert</code>, and <code>Log</code> statements would find more deduplication opportunities.</li>
-<li><strong>Type checking in validation</strong>: The validator checks SSA well-formedness and structural correctness, but does not yet verify type consistency of operations (the <code>TypeMismatch</code> error variant exists but is not yet wired).</li>
+<li><strong>Extended fuzzy deduplication</strong>: The current pass only parameterizes literals in <code>Let</code> bindings and <code>SStore</code> slots. Extending it to consider literals inside <code>MStore</code>, <code>Return</code>, <code>Revert</code>, and <code>Log</code> statements would find more deduplication opportunities.</li>
+<li><strong>Type checking in validation</strong>: The validator checks SSA well-formedness and structure, but not operation type consistency. Type discipline is maintained by construction (type inference and codegen), with LLVM’s IR verifier as the backstop.</li>
 <li><strong>Loop variable narrowing</strong>: Loop-carried variables are conservatively widened to <code>I256</code>. Reaching a fixed-point across loop iterations could allow narrower types for simple counters.</li>
+<li><strong>Functions with <code>leave</code> inside a <code>for</code> loop are not inlined</strong>: the IR-level inliner defers such functions to LLVM’s inliner, so they miss the interprocedural constant propagation and width narrowing the IR-level pass provides.</li>
 </ul>
-<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment variables</a></h2>
-<p>A small set of environment variables controls or inspects the newyork pipeline. Only <code>RESOLC_USE_NEWYORK</code> affects generated bytecode; the others are read-only inspection knobs used while debugging the optimizer.</p>
+<h2 id="debug-output"><a class="header" href="#debug-output">Debug output</a></h2>
+<p>Passing <code>--debug-output-dir &lt;path&gt;</code> makes the newyork pipeline write IR and analysis artifacts for each compiled contract into that directory. The dumps are produced automatically whenever the directory is set.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Variable</th><th>Effect</th></tr>
+<tr><th>File</th><th>Content</th></tr>
 </thead>
 <tbody>
-<tr><td><code>RESOLC_USE_NEWYORK=1</code></td><td>Routes Yul lowering through the newyork pipeline. Equivalent to passing <code>--newyork</code> on the command line; the CLI flag and this variable are OR-ed by <code>resolve_use_newyork</code> (<code>crates/resolc/src/lib.rs</code>).</td></tr>
-<tr><td><code>RESOLC_DEBUG_IR</code></td><td>When set, prints the translated newyork IR for every object to stderr. Additionally writes <code>&lt;output_directory&gt;/&lt;object&gt;.newyork.txt</code> whenever the debug config carries an output directory.</td></tr>
-<tr><td><code>RESOLC_DEBUG_HEAP</code></td><td>When set, appends per-object heap-analysis details — native regions/offsets, taintedness, dynamic escapes, escaping ranges — to <code>&lt;output_directory&gt;/resolc_heap_debug.log</code>. Requires the debug config to carry an output directory.</td></tr>
-<tr><td><code>NEWYORK_DUMP_IR</code></td><td>When set, writes the IR for every translated object to <code>/tmp/newyork_ir_&lt;object&gt;.txt</code> from inside <code>translate_yul_object</code> (<code>crates/newyork/src/lib.rs</code>). Independent of <code>RESOLC_DEBUG_IR</code> — fires before codegen and needs no output directory.</td></tr>
-<tr><td><code>RESOLC_DEBUG_BLOB</code></td><td>Test harness only. Dumps the compiled PVM blob to <code>/tmp/debug_blob_&lt;contract&gt;.pvm</code> and the LLVM IR debug directory to <code>/tmp/debug_llvm_newyork</code> or <code>/tmp/debug_llvm_yul</code>. Used by <code>crates/resolc/src/test_utils.rs</code> when comparing newyork against the Yul path.</td></tr>
+<tr><td><code>&lt;contract-stem&gt;.newyork</code></td><td>Final optimized IR, annotated with the inferred type widths</td></tr>
+<tr><td><code>&lt;contract-stem&gt;.snapshot.newyork</code></td><td>IR snapshot taken before the late passes (only when captured during translation)</td></tr>
+<tr><td><code>&lt;contract-stem&gt;.heap.newyork</code></td><td>Heap analysis summary (native regions/offsets, taintedness, escapes, dynamic accesses)</td></tr>
+<tr><td><code>&lt;contract-stem&gt;.mem.newyork</code></td><td>Memory optimization counters (loads/stores eliminated, keccak fusions, FMP loads eliminated)</td></tr>
 </tbody>
 </table>
 </div>
-<p>All of these gate on presence/value at the start of compilation; flipping them mid-run has no effect.</p>
 <h2 id="module-reference"><a class="header" href="#module-reference">Module reference</a></h2>
 <div class="table-wrapper">
 <table>
@@ -469,7 +476,7 @@ can observe it.</p>
 <tr><td><code>type_inference.rs</code></td><td>Bidirectional integer width narrowing with transparent demand propagation</td></tr>
 <tr><td><code>mem_opt.rs</code></td><td>Load-after-store elimination, keccak256 fusion, FMP propagation</td></tr>
 <tr><td><code>heap_opt.rs</code></td><td>Heap access pattern analysis, alignment tracking, byte-swap elimination</td></tr>
-<tr><td><code>compound_outlining.rs</code></td><td>Mapping access pattern detection and fusion (<code>keccak256_pair</code> + <code>sload</code>/<code>sstore</code>)</td></tr>
+<tr><td><code>mapping_access_outlining.rs</code></td><td>Mapping access pattern detection and fusion (<code>keccak256_pair</code> + <code>sload</code>/<code>sstore</code>)</td></tr>
 <tr><td><code>guard_narrow.rs</code></td><td>Guard pattern detection and AND-mask narrowing insertion</td></tr>
 <tr><td><code>validate.rs</code></td><td>IR well-formedness checks (SSA, yields, function references)</td></tr>
 <tr><td><code>printer.rs</code></td><td>Human-readable IR pretty printer with configurable output</td></tr>
@@ -513,6 +520,22 @@ can observe it.</p>
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
 
 
         <script>

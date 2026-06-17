@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a6a49a5a.js";
+            window.path_to_searchindex_js = "searchindex-5ce1788e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1290cc30.js"></script>
@@ -237,7 +237,7 @@ Please find our <a href="https://paritytech.github.io/resolc-bin/">binary releas
 <h3 id="llvm-optimization-levels"><a class="header" href="#llvm-optimization-levels">LLVM optimization levels</a></h3>
 <pre><code class="language-bash">-O, --optimization &lt;OPTIMIZATION&gt;
 </code></pre>
-<p><code>resolc</code> exposes the optimization level setting for the LLVM backend. The performance and size of compiled contracts varies wiedly between different optimization levels.</p>
+<p><code>resolc</code> exposes the optimization level setting for the LLVM backend. The performance and size of compiled contracts varies widely between different optimization levels. (This is independent of <code>--newyork</code> which selects the IR lowering pipeline.)</p>
 <p>Valid levels are the following:</p>
 <ul>
 <li><code>0</code>: No optimizations are applied.</li>
@@ -248,6 +248,10 @@ Please find our <a href="https://paritytech.github.io/resolc-bin/">binary releas
 <li><code>z</code>: Aggressively optimize for code size.</li>
 </ul>
 <p>By default, <code>-Oz</code> is applied.</p>
+<h3 id="newyork-ir-pipeline"><a class="header" href="#newyork-ir-pipeline">newyork IR pipeline</a></h3>
+<pre><code class="language-bash">--newyork
+</code></pre>
+<p>Route Yul lowering through the <strong>experimental</strong> <a href="#the-newyork-optimizer">newyork IR pipeline</a> instead of the standard Yul-to-LLVM path. Orthogonal to the input mode: composes with <code>--yul</code>, <code>--standard-json</code>, <code>--combined-json</code>, and the default Solidity mode. Equivalent to setting <code>settings.polkavm.newyork: true</code> in standard JSON input. Off by default.</p>
 <h3 id="stack-size"><a class="header" href="#stack-size">Stack size</a></h3>
 <pre><code class="language-bash">--stack-size &lt;STACK_SIZE&gt;
 </code></pre>
@@ -281,7 +285,7 @@ Please find our <a href="https://paritytech.github.io/resolc-bin/">binary releas
 <h3 id="debug-artifacts"><a class="header" href="#debug-artifacts">Debug artifacts</a></h3>
 <pre><code class="language-bash">--debug-output-dir &lt;DEBUG_OUTPUT_DIRECTORY&gt;
 </code></pre>
-<p>Dump all intermediary compiler artifacts to files in the specified directory. This includes the YUL IR, optimized and unoptimized LLVM IR, the ELF object and the PVM assembly. Useful for debugging and development purposes.</p>
+<p>Dump all intermediary compiler artifacts to files in the specified directory. This includes the Yul IR, optimized and unoptimized LLVM IR, the ELF object and the PVM assembly. When the newyork pipeline is active, the <a href="#debug-output">newyork IR is additionally dumped</a> (the final IR, a pre-late-pass snapshot, and heap and memory optimization data). Useful for debugging and development purposes.</p>
 <h3 id="debug-info"><a class="header" href="#debug-info">Debug info</a></h3>
 <pre><code class="language-bash">-g
 </code></pre>
@@ -351,6 +355,9 @@ Please find our <a href="https://paritytech.github.io/resolc-bin/">binary releas
 <p>Used to configure PVM specific compiler settings.</p>
 <h3 id="settingspolkavmdebuginformation"><a class="header" href="#settingspolkavmdebuginformation"><code>settings.polkavm.debugInformation</code></a></h3>
 <p>A boolean value allowing to enable debug information. Corresponds to <code>resolc -g</code>.</p>
+<h3 id="settingspolkavmnewyork"><a class="header" href="#settingspolkavmnewyork"><code>settings.polkavm.newyork</code></a></h3>
+<p>A boolean value allowing to enable the experimental <a href="#the-newyork-optimizer">newyork IR pipeline</a> for Yul lowering. Corresponds to <code>resolc --newyork</code>. Off by default.</p>
+<p>The output JSON includes which pipeline actually ran, via the top-level <code>resolc_pipeline</code> field (<code>"newyork"</code> or <code>"yul"</code> for the standard Yul-to-LLVM pipeline) .</p>
 <h3 id="the-settingspolkavmmemoryconfig-object"><a class="header" href="#the-settingspolkavmmemoryconfig-object">The <code>settings.polkavm.memoryConfig</code> object</a></h3>
 <p>Used to apply PVM specific memory configuration settings.</p>
 <h4 id="settingspolkavmmemoryconfigheapsize"><a class="header" href="#settingspolkavmmemoryconfigheapsize"><code>settings.polkavm.memoryConfig.heapSize</code></a></h4>
@@ -649,7 +656,7 @@ contract Test is InnerContract {
 <p>The <code>newyork</code> crate (<code>crates/newyork/</code>) introduces an additional intermediate representation (IR) layer between Yul and LLVM IR. It enables domain-specific optimizations that neither <code>solc</code> nor LLVM can perform on their own, because they lack semantic knowledge about the cross-domain compilation from EVM to PolkaVM.</p>
 <blockquote class="blockquote-tag blockquote-tag-note">
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>The newyork optimizer is experimental. It is gated behind the <code>RESOLC_USE_NEWYORK=1</code> environment variable (for standard JSON mode) or the <code>--newyork</code> CLI flag, and not yet enabled by default.</p>
+<p>The newyork optimizer is experimental. It is gated behind the <code>--newyork</code> CLI flag or the <code>settings.polkavm.newyork</code> field in standard JSON input, and not yet enabled by default.</p>
 </blockquote>
 <h2 id="motivation"><a class="header" href="#motivation">Motivation</a></h2>
 <p>The EVM and PolkaVM are fundamentally different machines:</p>
@@ -677,13 +684,15 @@ Yul AST ──────────► │                  newyork IR       
                     │  3. dedup (exact + fuzzy)                        │
                     │  4. mem_opt + fmp_prop + keccak_fold             │
                     │  5. simplify (pass 2)                            │
-                    │  6. compound_outlining + guard_narrow            │
+                    │  6. mapping_access_outlining + guard_narrow      │
                     │  7. simplify (pass 3)                            │
                     │  8. dedup (exact + fuzzy, pass 2)                │
                     │  ── recursive on subobjects ──                   │
-                    │  9. heap_opt (analysis)                          │
-                    │ 10. type_inference (4 iterative rounds)          │
-                    │ 11. validate                                     │
+                    │  9. type_inference (iterative narrowing)         │
+                    │ 10. late inline loop: inline, simplify, outline, │
+                    │     guard-narrow, simplify, dedup, narrow        │
+                    │ 11. heap_opt (analysis)                          │
+                    │ 12. validate                                     │
                     └──────────────────────────────────────────────────┘
 </code></pre>
 <p>The optimizer runs the following passes in order:</p>
@@ -696,13 +705,14 @@ Yul AST ──────────► │                  newyork IR       
 <li><strong>Compound outlining</strong> – detects <code>keccak256_pair</code> + <code>sload</code>/<code>sstore</code> sequences and fuses them into <code>MappingSLoad</code>/<code>MappingSStore</code> IR nodes, eliminating intermediate hash values. <strong>Guard narrowing</strong> – detects <code>if gt(val, MASK) { revert }</code> and <code>iszero(eq(val, and(val, MASK)))</code> patterns and inserts AND-mask narrowing, giving type inference proof that values fit in fewer bits.</li>
 <li><strong>Simplify</strong> (pass 3) – propagates opportunities created by compound outlining and guard narrowing.</li>
 <li><strong>Function deduplication</strong> (pass 2) – catches new duplicates exposed by guard narrowing and compound outlining canonicalization.</li>
-<li><strong>Heap analysis</strong> – analyzes memory access patterns (alignment, static offsets, taintedness, escaping regions) to determine which accesses can use native little-endian layout, skipping byte-swap operations. Uses GCD-based alignment propagation and per-region taint tracking.</li>
 <li><strong>Type inference</strong> – narrows 256-bit values to smaller widths (<code>I1</code>, <code>I8</code>, <code>I32</code>, <code>I64</code>, <code>I128</code>, <code>I160</code>) where provable. Runs iteratively for up to 4 cascading refinement rounds, combining forward min-width propagation, backward use-context demands, transparent-operation demand propagation, and interprocedural parameter/return narrowing.</li>
+<li><strong>Late inline loop</strong> – now that narrowing and simplification have shrunk wrapper functions below the inline thresholds, re-runs inlining, simplification, mapping access outlining, guard narrowing, deduplication, and type inference to collect the residual opportunities.</li>
+<li><strong>Heap analysis</strong> – analyzes memory access patterns (alignment, static offsets, taintedness, escaping regions) to determine which accesses can use native little-endian layout, skipping byte-swap operations. Uses GCD-based alignment propagation and per-region taint tracking.</li>
 <li><strong>Validation</strong> – checks SSA well-formedness (use-before-def, multiple definitions), yield count consistency, and function reference correctness.</li>
 </ol>
-<p>Steps 1-8 run recursively on subobjects (deployed contract code), where optimization impact is greatest. Steps 9-11 run on the full object tree.</p>
+<p>Steps 1-8 run recursively on subobjects (deployed contract code), where optimization impact is greatest. Steps 9-12 run on the full object tree.</p>
 <h2 id="ir-design"><a class="header" href="#ir-design">IR design</a></h2>
-<p>The newyork IR is an SSA form with structured control flow, inspired by MLIR’s SCF dialect. Key design choices:</p>
+<p>The newyork IR is an SSA form with structured control flow, inspired by <a href="https://mlir.llvm.org/docs/Dialects/SCFDialect/">MLIR’s SCF dialect</a>. Key design choices:</p>
 <ul>
 <li><strong>Explicit types with address spaces</strong>: Every value carries a bit-width (<code>I1</code>, <code>I8</code>, <code>I32</code>, <code>I64</code>, <code>I128</code>, <code>I160</code>, <code>I256</code>) and pointers carry address space information (<code>Heap</code>, <code>Stack</code>, <code>Storage</code>, <code>Code</code>). All values start as <code>I256</code> and are narrowed by type inference.</li>
 <li><strong>Pure expressions vs. effectful statements</strong>: Expressions compute values without side effects; statements perform memory, storage, or control flow effects. This separation simplifies analysis and rewriting.</li>
@@ -715,7 +725,7 @@ Yul AST ──────────► │                  newyork IR       
 <p>EVM operates on 256-bit words, but most values in practice fit in 32 or 64 bits. The type inference pass performs bidirectional analysis:</p>
 <ul>
 <li><strong>Forward</strong>: computes minimum width from literal values and operation semantics (e.g., <code>add(I64, I8)</code> produces <code>I65</code>, rounded up to <code>I128</code>).</li>
-<li><strong>Backward use tracking</strong>: classifies each value’s uses into 9 context categories (<code>MemoryOffset</code>, <code>MemoryValue</code>, <code>StorageAccess</code>, <code>Comparison</code>, <code>Arithmetic</code>, <code>FunctionArg</code>, <code>FunctionReturn</code>, <code>ExternalCall</code>, <code>General</code>). All categories conservatively demand the full <code>I256</code> width by default; the categorisation is what enables the interprocedural phase to selectively relax the demand for narrowed function arguments. Earlier versions narrowed directly from the use category, but that was unsound for memory offsets — <code>mload(2^128)</code> aliased to <code>mload(0)</code> because the bounds check ran on an already-truncated value (commit <code>ccca38df</code>).</li>
+<li><strong>Backward use tracking</strong>: classifies each value’s uses into 9 context categories (<code>MemoryOffset</code>, <code>MemoryValue</code>, <code>StorageAccess</code>, <code>Comparison</code>, <code>Arithmetic</code>, <code>FunctionArg</code>, <code>FunctionReturn</code>, <code>ExternalCall</code>, <code>General</code>). All categories conservatively demand the full <code>I256</code> width by default; the categorization is what enables the interprocedural phase to selectively relax the demand for narrowed function arguments. Earlier versions narrowed directly from the use category, but that was unsound for memory offsets — <code>mload(2^128)</code> aliased to <code>mload(0)</code> because the bounds check ran on an already-truncated value (commit <code>ccca38df</code>).</li>
 <li><strong>Transparent demand propagation</strong>: for modular-arithmetic operations (<code>Add</code>, <code>Sub</code>, <code>Mul</code>, <code>And</code>, <code>Or</code>, <code>Xor</code>), propagates narrow demands backward through operands, exploiting the property that <code>trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N))</code>.</li>
 <li><strong>Interprocedural</strong>: iteratively narrows function parameter and return types in up to four rounds, combining four narrowing strategies — body-driven parameter narrowing, caller-driven parameter narrowing, forward-based return narrowing, and demand-based return narrowing — and re-running full inference between rounds. Parameters are clamped to at least <code>I32</code> (XLEN on PolkaVM).</li>
 </ul>
@@ -831,30 +841,30 @@ can observe it.</p>
 <p>Additionally, common exit patterns (revert with constant length, zero-value returns) are deduplicated into shared LLVM basic blocks, saving hundreds of instruction copies in large contracts.</p>
 <h2 id="codesize-results"><a class="header" href="#codesize-results">Codesize results</a></h2>
 <h3 id="integration-test-contracts"><a class="header" href="#integration-test-contracts">Integration test contracts</a></h3>
-<p>Reproducible with <code>cargo test --package revive-integration -- codesize</code>. The <code>main</code> column is the value committed to <code>crates/integration/codesize.json</code> on <code>main</code>; the <code>newyork</code> column is the value produced by the same test with <code>RESOLC_USE_NEWYORK=1</code> set, currently committed on this branch.</p>
+<p>Reproducible with <code>cargo test --package revive-integration -- codesize</code> for the <em>Via Yul IR</em> column (<code>crates/integration/codesize.json</code>) and <code>cargo test --package revive-integration --features newyork -- codesize</code> for the <em>Via newyork IR</em> column (<code>crates/integration/codesize_newyork.json</code>).</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Contract</th><th>main (bytes)</th><th>newyork (bytes)</th><th>Reduction</th></tr>
+<tr><th>Contract</th><th>Via Yul IR (bytes)</th><th>Via newyork IR (bytes)</th><th>Reduction</th></tr>
 </thead>
 <tbody>
-<tr><td>Baseline</td><td>870</td><td>479</td><td>−44.9%</td></tr>
-<tr><td>Computation</td><td>2,418</td><td>1,376</td><td>−43.1%</td></tr>
-<tr><td>DivisionArithmetics</td><td>9,327</td><td>7,192</td><td>−22.9%</td></tr>
-<tr><td>ERC20</td><td>17,160</td><td>10,138</td><td>−40.9%</td></tr>
-<tr><td>Events</td><td>1,662</td><td>1,279</td><td>−23.0%</td></tr>
-<tr><td>FibonacciIterative</td><td>1,427</td><td>949</td><td>−33.5%</td></tr>
-<tr><td>Flipper</td><td>2,240</td><td>1,123</td><td>−49.9%</td></tr>
-<tr><td>SHA1</td><td>8,009</td><td>6,286</td><td>−21.5%</td></tr>
+<tr><td>Baseline</td><td>838</td><td>493</td><td>−41.2%</td></tr>
+<tr><td>Computation</td><td>2,368</td><td>1,217</td><td>−48.6%</td></tr>
+<tr><td>DivisionArithmetics</td><td>11,444</td><td>7,370</td><td>−35.6%</td></tr>
+<tr><td>ERC20</td><td>18,057</td><td>8,726</td><td>−51.7%</td></tr>
+<tr><td>Events</td><td>1,614</td><td>909</td><td>−43.7%</td></tr>
+<tr><td>FibonacciIterative</td><td>1,373</td><td>969</td><td>−29.4%</td></tr>
+<tr><td>Flipper</td><td>2,205</td><td>1,058</td><td>−52.0%</td></tr>
+<tr><td>SHA1</td><td>7,830</td><td>6,264</td><td>−20.0%</td></tr>
 </tbody>
 </table>
 </div>
 <h3 id="openzeppelin-contracts"><a class="header" href="#openzeppelin-contracts">OpenZeppelin contracts</a></h3>
-<p>Measured by running <code>oz-tests/oz.sh</code> against real-world contracts generated with the OpenZeppelin Wizard. The numbers below are a development snapshot — there is no committed measurement file in the repo, so these may drift as the optimizer evolves; rerun the script for fresh figures.</p>
+<p>Measured against real-world contracts generated with the OpenZeppelin Wizard. The numbers below are a development snapshot.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Contract</th><th>newyork (bytes)</th></tr>
+<tr><th>Contract</th><th>Via newyork IR (bytes)</th></tr>
 </thead>
 <tbody>
 <tr><td>oz_gov</td><td>81,840</td></tr>
@@ -870,10 +880,11 @@ can observe it.</p>
 </table>
 </div>
 <p>For comparison, building the same contracts without the newyork optimizer at the equivalent snapshot produced <strong>563,526</strong> bytes total — a reduction of about <strong>−43%</strong> across the corpus.</p>
-<p>Per-contract reductions in the integration suite range from roughly <strong>−21%</strong> (SHA1, where the bulk of the work is the SHA-1 inner loop and offers little to optimise) to nearly <strong>−50%</strong> (Flipper, where the optimiser strips away most of Solidity’s dispatch and storage-access scaffolding).</p>
+<p>Per-contract reductions in the integration suite range from roughly <strong>−20%</strong> (SHA1, where the bulk of the work is the SHA-1 inner loop and offers little to optimize) to about <strong>−52%</strong> (Flipper, where the optimizer strips away most of Solidity’s dispatch and storage-access scaffolding).</p>
 <h2 id="development-history-and-challenges"><a class="header" href="#development-history-and-challenges">Development history and challenges</a></h2>
-<p>The newyork optimizer was developed over roughly three months — from early February 2026 through early May 2026 — largely through AI-assisted pair programming with Claude. The development progressed through several distinct phases:</p>
-<p><strong>Phase 1 – Initial scaffolding</strong>: The first draft established the core IR data structures, Yul-to-IR translation, and LLVM codegen. Early commits focused on getting a correct round-trip through the new pipeline.</p>
+<p>The first version of the newyork optimizer was authored collaboratively and reviewed extensively by the <code>revive</code> maintainers, as well as Claude Opus, Claude Fable, Qwen, Minimax and Deepseek LLMs, over a span of many months — from early February 2026 through mid-June 2026.</p>
+<p>The development progressed through several distinct phases:</p>
+<p><strong>Phase 1 – Initial scaffolding</strong>: The first draft established the core IR data structures, Yul-to-newyork-IR translation, and LLVM codegen. Early commits focused on getting a correct round-trip through the new pipeline.</p>
 <p><strong>Phase 2 – Optimization passes</strong>: Once the baseline was stable, optimization passes were added iteratively: inlining, simplification, memory optimization, function deduplication, keccak256 fusion, and type inference. Each pass was validated against differential tests comparing EVM and PVM execution.</p>
 <p><strong>Phase 3 – Soundness hardening</strong>: Several type inference and narrowing approaches turned out to be unsound and had to be reworked:</p>
 <ul>
@@ -882,6 +893,8 @@ can observe it.</p>
 <li>Backward demand-driven narrowing required multiple iterations to become provably safe.</li>
 </ul>
 <p><strong>Phase 4 – Measuring and tuning</strong>: Systematic measurement of OpenZeppelin contracts revealed which optimizations had the most impact and which approaches regressed performance.</p>
+<p>Throughout development the optimizer was validated against the existing integration and differential test suites (containing over 30,000 test cases), which run each contract on both EVM and PVM and assert identical state changes.</p>
+<p>The newyork compiler pipeline introduced no new regressions over these test suites. This was achieved by careful manual reviews and many LLM bughunt loops. Additionally, a final security review by Anthropic’s Fable 5 LLM found no remaining soundness issues. As with any new compiler feature, it should still be treated as experimental as of now.</p>
 <h3 id="approaches-that-did-not-work"><a class="header" href="#approaches-that-did-not-work">Approaches that did not work</a></h3>
 <div class="table-wrapper">
 <table>
@@ -893,6 +906,9 @@ can observe it.</p>
 <tr><td>NoInline on <code>__revive_int_truncate</code></td><td>+62% regression: PolkaVM call overhead exceeds inline cost</td></tr>
 <tr><td>Native FMP memory (inline sbrk)</td><td>Mixed: small contracts improved, large ones regressed from sbrk bloat</td></tr>
 <tr><td>Shared overflow trap block</td><td>Mixed: prevented LLVM from eliminating individual dead overflow checks</td></tr>
+<tr><td>Aggressive IR-level single-call inlining</td><td>Regressed large contracts (ERC20 +6.1%): merged bodies become monolithic functions LLVM can’t optimize, so large functions are deferred to LLVM’s inliner instead</td></tr>
+<tr><td>Type-inference narrowing of <code>mload(0x40)</code> to I32</td><td>Regressed small contracts (+252 bytes): conflicts with the codegen FMP range proof; the bound is exposed via a trunc→zext pair instead</td></tr>
+<tr><td>Full simplifier re-run after <code>mem_opt</code></td><td>Mixed: helped small ERC20 (−293 bytes) but regressed the OZ stablecoin (+72 bytes); replaced by a targeted keccak-only fold</td></tr>
 </tbody>
 </table>
 </div>
@@ -900,30 +916,28 @@ can observe it.</p>
 <h2 id="known-limitations-and-future-work"><a class="header" href="#known-limitations-and-future-work">Known limitations and future work</a></h2>
 <p>The following opportunities have been identified but are not yet implemented:</p>
 <ul>
-<li><strong>Bitwise algebraic simplifications</strong>: <code>BitAnd</code>, <code>BitOr</code>, <code>BitXor</code> identity patterns fall through without simplification.</li>
-<li><strong>Cross-control-flow memory optimization</strong>: Memory state is conservatively cleared at <code>if</code>/<code>switch</code>/<code>for</code> boundaries. Preserving state across simple branches would enable more load-after-store eliminations.</li>
+<li><strong>Memory optimization across loop boundaries</strong>: Tracked memory state is cleared around <code>for</code> loop condition, body, and post blocks, so load-after-store eliminations do not carry across loop iterations. Preserving loop-invariant state would recover more eliminations.</li>
 <li><strong>Adaptive inlining thresholds</strong>: Current thresholds are static constants. Profile-guided or contract-size-aware heuristics could improve decisions for diverse contract sizes.</li>
-<li><strong>Extended fuzzy deduplication</strong>: The current pass only compares functions by structure of <code>Let</code> bindings. Extending to consider literals inside <code>MStore</code>, <code>Return</code>, <code>Revert</code>, and <code>Log</code> statements would find more deduplication opportunities.</li>
-<li><strong>Type checking in validation</strong>: The validator checks SSA well-formedness and structural correctness, but does not yet verify type consistency of operations (the <code>TypeMismatch</code> error variant exists but is not yet wired).</li>
+<li><strong>Extended fuzzy deduplication</strong>: The current pass only parameterizes literals in <code>Let</code> bindings and <code>SStore</code> slots. Extending it to consider literals inside <code>MStore</code>, <code>Return</code>, <code>Revert</code>, and <code>Log</code> statements would find more deduplication opportunities.</li>
+<li><strong>Type checking in validation</strong>: The validator checks SSA well-formedness and structure, but not operation type consistency. Type discipline is maintained by construction (type inference and codegen), with LLVM’s IR verifier as the backstop.</li>
 <li><strong>Loop variable narrowing</strong>: Loop-carried variables are conservatively widened to <code>I256</code>. Reaching a fixed-point across loop iterations could allow narrower types for simple counters.</li>
+<li><strong>Functions with <code>leave</code> inside a <code>for</code> loop are not inlined</strong>: the IR-level inliner defers such functions to LLVM’s inliner, so they miss the interprocedural constant propagation and width narrowing the IR-level pass provides.</li>
 </ul>
-<h2 id="environment-variables"><a class="header" href="#environment-variables">Environment variables</a></h2>
-<p>A small set of environment variables controls or inspects the newyork pipeline. Only <code>RESOLC_USE_NEWYORK</code> affects generated bytecode; the others are read-only inspection knobs used while debugging the optimizer.</p>
+<h2 id="debug-output"><a class="header" href="#debug-output">Debug output</a></h2>
+<p>Passing <code>--debug-output-dir &lt;path&gt;</code> makes the newyork pipeline write IR and analysis artifacts for each compiled contract into that directory. The dumps are produced automatically whenever the directory is set.</p>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Variable</th><th>Effect</th></tr>
+<tr><th>File</th><th>Content</th></tr>
 </thead>
 <tbody>
-<tr><td><code>RESOLC_USE_NEWYORK=1</code></td><td>Routes Yul lowering through the newyork pipeline. Equivalent to passing <code>--newyork</code> on the command line; the CLI flag and this variable are OR-ed by <code>resolve_use_newyork</code> (<code>crates/resolc/src/lib.rs</code>).</td></tr>
-<tr><td><code>RESOLC_DEBUG_IR</code></td><td>When set, prints the translated newyork IR for every object to stderr. Additionally writes <code>&lt;output_directory&gt;/&lt;object&gt;.newyork.txt</code> whenever the debug config carries an output directory.</td></tr>
-<tr><td><code>RESOLC_DEBUG_HEAP</code></td><td>When set, appends per-object heap-analysis details — native regions/offsets, taintedness, dynamic escapes, escaping ranges — to <code>&lt;output_directory&gt;/resolc_heap_debug.log</code>. Requires the debug config to carry an output directory.</td></tr>
-<tr><td><code>NEWYORK_DUMP_IR</code></td><td>When set, writes the IR for every translated object to <code>/tmp/newyork_ir_&lt;object&gt;.txt</code> from inside <code>translate_yul_object</code> (<code>crates/newyork/src/lib.rs</code>). Independent of <code>RESOLC_DEBUG_IR</code> — fires before codegen and needs no output directory.</td></tr>
-<tr><td><code>RESOLC_DEBUG_BLOB</code></td><td>Test harness only. Dumps the compiled PVM blob to <code>/tmp/debug_blob_&lt;contract&gt;.pvm</code> and the LLVM IR debug directory to <code>/tmp/debug_llvm_newyork</code> or <code>/tmp/debug_llvm_yul</code>. Used by <code>crates/resolc/src/test_utils.rs</code> when comparing newyork against the Yul path.</td></tr>
+<tr><td><code>&lt;contract-stem&gt;.newyork</code></td><td>Final optimized IR, annotated with the inferred type widths</td></tr>
+<tr><td><code>&lt;contract-stem&gt;.snapshot.newyork</code></td><td>IR snapshot taken before the late passes (only when captured during translation)</td></tr>
+<tr><td><code>&lt;contract-stem&gt;.heap.newyork</code></td><td>Heap analysis summary (native regions/offsets, taintedness, escapes, dynamic accesses)</td></tr>
+<tr><td><code>&lt;contract-stem&gt;.mem.newyork</code></td><td>Memory optimization counters (loads/stores eliminated, keccak fusions, FMP loads eliminated)</td></tr>
 </tbody>
 </table>
 </div>
-<p>All of these gate on presence/value at the start of compilation; flipping them mid-run has no effect.</p>
 <h2 id="module-reference"><a class="header" href="#module-reference">Module reference</a></h2>
 <div class="table-wrapper">
 <table>
@@ -940,7 +954,7 @@ can observe it.</p>
 <tr><td><code>type_inference.rs</code></td><td>Bidirectional integer width narrowing with transparent demand propagation</td></tr>
 <tr><td><code>mem_opt.rs</code></td><td>Load-after-store elimination, keccak256 fusion, FMP propagation</td></tr>
 <tr><td><code>heap_opt.rs</code></td><td>Heap access pattern analysis, alignment tracking, byte-swap elimination</td></tr>
-<tr><td><code>compound_outlining.rs</code></td><td>Mapping access pattern detection and fusion (<code>keccak256_pair</code> + <code>sload</code>/<code>sstore</code>)</td></tr>
+<tr><td><code>mapping_access_outlining.rs</code></td><td>Mapping access pattern detection and fusion (<code>keccak256_pair</code> + <code>sload</code>/<code>sstore</code>)</td></tr>
 <tr><td><code>guard_narrow.rs</code></td><td>Guard pattern detection and AND-mask narrowing insertion</td></tr>
 <tr><td><code>validate.rs</code></td><td>IR well-formedness checks (SSA, yields, function references)</td></tr>
 <tr><td><code>printer.rs</code></td><td>Human-readable IR pretty printer with configurable output</td></tr>
@@ -952,9 +966,9 @@ can observe it.</p>
 <h1 id="newyork-ir-reference"><a class="header" href="#newyork-ir-reference">newyork IR reference</a></h1>
 <p>A per-operation reference for the newyork IR: textual syntax, operand and result types, purity, region and static-slot annotations, and examples.</p>
 <h2 id="how-to-read-this-reference"><a class="header" href="#how-to-read-this-reference">How to read this reference</a></h2>
-<p>This appendix enumerates every operation the newyork IR supports. It is a lookup, not a walkthrough: each entry is self-contained and intended to be reachable by anchor.</p>
+<p>This reference page enumerates every operation the newyork IR supports. It is a lookup, not a walkthrough: each entry is self-contained and intended to be reachable by anchor.</p>
 <p>Operations are grouped by function (memory and storage writes, pure expressions, control flow, and so on) rather than alphabetically. Jump to a specific operation from the <a href="#operation-index">operation index</a> below, or use the sidebar.</p>
-<p>Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either <code>Expression</code> or <code>Statement</code> in <code>ir.rs</code>. The textual rendering used by debug dumps and by this appendix is produced by the printer in <code>printer.rs</code>. Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.</p>
+<p>Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either <code>Expression</code> or <code>Statement</code> in <code>ir.rs</code>. The textual rendering used by debug dumps and by this reference page is produced by the printer in <code>printer.rs</code>. Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.</p>
 <h3 id="entry-format"><a class="header" href="#entry-format">Entry format</a></h3>
 <p>Each operation entry has the same shape:</p>
 <div class="table-wrapper">
@@ -1145,21 +1159,21 @@ can observe it.</p>
 <h2 id="type-system"><a class="header" href="#type-system">Type system</a></h2>
 <p>Every value in the IR carries a <code>Type</code>. The operation entries below refer to widths (<code>i1</code>…<code>i256</code>), address spaces (<code>ptr&lt;heap&gt;</code>, etc.), and memory regions (<code>scratch</code>, etc.) by their printed form; this section is the reference for those names.</p>
 <h3 id="type"><a class="header" href="#type"><code>Type</code></a></h3>
-<p>The umbrella enum. Three variants:</p>
+<p>The umbrella enum, with these variants:</p>
 <div class="table-wrapper">
 <table>
 <thead>
 <tr><th>Variant</th><th>Printed as</th><th>Description</th></tr>
 </thead>
 <tbody>
-<tr><td><code>Int(BitWidth)</code></td><td><code>i1</code>, <code>i8</code>, …, <code>i256</code></td><td>An integer at one of seven widths; see <a href="#bitwidth">BitWidth</a>.</td></tr>
+<tr><td><code>Int(BitWidth)</code></td><td><code>i1</code>, <code>i8</code>, …, <code>i256</code></td><td>An integer at one of the <a href="#bitwidth">BitWidth</a> widths.</td></tr>
 <tr><td><code>Ptr(AddressSpace)</code></td><td><code>ptr&lt;heap&gt;</code>, <code>ptr&lt;stack&gt;</code>, <code>ptr&lt;storage&gt;</code>, <code>ptr&lt;code&gt;</code></td><td>A pointer tagged with its address space; see <a href="#addressspace">AddressSpace</a>.</td></tr>
 <tr><td><code>Void</code></td><td><code>void</code></td><td>Unit type. Used for statements that produce no value and for <code>void</code>-returning functions.</td></tr>
 </tbody>
 </table>
 </div>
 <h3 id="bitwidth"><a class="header" href="#bitwidth"><code>BitWidth</code></a></h3>
-<p>The seven rungs of integer width. Newly minted values default to <code>I256</code>; type inference narrows them down to one of the lower rungs when it can prove the upper bits are zero or unused.</p>
+<p>The rungs of integer width. Newly minted values default to <code>I256</code>; type inference narrows them down to one of the lower rungs when it can prove the upper bits are zero or unused.</p>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -1439,7 +1453,7 @@ let v2 := 0x80: i64         // narrowed by type inference
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td><code>width(lhs)</code></td><td>Pure</td></tr>
+<tr><td><code>max(width(lhs), width(rhs))</code> — a negative divisor can push the result to full width</td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
@@ -1559,7 +1573,8 @@ let v2 := 0x80: i64         // narrowed by type inference
 </code></pre>
 <h4 id="example-10"><a class="header" href="#example-10">Example</a></h4>
 <pre><code class="language-text">let v2 := and(v0, v1)
-let v3 := and(v0, 0xff)     // type inference narrows result to i8
+let v3: i8 := 0xff              // mask constant gets its own let-binding, narrowed to i8
+let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear bits
 </code></pre>
 <h4 id="operands-10"><a class="header" href="#operands-10">Operands</a></h4>
 <div class="table-wrapper">
@@ -1755,7 +1770,7 @@ let v3 := and(v0, 0xff)     // type inference narrows result to i8
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td>Same shape as <a href="#shr"><code>shr</code></a> forward inference (constant shift narrows the result; non-constant falls back to <code>width(rhs)</code>).</td><td>Pure</td></tr>
+<tr><td><code>width(rhs)</code> — unlike <a href="#shr"><code>shr</code></a>, sign-extension means a constant shift cannot narrow the result</td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
@@ -2286,7 +2301,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <h3 id="keccak256"><a class="header" href="#keccak256"><code>keccak256</code></a></h3>
 <p>(<code>Expression::Keccak256</code>)</p>
 <h4 id="description-31"><a class="header" href="#description-31">Description</a></h4>
-<p>Compute the Keccak-256 hash of <code>length</code> bytes of emulated EVM linear memory starting at <code>offset</code>. The general-purpose hashing primitive; the two specialized variants below cover the common scratch-space patterns more compactly.</p>
+<p>Compute the Keccak-256 hash of <code>length</code> bytes of emulated EVM linear memory starting at <code>offset</code>. The general-purpose hashing primitive; the specialized variants below cover the common scratch-space patterns more compactly.</p>
 <h4 id="syntax-31"><a class="header" href="#syntax-31">Syntax</a></h4>
 <pre><code class="language-text">keccak256($offset[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
@@ -2321,7 +2336,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <h3 id="keccak256_pair"><a class="header" href="#keccak256_pair"><code>keccak256_pair</code></a></h3>
 <p>(<code>Expression::Keccak256Pair</code>)</p>
 <h4 id="description-32"><a class="header" href="#description-32">Description</a></h4>
-<p>Compound hash of two 256-bit words. Equivalent to <code>mstore(0, word0); mstore(32, word1); keccak256(0, 64)</code> but emitted as a single outlined call after the keccak-fusion pass recognizes the pattern. The mapping-key idiom; see also <a href="#mapping_sload"><code>mapping_sload</code></a>.</p>
+<p>Compound hash of two 256-bit words. Equivalent to <code>mstore(0, word0); mstore(32, word1); keccak256(0, 64)</code> but emitted as a single outlined call after <code>mem_opt</code>’s keccak fusion recognizes the pattern. The mapping-key idiom; see also <a href="#mapping_sload"><code>mapping_sload</code></a>.</p>
 <h4 id="syntax-32"><a class="header" href="#syntax-32">Syntax</a></h4>
 <pre><code class="language-text">keccak256_pair($word0[: &lt;type&gt;], $word1[: &lt;type&gt;])
 </code></pre>
@@ -2356,7 +2371,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <h3 id="keccak256_single"><a class="header" href="#keccak256_single"><code>keccak256_single</code></a></h3>
 <p>(<code>Expression::Keccak256Single</code>)</p>
 <h4 id="description-33"><a class="header" href="#description-33">Description</a></h4>
-<p>Compound hash of a single 256-bit word. Equivalent to <code>mstore(0, word0); keccak256(0, 32)</code> but emitted as a single outlined call after the keccak-fusion pass.</p>
+<p>Compound hash of a single 256-bit word. Equivalent to <code>mstore(0, word0); keccak256(0, 32)</code> but emitted as a single outlined call after <code>mem_opt</code>’s keccak fusion.</p>
 <h4 id="syntax-33"><a class="header" href="#syntax-33">Syntax</a></h4>
 <pre><code class="language-text">keccak256_single($word0[: &lt;type&gt;])
 </code></pre>
@@ -2515,7 +2530,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <h3 id="gas"><a class="header" href="#gas"><code>gas</code></a></h3>
 <p>(<code>Expression::Gas</code>)</p>
 <h4 id="description-39"><a class="header" href="#description-39">Description</a></h4>
-<p>Remaining gas at the point of evaluation. Modelled as a pure expression for IR purposes; in practice it changes between evaluations, so any simplifier that deduplicates pure expressions must respect <code>gas</code> as a barrier.</p>
+<p>Remaining gas at the point of evaluation. Modeled as a pure expression for IR purposes; in practice it changes between evaluations, so any simplifier that deduplicates pure expressions must respect <code>gas</code> as a barrier.</p>
 <h4 id="syntax-39"><a class="header" href="#syntax-39">Syntax</a></h4>
 <pre><code class="language-text">gas()
 </code></pre>
@@ -2788,7 +2803,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>number</code></td><td><code>i256</code></td><td>Block number; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>number</code></td><td><code>i256</code></td><td>Block number; forward analysis widens to <code>i256</code>.</td></tr>
 </tbody>
 </table>
 </div>
@@ -2917,7 +2932,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <h3 id="returndatasize"><a class="header" href="#returndatasize"><code>returndatasize</code></a></h3>
 <p>(<code>Expression::ReturnDataSize</code>)</p>
 <h4 id="description-54"><a class="header" href="#description-54">Description</a></h4>
-<p>Length of the most recently returned data buffer from a sub-call, in bytes. Modelled as pure per IR but reflects the last <code>ExternalCall</code> / <code>Create</code> result; consumers must respect that ordering.</p>
+<p>Length of the most recently returned data buffer from a sub-call, in bytes. Modeled as pure per IR but reflects the last <code>ExternalCall</code> / <code>Create</code> result; consumers must respect that ordering.</p>
 <h4 id="syntax-54"><a class="header" href="#syntax-54">Syntax</a></h4>
 <pre><code class="language-text">returndatasize()
 </code></pre>
@@ -3193,7 +3208,7 @@ let v2 := sload(v3) /* slot: 0x0 */
 <h3 id="mapping_sload"><a class="header" href="#mapping_sload"><code>mapping_sload</code></a></h3>
 <p>(<code>Expression::MappingSLoad</code>)</p>
 <h4 id="description-62"><a class="header" href="#description-62">Description</a></h4>
-<p>Compound load for a Solidity mapping element. Equivalent to <code>mstore(0, key); mstore(32, slot); sload(keccak256(0, 64))</code> but emitted as a single outlined call after the <code>compound_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> — itself produced by <code>mem_opt</code>’s keccak fusion — followed by an <code>sload</code> whose key has a single consumer). Only valid when the intermediate hash is used exclusively by this load.</p>
+<p>Compound load for a Solidity mapping element. Equivalent to <code>mstore(0, key); mstore(32, slot); sload(keccak256(0, 64))</code> but emitted as a single outlined call after the <code>mapping_access_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> — itself produced by <code>mem_opt</code>’s keccak fusion — followed by an <code>sload</code> whose key has a single consumer). Only valid when the intermediate hash is used exclusively by this load.</p>
 <h4 id="syntax-62"><a class="header" href="#syntax-62">Syntax</a></h4>
 <pre><code class="language-text">mapping_sload($key[: &lt;type&gt;], $slot[: &lt;type&gt;])
 </code></pre>
@@ -3406,7 +3421,7 @@ let v4, v5 := returns_two(v0)           // multi-return via let multi-binding
 </table>
 </div>
 <h2 id="memory-and-storage-writes-1"><a class="header" href="#memory-and-storage-writes-1">Memory and storage writes</a></h2>
-<p>The six operations in this section all modify external state: emulated EVM linear memory, persistent storage, or transient storage. They are statements (not expressions) and they are never pure. Simplification and deduplication never reorder them with respect to each other or with respect to reverts; the memory passes treat them as the side-effect boundary for their analyses.</p>
+<p>The operations in this section all modify external state: emulated EVM linear memory, persistent storage, or transient storage. They are statements (not expressions) and they are never pure. Simplification and deduplication never reorder them with respect to each other or with respect to reverts; the memory passes treat them as the side-effect boundary for their analyses.</p>
 <h3 id="mstore"><a class="header" href="#mstore"><code>mstore</code></a></h3>
 <p>(<code>Statement::MStore</code>)</p>
 <h4 id="description-68"><a class="header" href="#description-68">Description</a></h4>
@@ -3619,7 +3634,7 @@ sstore(v2, v3) /* slot: 0x0 */
 <h3 id="mapping_sstore"><a class="header" href="#mapping_sstore"><code>mapping_sstore</code></a></h3>
 <p>(<code>Statement::MappingSStore</code>)</p>
 <h4 id="description-73"><a class="header" href="#description-73">Description</a></h4>
-<p>Compound store for a Solidity mapping element. Equivalent to the three-operation sequence <code>mstore(0, key); mstore(32, slot); sstore(keccak256(0, 64), value)</code> but emitted as a single outlined statement after the <code>compound_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> followed by an <code>sstore</code> whose key has a single consumer). Only valid when the intermediate hash is not observed by any other statement.</p>
+<p>Compound store for a Solidity mapping element. Equivalent to <code>mstore(0, key); mstore(32, slot); sstore(keccak256(0, 64), value)</code> but emitted as a single outlined statement after the <code>mapping_access_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> followed by an <code>sstore</code> whose key has a single consumer). Only valid when the intermediate hash is not observed by any other statement.</p>
 <h4 id="syntax-73"><a class="header" href="#syntax-73">Syntax</a></h4>
 <pre><code class="language-text">mapping_sstore($key[: &lt;type&gt;], $slot[: &lt;type&gt;], $value[: &lt;type&gt;])
 </code></pre>
@@ -3653,7 +3668,7 @@ sstore(v2, v3) /* slot: 0x0 */
 <h4 id="annotations-73"><a class="header" href="#annotations-73">Annotations</a></h4>
 <p>None. <code>mapping_sstore</code> deliberately drops the <code>static_slot</code> annotation that the original <code>sstore</code> may have carried, because the fused statement’s effective slot is the keccak hash of the key and the declared slot, which is never a compile-time constant.</p>
 <h2 id="bulk-copies-1"><a class="header" href="#bulk-copies-1">Bulk copies</a></h2>
-<p>Multi-byte memory copies from the five EVM-accessible byte sources (code, external code, returndata, embedded data, and calldata) into emulated EVM linear memory. All five take the same shape: a destination memory offset, a source offset, and a length. They are effectful and act as opaque barriers to the memory passes.</p>
+<p>Multi-byte memory copies from the EVM-accessible byte sources (code, external code, returndata, embedded data, and calldata) into emulated EVM linear memory. They all take the same shape: a destination memory offset, a source offset, and a length. They are effectful and act as opaque barriers to the memory passes.</p>
 <h3 id="codecopy-1"><a class="header" href="#codecopy-1"><code>codecopy</code></a></h3>
 <p>(<code>Statement::CodeCopy</code>)</p>
 <h4 id="description-74"><a class="header" href="#description-74">Description</a></h4>
@@ -3836,7 +3851,7 @@ sstore(v2, v3) /* slot: 0x0 */
 <h4 id="annotations-78"><a class="header" href="#annotations-78">Annotations</a></h4>
 <p>None.</p>
 <h2 id="bindings-and-wrappers-1"><a class="header" href="#bindings-and-wrappers-1">Bindings and wrappers</a></h2>
-<p>The statements that bind SSA values, hold loose expressions evaluated for their side effects, and write to immutable storage. Every pure expression in the appendix’s earlier sections appears on the right-hand side of one of these statements (almost always <code>let</code>).</p>
+<p>The statements that bind SSA values, hold loose expressions evaluated for their side effects, and write to immutable storage. Every pure expression in this reference’s earlier sections appears on the right-hand side of one of these statements (almost always <code>let</code>).</p>
 <h3 id="let"><a class="header" href="#let"><code>let</code></a></h3>
 <p>(<code>Statement::Let</code>)</p>
 <h4 id="description-79"><a class="header" href="#description-79">Description</a></h4>
@@ -3951,7 +3966,7 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 </table>
 </div>
 <h2 id="structured-control-flow-1"><a class="header" href="#structured-control-flow-1">Structured control flow</a></h2>
-<p>The IR’s control flow is structured: <code>if</code>, <code>switch</code>, and <code>for</code> are statements with explicit nested regions, each carrying input values and yielding output values. The three jump-like statements (<code>break</code>, <code>continue</code>, <code>leave</code>) are scoped to their nearest enclosing construct. Nested blocks create lexical scope without otherwise changing control flow.</p>
+<p>The IR’s control flow is structured: <code>if</code>, <code>switch</code>, and <code>for</code> are statements with explicit nested regions, each carrying input values and yielding output values. The jump-like statements (<code>break</code>, <code>continue</code>, <code>leave</code>) are scoped to their nearest enclosing construct. Nested blocks create lexical scope without otherwise changing control flow.</p>
 <h3 id="if"><a class="header" href="#if"><code>if</code></a></h3>
 <p>(<code>Statement::If</code>)</p>
 <h4 id="description-82"><a class="header" href="#description-82">Description</a></h4>
@@ -4058,27 +4073,27 @@ default {
 <p>Structured loop with explicit loop-carried variables. Each iteration evaluates <code>condition_statements</code> followed by <code>condition</code>; if the condition is non-zero, the <code>body</code> region runs, then the <code>post</code> region runs, and the loop iterates. Loop-carried variables are passed as SSA values through each region. <code>break</code> exits the loop and <code>continue</code> jumps to the post region.</p>
 <h4 id="syntax-84"><a class="header" href="#syntax-84">Syntax</a></h4>
 <pre><code class="language-text">for { $variable_0 := $initial_0[, …] }
-    [// condition_statements:
+    [// condition statements:
         …]
-    $condition
-    { // post
+    condition: $condition
+    post [($post_input_variable_0[, …])] {
         …
     }
-{
-    … body …
-}
+    body {
+        … body …
+    }
 </code></pre>
 <h4 id="example-84"><a class="header" href="#example-84">Example</a></h4>
 <pre><code class="language-text">for { v1 := 0x0 }
-    lt(v1, 0xa)
-    { // post
-        let v3 := add(v1, 0x1)
-        yield v3
+    condition: lt(v1, 0xa)
+    post (v3) {
+        let v4 := add(v1, 0x1)
+        yield v4
     }
-{
-    sstore(v1, v2)
-    yield v1
-}
+    body {
+        sstore(v1, v2)
+        yield v1
+    }
 </code></pre>
 <h4 id="operands-84"><a class="header" href="#operands-84">Operands</a></h4>
 <div class="table-wrapper">
@@ -4089,7 +4104,7 @@ default {
 <tbody>
 <tr><td><code>initial_values</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Starting values for the loop-carried variables.</td></tr>
 <tr><td><code>loop_variables</code></td><td><code>Vec&lt;ValueId&gt;</code></td><td>SSA ids visible inside condition, body, and post.</td></tr>
-<tr><td><code>condition_statements</code></td><td><code>Vec&lt;Statement&gt;</code></td><td>Statements evaluated each iteration <em>before</em> the condition expression; emitted into the loop header block. Printed only when non-empty, behind a <code>// condition_statements:</code> comment.</td></tr>
+<tr><td><code>condition_statements</code></td><td><code>Vec&lt;Statement&gt;</code></td><td>Statements evaluated each iteration <em>before</em> the condition expression; emitted into the loop header block. Printed only when non-empty, behind a <code>// condition statements:</code> comment.</td></tr>
 <tr><td><code>condition</code></td><td><code>Expression</code></td><td>Re-evaluated each iteration; non-zero continues, zero exits.</td></tr>
 <tr><td><code>body</code></td><td><code>Region</code></td><td>Loop body; yields current loop-carried values.</td></tr>
 <tr><td><code>post_input_variables</code></td><td><code>Vec&lt;ValueId&gt;</code></td><td>Input SSA ids for the post region (one per loop-carried variable); receive the body’s yielded values merged with continue-site values via phi nodes in the LLVM codegen.</td></tr>
@@ -4119,10 +4134,10 @@ default {
 <pre><code class="language-text">break
 </code></pre>
 <h4 id="example-85"><a class="header" href="#example-85">Example</a></h4>
-<pre><code class="language-text">if v0 { break }
+<pre><code class="language-text">if v0 { break [v1, v2] }
 </code></pre>
 <h4 id="operands-85"><a class="header" href="#operands-85">Operands</a></h4>
-<p>None in the printed form; the IR’s <code>values: Vec&lt;Value&gt;</code> field carries the loop-carried values internally.</p>
+<p>The loop-carried <code>values: Vec&lt;Value&gt;</code> print in brackets when non-empty (e.g. <code>break [v1, v2]</code>).</p>
 <h4 id="result-and-purity-85"><a class="header" href="#result-and-purity-85">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -4144,10 +4159,10 @@ default {
 <pre><code class="language-text">continue
 </code></pre>
 <h4 id="example-86"><a class="header" href="#example-86">Example</a></h4>
-<pre><code class="language-text">if v0 { continue }
+<pre><code class="language-text">if v0 { continue [v1, v2] }
 </code></pre>
 <h4 id="operands-86"><a class="header" href="#operands-86">Operands</a></h4>
-<p>None in the printed form; the IR’s <code>values</code> field carries the loop-carried values internally.</p>
+<p>The loop-carried <code>values</code> print in brackets when non-empty (e.g. <code>continue [v1, v2]</code>).</p>
 <h4 id="result-and-purity-86"><a class="header" href="#result-and-purity-86">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -4227,7 +4242,7 @@ leave                       // returns nothing (void function)
 <h4 id="annotations-88"><a class="header" href="#annotations-88">Annotations</a></h4>
 <p>None.</p>
 <h2 id="external-interaction-1"><a class="header" href="#external-interaction-1">External interaction</a></h2>
-<p>Statements that cross the contract boundary: external calls (four kinds), contract creation (two kinds), and event log emission. All produce or rely on external state and act as barriers to memory and storage analyses.</p>
+<p>Statements that cross the contract boundary: external calls, contract creation, and event log emission. All produce or rely on external state and act as barriers to memory and storage analyses.</p>
 <h3 id="call"><a class="header" href="#call"><code>call</code></a></h3>
 <p>(<code>Statement::ExternalCall</code> with <code>CallKind::Call</code>)</p>
 <h4 id="description-89"><a class="header" href="#description-89">Description</a></h4>
@@ -4271,7 +4286,7 @@ leave                       // returns nothing (void function)
 <h3 id="callcode"><a class="header" href="#callcode"><code>callcode</code></a></h3>
 <p>(<code>Statement::ExternalCall</code> with <code>CallKind::CallCode</code>)</p>
 <h4 id="description-90"><a class="header" href="#description-90">Description</a></h4>
-<p>Deprecated EVM opcode that executes the callee’s code in the caller’s context but with the callee’s storage. Preserved for Solidity compatibility; new code should use <a href="#delegatecall"><code>delegatecall</code></a>.</p>
+<p>Deprecated EVM opcode that executes the callee’s code in the caller’s context but with the callee’s storage. Not supported by the newyork backend (codegen rejects it); use <a href="#delegatecall"><code>delegatecall</code></a> instead.</p>
 <h4 id="syntax-90"><a class="header" href="#syntax-90">Syntax</a></h4>
 <pre><code class="language-text">let $result := callcode($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $value[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
 </code></pre>
@@ -4442,7 +4457,7 @@ log2(v0, v1, v2, v3)            // two topics
 <h4 id="annotations-95"><a class="header" href="#annotations-95">Annotations</a></h4>
 <p>None.</p>
 <h2 id="termination-1"><a class="header" href="#termination-1">Termination</a></h2>
-<p>Statements that end the current call frame. Three plain forms (<code>return</code>, <code>revert</code>, <code>stop</code>), two unconditional traps (<code>invalid</code>, <code>selfdestruct</code>), and three outlined revert variants that encode common Solidity error patterns into single nodes that can be deduplicated across call sites.</p>
+<p>Statements that end the current call frame. Plain forms (<code>return</code>, <code>revert</code>, <code>stop</code>), unconditional traps (<code>invalid</code>, <code>selfdestruct</code>), and outlined revert variants (<code>panic_revert</code>, <code>error_string_revert</code>, <code>custom_error_revert</code>) that encode common Solidity error patterns into single nodes that can be deduplicated across call sites.</p>
 <h3 id="return"><a class="header" href="#return"><code>return</code></a></h3>
 <p>(<code>Statement::Return</code>)</p>
 <h4 id="description-96"><a class="header" href="#description-96">Description</a></h4>
@@ -4669,12 +4684,12 @@ log2(v0, v1, v2, v3)            // two topics
 <h3 id="custom_error_revert"><a class="header" href="#custom_error_revert"><code>custom_error_revert</code></a></h3>
 <p>(<code>Statement::CustomErrorRevert</code>)</p>
 <h4 id="description-103"><a class="header" href="#description-103">Description</a></h4>
-<p>Outlined Solidity custom-error revert. Encodes the error selector (left-shifted by 224 bits) and zero to three argument values into scratch memory and reverts. No FMP load is needed; the encoding uses the scratch region at offset <code>0</code>.</p>
+<p>Outlined Solidity custom-error revert. Encodes the error selector (left-shifted by 224 bits) and zero or more argument values into scratch memory and reverts. No FMP load is needed; the encoding uses the scratch region at offset <code>0</code>.</p>
 <h4 id="syntax-103"><a class="header" href="#syntax-103">Syntax</a></h4>
 <pre><code class="language-text">custom_error_revert(0x&lt;hex&gt;, [$arg_0, $arg_1, …])
 </code></pre>
 <h4 id="example-103"><a class="header" href="#example-103">Example</a></h4>
-<pre><code class="language-text">custom_error_revert(0xa28c4c1100000000000000000000000000000000000000000000000000000000, [v0, v1])
+<pre><code class="language-text">custom_error_revert(0xa28c4c11, [v0, v1])
 </code></pre>
 <h4 id="operands-103"><a class="header" href="#operands-103">Operands</a></h4>
 <div class="table-wrapper">
@@ -4683,7 +4698,7 @@ log2(v0, v1, v2, v3)            // two topics
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>arguments</code></td><td><code>Vec&lt;Value&gt;</code></td><td>0–3 argument values; the selector is a compile-time field.</td></tr>
+<tr><td><code>arguments</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Zero or more argument values; the selector is a compile-time field.</td></tr>
 </tbody>
 </table>
 </div>
@@ -4705,7 +4720,7 @@ log2(v0, v1, v2, v3)            // two topics
 <tr><th>Source field</th><th>Printed as</th></tr>
 </thead>
 <tbody>
-<tr><td><code>selector: BigUint</code></td><td>The 4-byte error selector shifted left by 224 bits, printed in hex in the first syntax position.</td></tr>
+<tr><td><code>selector: BigUint</code></td><td>The 4-byte error selector in hex, in the first syntax position. The selector is stored left-shifted by 224 bits; the printer right-shifts it back and prints the bare 4-byte value.</td></tr>
 </tbody>
 </table>
 </div>
@@ -4851,6 +4866,22 @@ make test-wasm
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
 
 
         <script>

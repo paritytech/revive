@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-5ce1788e.js";
+            window.path_to_searchindex_js = "searchindex-7e05244f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1290cc30.js"></script>
@@ -931,10 +931,10 @@ can observe it.</p>
 <tr><th>File</th><th>Content</th></tr>
 </thead>
 <tbody>
-<tr><td><code>&lt;contract-stem&gt;.newyork</code></td><td>Final optimized IR, annotated with the inferred type widths</td></tr>
-<tr><td><code>&lt;contract-stem&gt;.snapshot.newyork</code></td><td>IR snapshot taken before the late passes (only when captured during translation)</td></tr>
-<tr><td><code>&lt;contract-stem&gt;.heap.newyork</code></td><td>Heap analysis summary (native regions/offsets, taintedness, escapes, dynamic accesses)</td></tr>
-<tr><td><code>&lt;contract-stem&gt;.mem.newyork</code></td><td>Memory optimization counters (loads/stores eliminated, keccak fusions, FMP loads eliminated)</td></tr>
+<tr><td><code>&lt;file-stem&gt;.newyork</code></td><td>Final optimized IR, annotated with the inferred type widths</td></tr>
+<tr><td><code>&lt;file-stem&gt;.snapshot.newyork</code></td><td>IR snapshot taken before the late passes (only when captured during translation)</td></tr>
+<tr><td><code>&lt;file-stem&gt;.heap.newyork</code></td><td>Heap analysis summary (native regions/offsets, taintedness, escapes, dynamic accesses)</td></tr>
+<tr><td><code>&lt;file-stem&gt;.mem.newyork</code></td><td>Memory optimization counters (loads/stores eliminated, keccak fusions, FMP loads eliminated)</td></tr>
 </tbody>
 </table>
 </div>
@@ -4084,14 +4084,19 @@ default {
     }
 </code></pre>
 <h4 id="example-84"><a class="header" href="#example-84">Example</a></h4>
-<pre><code class="language-text">for { v1 := 0x0 }
-    condition: lt(v1, 0xa)
+<pre><code class="language-text">let v0: i1 := 0x0
+let v6 := for { v1 := v0: i1 }
+    // condition statements:
+    let v2: i8 := 0xa
+    condition: lt(v1, v2: i8)
     post (v3) {
-        let v4 := add(v1, 0x1)
-        yield v4
+        let v4: i64 := 0x1
+        let v5 := add(v3, v4: i64)
+        yield v5
     }
     body {
-        sstore(v1, v2)
+        sstore(v1, v1)
+        0x0: void
         yield v1
     }
 </code></pre>

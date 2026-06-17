@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1895e767.js";
+            window.path_to_searchindex_js = "searchindex-d07daed5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1290cc30.js"></script>
@@ -1009,6 +1009,18 @@ can observe it.</p>
 </tbody>
 </table>
 </div>
+<p>For instance, this template:</p>
+<pre><code class="language-text">let $result[: &lt;type&gt;] := and($lhs[: &lt;type&gt;], $rhs[: &lt;type&gt;])
+</code></pre>
+<p>prints as:</p>
+<pre><code class="language-text">let v2: i8 := and(v0, v1: i8)
+</code></pre>
+<p><code>$result</code> rendered as <code>v2</code> with an <code>i8</code> type suffix, <code>$lhs</code> as <code>v0</code> at the default <code>i256</code> (type suffix omitted), and <code>$rhs</code> as <code>v1</code> with an <code>i8</code> type suffix.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p><strong>A value’s printed width is use-driven.</strong> Type inference assigns each value a forward width from its definition, then widens it to satisfy its uses. The type suffix shown for a value in an example (such as <code>i8</code>) is therefore only illustrative — a short example may not show the uses that determine it, and the same operation can appear with a wider suffix, or none (it is omitted for the default <code>i256</code>), in another program.</p>
+<p>For instance, a value used as a memory offset widens to <code>i64</code>; as an address (a <code>call</code> target, <code>extcodesize</code>) to <code>i160</code>; stored as a full word (an <code>mstore</code>/<code>sstore</code> value) to <code>i256</code>; and an <code>add</code>/<code>mul</code> operand up to the <code>i64</code> register width.</p>
+</blockquote>
 <h3 id="operation-index"><a class="header" href="#operation-index">Operation index</a></h3>
 <h4 id="pure-expressions"><a class="header" href="#pure-expressions">Pure expressions</a></h4>
 <h5 id="constants-and-variables"><a class="header" href="#constants-and-variables">Constants and variables</a></h5>
@@ -3526,7 +3538,7 @@ mstore(v4, v5) /* free_ptr */     // offset is exactly 0x40
 <pre><code class="language-text">mcopy($dest[: &lt;type&gt;], $src[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-70"><a class="header" href="#example-70">Example</a></h4>
-<pre><code class="language-text">mcopy(v0, v1, v2)               // dest, src, length
+<pre><code class="language-text">mcopy(v0, v1, v2)
 </code></pre>
 <h4 id="operands-70"><a class="header" href="#operands-70">Operands</a></h4>
 <div class="table-wrapper">
@@ -3895,12 +3907,12 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 <h3 id="expression-statement"><a class="header" href="#expression-statement">Expression statement</a></h3>
 <p>(<code>Statement::Expression</code>)</p>
 <h4 id="description-80"><a class="header" href="#description-80">Description</a></h4>
-<p>Wraps an expression evaluated for its observable consequences but whose value is not bound. Typically a user-defined function call (<code>Expression::Call</code>) whose return values the source code discarded, or another Yul expression statement that does not have a dedicated <code>Statement::</code> variant. EVM external calls (<code>call</code>, <code>delegatecall</code>, etc.) and contract creation (<code>create</code>, <code>create2</code>) translate to dedicated <code>Statement::ExternalCall</code> and <code>Statement::Create</code> variants, not through this wrapper.</p>
+<p>Wraps an expression evaluated for its observable consequences but whose value is not bound. Typically a zero-return (void) user-defined function call (<code>Expression::Call</code>) evaluated for its side effects, or the discarded void result of a Yul builtin used as a statement (a value-producing expression is bound by a <code>let</code> instead). EVM external calls (<code>call</code>, <code>delegatecall</code>, etc.) and contract creation (<code>create</code>, <code>create2</code>) translate to dedicated <code>Statement::ExternalCall</code> and <code>Statement::Create</code> variants, not through this wrapper.</p>
 <h4 id="syntax-80"><a class="header" href="#syntax-80">Syntax</a></h4>
 <pre><code class="language-text">$expression
 </code></pre>
 <h4 id="example-80"><a class="header" href="#example-80">Example</a></h4>
-<pre><code class="language-text">keccak256(v0, v1)           // hash computed but not bound to a value
+<pre><code class="language-text">update_balance(v0)          // void function called for its side effects
 </code></pre>
 <h4 id="operands-80"><a class="header" href="#operands-80">Operands</a></h4>
 <div class="table-wrapper">
@@ -3979,13 +3991,14 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 <pre><code class="language-text">if $condition[: &lt;type&gt;] [[$input_0, $input_1, …]] { … } [else { … }]
 </code></pre>
 <h4 id="example-82"><a class="header" href="#example-82">Example</a></h4>
-<pre><code class="language-text">if v0 {
+<pre><code class="language-text">if v0: i1 {
     sstore(v1, v2)
 }
 
-let v5, v6 := if v3 [v1, v2] {
-    let v7 := add(v2, 0x1)
-    yield v1, v7
+let v5, v6 := if v3: i1 [v1, v2] {
+    let v7: i64 := 0x1          // add widens its operands to the i64 register width
+    let v8 := add(v2, v7: i64)
+    yield v1, v8
 } else {
     yield v1, v2
 }

@@ -11,6 +11,7 @@ Operations are grouped by function (memory and storage writes, pure expressions,
 Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either `Expression` or `Statement` in `ir.rs`. The textual rendering used by debug dumps and by this reference page is produced by the printer in `printer.rs`.
 
 > [!NOTE]
+>
 > Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.
 
 ### Entry format
@@ -40,6 +41,26 @@ Syntax templates in each entry use the following conventions:
 | `[: <type>]` | Optional type suffix on a value reference. Suppressed when the value's type is the default `i256` integer; present otherwise (`: i32`, `: ptr<heap>`, …). |
 | `/* … */` | Debug-only annotations the printer attaches to certain operations (memory region tag, static-slot hint, etc.). |
 | `…` | Repetition: "more entries of the same shape." Used in vector operand lists (`$arg_0, $arg_1, …`) and in multi-line block bodies (`{ … }`). |
+
+For instance, this template:
+
+```text
+let $result[: <type>] := and($lhs[: <type>], $rhs[: <type>])
+```
+
+prints as:
+
+```text
+let v2: i8 := and(v0, v1: i8)
+```
+
+`$result` rendered as `v2` with an `i8` type suffix, `$lhs` as `v0` at the default `i256` (type suffix omitted), and `$rhs` as `v1` with an `i8` type suffix.
+
+> [!NOTE]
+>
+> **A value's printed width is use-driven.** Type inference assigns each value a forward width from its definition, then widens it to satisfy its uses. The type suffix shown for a value in an example (such as `i8`) is therefore only illustrative — a short example may not show the uses that determine it, and the same operation can appear with a wider suffix, or none (it is omitted for the default `i256`), in another program.
+>
+> For instance, a value used as a memory offset widens to `i64`; as an address (a `call` target, `extcodesize`) to `i160`; stored as a full word (an `mstore`/`sstore` value) to `i256`; and an `add`/`mul` operand up to the `i64` register width.
 
 ### Operation index
 
@@ -2808,7 +2829,7 @@ mcopy($dest[: <type>], $src[: <type>], $length[: <type>])
 #### Example
 
 ```text
-mcopy(v0, v1, v2)               // dest, src, length
+mcopy(v0, v1, v2)
 ```
 
 #### Operands
@@ -3189,7 +3210,7 @@ None.
 
 #### Description
 
-Wraps an expression evaluated for its observable consequences but whose value is not bound. Typically a user-defined function call (`Expression::Call`) whose return values the source code discarded, or another Yul expression statement that does not have a dedicated `Statement::` variant. EVM external calls (`call`, `delegatecall`, etc.) and contract creation (`create`, `create2`) translate to dedicated `Statement::ExternalCall` and `Statement::Create` variants, not through this wrapper.
+Wraps an expression evaluated for its observable consequences but whose value is not bound. Typically a zero-return (void) user-defined function call (`Expression::Call`) evaluated for its side effects, or the discarded void result of a Yul builtin used as a statement (a value-producing expression is bound by a `let` instead). EVM external calls (`call`, `delegatecall`, etc.) and contract creation (`create`, `create2`) translate to dedicated `Statement::ExternalCall` and `Statement::Create` variants, not through this wrapper.
 
 #### Syntax
 
@@ -3200,7 +3221,7 @@ $expression
 #### Example
 
 ```text
-keccak256(v0, v1)           // hash computed but not bound to a value
+update_balance(v0)          // void function called for its side effects
 ```
 
 #### Operands
@@ -3278,13 +3299,14 @@ if $condition[: <type>] [[$input_0, $input_1, …]] { … } [else { … }]
 #### Example
 
 ```text
-if v0 {
+if v0: i1 {
     sstore(v1, v2)
 }
 
-let v5, v6 := if v3 [v1, v2] {
-    let v7 := add(v2, 0x1)
-    yield v1, v7
+let v5, v6 := if v3: i1 [v1, v2] {
+    let v7: i64 := 0x1          // add widens its operands to the i64 register width
+    let v8 := add(v2, v7: i64)
+    yield v1, v8
 } else {
     yield v1, v2
 }

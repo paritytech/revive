@@ -8,7 +8,10 @@ This reference page enumerates every operation the newyork IR supports. It is a 
 
 Operations are grouped by function (memory and storage writes, pure expressions, control flow, and so on) rather than alphabetically. Jump to a specific operation from the [operation index](#operation-index) below, or use the sidebar.
 
-Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either `Expression` or `Statement` in `ir.rs`. The textual rendering used by debug dumps and by this reference page is produced by the printer in `printer.rs`. Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.
+Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either `Expression` or `Statement` in `ir.rs`. The textual rendering used by debug dumps and by this reference page is produced by the printer in `printer.rs`.
+
+> [!NOTE]
+> Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.
 
 ### Entry format
 
@@ -262,9 +265,9 @@ A compile-time constant value with a declared type. New literals minted by the t
 #### Example
 
 ```text
-let v0 := 0x2a              // 42 at the default i256
-let v1 := 0x1: i1           // boolean true
-let v2 := 0x80: i64         // narrowed by type inference
+let v0: i8 := 0x2a
+let v1: i1 := 0x1           // boolean true
+let v2: i64 := 0x80
 ```
 
 #### Operands
@@ -583,12 +586,12 @@ None.
 
 #### Description
 
-Modular exponentiation: `(lhs ^ rhs) mod 2^256`. The most expensive arithmetic opcode in EVM (variable gas cost proportional to the byte length of `rhs`).
+Modular exponentiation: `(base ^ exponent) mod 2^256`. The most expensive arithmetic opcode in EVM (variable gas cost proportional to the byte length of `exponent`).
 
 #### Syntax
 
 ```text
-exp($lhs[: <type>], $rhs[: <type>])
+exp($base[: <type>], $exponent[: <type>])
 ```
 
 #### Example
@@ -601,8 +604,8 @@ let v2 := exp(v0, v1)
 
 | Name | Type | Notes |
 |---|---|---|
-| `lhs` | `i256` | Base. |
-| `rhs` | `i256` | Exponent. |
+| `base` | `i256` | Base. |
+| `exponent` | `i256` | Exponent. |
 
 #### Result and purity
 
@@ -632,8 +635,8 @@ and($lhs[: <type>], $rhs[: <type>])
 
 ```text
 let v2 := and(v0, v1)
-let v3: i8 := 0xff              // mask constant gets its own let-binding, narrowed to i8
-let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear bits
+let v3: i8 := 0xff
+let v4: i8 := and(v0, v3: i8)
 ```
 
 #### Operands
@@ -738,21 +741,21 @@ Logical left shift. Operand order follows EVM: `shl(shift, value)` computes `val
 #### Syntax
 
 ```text
-shl($lhs[: <type>], $rhs[: <type>])
+shl($shift[: <type>], $value[: <type>])
 ```
 
 #### Example
 
 ```text
-let v2 := shl(v0, v1)       // v1 shifted left by v0 bits
+let v2 := shl(v0, v1)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `lhs` | `i256` | Shift amount in bits. |
-| `rhs` | `i256` | Value to shift. |
+| `shift` | `i256` | Shift amount in bits. |
+| `value` | `i256` | Value to shift. |
 
 #### Result and purity
 
@@ -775,7 +778,7 @@ Logical right shift. Operand order follows EVM: `shr(shift, value)` computes `va
 #### Syntax
 
 ```text
-shr($lhs[: <type>], $rhs[: <type>])
+shr($shift[: <type>], $value[: <type>])
 ```
 
 #### Example
@@ -788,14 +791,14 @@ let v2 := shr(v0, v1)
 
 | Name | Type | Notes |
 |---|---|---|
-| `lhs` | `i256` | Shift amount in bits. |
-| `rhs` | `i256` | Value to shift. |
+| `shift` | `i256` | Shift amount in bits. |
+| `value` | `i256` | Value to shift. |
 
 #### Result and purity
 
 | Result | Purity |
 |---|---|
-| If `lhs` is a known constant `k`: tier holding `256 - k` bits (or `i1` for `k ≥ 256`). Otherwise: `width(rhs)`. | Pure |
+| If `shift` is a known constant `k`: tier holding `256 - k` bits (or `i1` for `k ≥ 256`). Otherwise: `width(value)`. | Pure |
 
 #### Annotations
 
@@ -812,7 +815,7 @@ Arithmetic (signed) right shift. Operand order follows EVM: `sar(shift, value)` 
 #### Syntax
 
 ```text
-sar($lhs[: <type>], $rhs[: <type>])
+sar($shift[: <type>], $value[: <type>])
 ```
 
 #### Example
@@ -825,14 +828,14 @@ let v2 := sar(v0, v1)
 
 | Name | Type | Notes |
 |---|---|---|
-| `lhs` | `i256` | Shift amount in bits. |
-| `rhs` | `i256` | Value to shift, treated as signed. |
+| `shift` | `i256` | Shift amount in bits. |
+| `value` | `i256` | Value to shift, treated as signed. |
 
 #### Result and purity
 
 | Result | Purity |
 |---|---|
-| `width(rhs)` — unlike [`shr`](#shr), sign-extension means a constant shift cannot narrow the result | Pure |
+| `width(value)` — unlike [`shr`](#shr), sign-extension means a constant shift cannot narrow the result | Pure |
 
 #### Annotations
 
@@ -855,7 +858,7 @@ lt($lhs[: <type>], $rhs[: <type>])
 #### Example
 
 ```text
-let v2 := lt(v0, v1)
+let v2: i1 := lt(v0, v1)
 ```
 
 #### Operands
@@ -892,7 +895,7 @@ gt($lhs[: <type>], $rhs[: <type>])
 #### Example
 
 ```text
-let v2 := gt(v0, v1)
+let v2: i1 := gt(v0, v1)
 ```
 
 #### Operands
@@ -929,7 +932,7 @@ slt($lhs[: <type>], $rhs[: <type>])
 #### Example
 
 ```text
-let v2 := slt(v0, v1)
+let v2: i1 := slt(v0, v1)
 ```
 
 #### Operands
@@ -966,7 +969,7 @@ sgt($lhs[: <type>], $rhs[: <type>])
 #### Example
 
 ```text
-let v2 := sgt(v0, v1)
+let v2: i1 := sgt(v0, v1)
 ```
 
 #### Operands
@@ -1003,7 +1006,7 @@ eq($lhs[: <type>], $rhs[: <type>])
 #### Example
 
 ```text
-let v2 := eq(v0, v1)
+let v2: i1 := eq(v0, v1)
 ```
 
 #### Operands
@@ -1034,21 +1037,21 @@ Extract a single byte from a 256-bit word. `byte(i, x)` returns the *i*-th byte 
 #### Syntax
 
 ```text
-byte($lhs[: <type>], $rhs[: <type>])
+byte($index[: <type>], $word[: <type>])
 ```
 
 #### Example
 
 ```text
-let v2 := byte(v0, v1)      // v0 = byte index, v1 = word
+let v2: i8 := byte(v0, v1)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `lhs` | `i256` | Byte position; `0` = most significant byte. Values `≥ 32` yield `0`. |
-| `rhs` | `i256` | Source word. |
+| `index` | `i256` | Byte position; `0` = most significant byte. Values `≥ 32` yield `0`. |
+| `word` | `i256` | Source word. |
 
 #### Result and purity
 
@@ -1071,21 +1074,21 @@ Sign-extend an integer from a byte position. Per EVM, `signextend(b, x)` treats 
 #### Syntax
 
 ```text
-signextend($lhs[: <type>], $rhs[: <type>])
+signextend($byte_position[: <type>], $value[: <type>])
 ```
 
 #### Example
 
 ```text
-let v2 := signextend(v0, v1)  // v0 = byte position, v1 = value
+let v2 := signextend(v0, v1)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `lhs` | `i256` | Byte position of the sign byte (0–31). |
-| `rhs` | `i256` | Source value. |
+| `byte_position` | `i256` | Byte position of the sign byte (0–31). |
+| `value` | `i256` | Source value. |
 
 #### Result and purity
 
@@ -1190,7 +1193,7 @@ iszero($operand[: <type>])
 #### Example
 
 ```text
-let v1 := iszero(v0)
+let v1: i1 := iszero(v0)
 ```
 
 #### Operands
@@ -1298,8 +1301,8 @@ truncate<i<bits>>($value[: <type>])
 #### Example
 
 ```text
-let v1 := truncate<i64>(v0)
-let v2 := truncate<i8>(v1)
+let v1: i64 := truncate<i64>(v0)
+let v2: i8 := truncate<i8>(v1: i64)
 ```
 
 #### Operands
@@ -1517,7 +1520,7 @@ caller()
 #### Example
 
 ```text
-let v0 := caller()
+let v0: i160 := caller()
 ```
 
 #### Operands
@@ -1585,7 +1588,7 @@ origin()
 #### Example
 
 ```text
-let v0 := origin()
+let v0: i160 := origin()
 ```
 
 #### Operands
@@ -1619,7 +1622,7 @@ address()
 #### Example
 
 ```text
-let v0 := address()
+let v0: i160 := address()
 ```
 
 #### Operands
@@ -1687,7 +1690,7 @@ gas()
 #### Example
 
 ```text
-let v0 := gas()
+let v0: i64 := gas()
 ```
 
 #### Operands
@@ -1721,7 +1724,7 @@ msize()
 #### Example
 
 ```text
-let v0 := msize()
+let v0: i64 := msize()
 ```
 
 #### Operands
@@ -1755,7 +1758,7 @@ coinbase()
 #### Example
 
 ```text
-let v0 := coinbase()
+let v0: i160 := coinbase()
 ```
 
 #### Operands
@@ -1789,7 +1792,7 @@ timestamp()
 #### Example
 
 ```text
-let v0 := timestamp()
+let v0: i64 := timestamp()
 ```
 
 #### Operands
@@ -1823,7 +1826,7 @@ number()
 #### Example
 
 ```text
-let v0 := number()
+let v0: i64 := number()
 ```
 
 #### Operands
@@ -1891,7 +1894,7 @@ gaslimit()
 #### Example
 
 ```text
-let v0 := gaslimit()
+let v0: i64 := gaslimit()
 ```
 
 #### Operands
@@ -2169,7 +2172,7 @@ calldatasize()
 #### Example
 
 ```text
-let v0 := calldatasize()
+let v0: i64 := calldatasize()
 ```
 
 #### Operands
@@ -2203,7 +2206,7 @@ returndatasize()
 #### Example
 
 ```text
-let v0 := returndatasize()
+let v0: i64 := returndatasize()
 ```
 
 #### Operands
@@ -2237,7 +2240,7 @@ codesize()
 #### Example
 
 ```text
-let v0 := codesize()
+let v0: i64 := codesize()
 ```
 
 #### Operands
@@ -2271,7 +2274,7 @@ extcodesize($address[: <type>])
 #### Example
 
 ```text
-let v1 := extcodesize(v0: i160)
+let v1: i64 := extcodesize(v0: i160)
 ```
 
 #### Operands
@@ -2379,8 +2382,8 @@ mload($offset[: <type>]) [/* <region> */]
 #### Example
 
 ```text
-let v1 := mload(v0)
-let v2 := mload(v3) /* free_ptr */
+let v1 := mload(v0: i64)
+let v2: i32 := mload(v3: i64) /* free_ptr */
 ```
 
 #### Operands
@@ -2570,7 +2573,7 @@ datasize("<id>")
 #### Example
 
 ```text
-let v0 := datasize("MyContract_deployed")
+let v0: i64 := datasize("MyContract_deployed")
 ```
 
 #### Operands
@@ -2642,7 +2645,7 @@ linkersymbol("<path>")
 #### Example
 
 ```text
-let v0 := linkersymbol("contracts/Library.sol:L")
+let v0: i160 := linkersymbol("contracts/Library.sol:L")
 ```
 
 #### Operands
@@ -2764,7 +2767,7 @@ mstore8($offset[: <type>], $value[: <type>]) [/* <region> */]
 #### Example
 
 ```text
-mstore8(v0, v1: i8)             // value narrowed to i8 by type inference
+mstore8(v0, v1: i8)
 ```
 
 #### Operands
@@ -2922,14 +2925,14 @@ mapping_sstore($key[: <type>], $slot[: <type>], $value[: <type>])
 #### Example
 
 ```text
-mapping_sstore(v0: i160, v1, v2)        // address key, declared slot, value
+mapping_sstore(v0, v1, v2)        // address key, declared slot, value
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `key` | `i256` | Mapping key. Often narrowed to `i160` for address keys. |
+| `key` | `i256` | Mapping key. The outlining pass force-widens it to `i256`, so it always prints at full width, even for address keys. |
 | `slot` | `i256` | The mapping's declared storage slot. Typically a small constant. |
 | `value` | `i256` | The value to store at the computed storage location. |
 
@@ -3233,7 +3236,7 @@ setimmutable("<key>", $value[: <type>])
 #### Example
 
 ```text
-setimmutable("MyContract.owner", v0: i160)
+setimmutable("MyContract.owner", v0)
 ```
 
 #### Operands
@@ -3593,20 +3596,20 @@ let $result := call($gas[: <type>], $address[: <type>], $value[: <type>], $args_
 #### Example
 
 ```text
-let v8 := call(v0, v1: i160, v2, v3, v4, v5, v6)
+let v8 := call(v0: i64, v1: i160, v2, v3: i64, v4: i64, v5: i64, v6: i64)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `gas` | `i256` | Gas to forward to the target. |
+| `gas` | `i256` | Gas to forward to the target; narrows to `i64`. |
 | `address` | `i256` | Callee address; narrows to `i160`. |
 | `value` | `i256` | Wei to transfer with the call. |
-| `args_offset` | `i256` | Calldata source offset in linear memory. |
-| `args_length` | `i256` | Calldata length in bytes. |
-| `ret_offset` | `i256` | Return-data destination offset in linear memory. |
-| `ret_length` | `i256` | Maximum return-data length. |
+| `args_offset` | `i256` | Calldata source offset in linear memory; narrows to `i64`. |
+| `args_length` | `i256` | Calldata length in bytes; narrows to `i64`. |
+| `ret_offset` | `i256` | Return-data destination offset in linear memory; narrows to `i64`. |
+| `ret_length` | `i256` | Maximum return-data length; narrows to `i64`. |
 
 #### Result and purity
 
@@ -3635,7 +3638,7 @@ let $result := callcode($gas[: <type>], $address[: <type>], $value[: <type>], $a
 #### Example
 
 ```text
-let v8 := callcode(v0, v1: i160, v2, v3, v4, v5, v6)
+let v8 := callcode(v0: i64, v1: i160, v2, v3: i64, v4: i64, v5: i64, v6: i64)
 ```
 
 #### Operands
@@ -3669,7 +3672,7 @@ let $result := delegatecall($gas[: <type>], $address[: <type>], $args_offset[: <
 #### Example
 
 ```text
-let v7 := delegatecall(v0, v1: i160, v2, v3, v4, v5)
+let v7 := delegatecall(v0: i64, v1: i160, v2: i64, v3: i64, v4: i64, v5: i64)
 ```
 
 #### Operands
@@ -3703,7 +3706,7 @@ let $result := staticcall($gas[: <type>], $address[: <type>], $args_offset[: <ty
 #### Example
 
 ```text
-let v7 := staticcall(v0, v1: i160, v2, v3, v4, v5)
+let v7 := staticcall(v0: i64, v1: i160, v2: i64, v3: i64, v4: i64, v5: i64)
 ```
 
 #### Operands
@@ -3737,7 +3740,7 @@ let $result := create($value[: <type>], $offset[: <type>], $length[: <type>])
 #### Example
 
 ```text
-let v4 := create(v0, v1, v2)
+let v4 := create(v0, v1: i64, v2: i64)
 ```
 
 #### Operands
@@ -3745,8 +3748,8 @@ let v4 := create(v0, v1, v2)
 | Name | Type | Notes |
 |---|---|---|
 | `value` | `i256` | Wei to transfer to the new contract. |
-| `offset` | `i256` | Linear-memory offset of the init code. |
-| `length` | `i256` | Length of the init code in bytes. |
+| `offset` | `i256` | Linear-memory offset of the init code; narrows to `i64`. |
+| `length` | `i256` | Length of the init code in bytes; narrows to `i64`. |
 
 #### Result and purity
 
@@ -3775,7 +3778,7 @@ let $result := create2($value[: <type>], $offset[: <type>], $length[: <type>], $
 #### Example
 
 ```text
-let v5 := create2(v0, v1, v2, v3)
+let v5 := create2(v0, v1: i64, v2: i64, v3)
 ```
 
 #### Operands
@@ -3809,16 +3812,16 @@ log<N>($offset[: <type>], $length[: <type>][, $topic_0[: <type>], …])
 #### Example
 
 ```text
-log0(v0, v1)
-log2(v0, v1, v2, v3)            // two topics
+log0(v0: i64, v1: i64)
+log2(v0: i64, v1: i64, v2, v3)            // two topics
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `offset` | `i256` | Data source offset in linear memory. |
-| `length` | `i256` | Data length in bytes. |
+| `offset` | `i256` | Data source offset in linear memory; narrows to `i64`. |
+| `length` | `i256` | Data length in bytes; narrows to `i64`. |
 | `topics` | `Vec<Value>` | Zero to four indexed topic values; the length determines the mnemonic suffix. |
 
 #### Result and purity
@@ -3852,15 +3855,15 @@ return($offset[: <type>], $length[: <type>])
 #### Example
 
 ```text
-return(v0, v1)
+return(v0: i64, v1: i64)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `offset` | `i256` | Return-data source offset. |
-| `length` | `i256` | Return-data length. |
+| `offset` | `i256` | Return-data source offset; narrows to `i64`. |
+| `length` | `i256` | Return-data length; narrows to `i64`. |
 
 #### Result and purity
 
@@ -3889,15 +3892,15 @@ revert($offset[: <type>], $length[: <type>])
 #### Example
 
 ```text
-revert(v0, v1)
+revert(v0: i64, v1: i64)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `offset` | `i256` | Revert-data source offset. |
-| `length` | `i256` | Revert-data length. |
+| `offset` | `i256` | Revert-data source offset; narrows to `i64`. |
+| `length` | `i256` | Revert-data length; narrows to `i64`. |
 
 #### Result and purity
 

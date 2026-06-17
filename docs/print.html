@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7e05244f.js";
+            window.path_to_searchindex_js = "searchindex-1895e767.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1290cc30.js"></script>
@@ -968,7 +968,11 @@ can observe it.</p>
 <h2 id="how-to-read-this-reference"><a class="header" href="#how-to-read-this-reference">How to read this reference</a></h2>
 <p>This reference page enumerates every operation the newyork IR supports. It is a lookup, not a walkthrough: each entry is self-contained and intended to be reachable by anchor.</p>
 <p>Operations are grouped by function (memory and storage writes, pure expressions, control flow, and so on) rather than alphabetically. Jump to a specific operation from the <a href="#operation-index">operation index</a> below, or use the sidebar.</p>
-<p>Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either <code>Expression</code> or <code>Statement</code> in <code>ir.rs</code>. The textual rendering used by debug dumps and by this reference page is produced by the printer in <code>printer.rs</code>. Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.</p>
+<p>Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either <code>Expression</code> or <code>Statement</code> in <code>ir.rs</code>. The textual rendering used by debug dumps and by this reference page is produced by the printer in <code>printer.rs</code>.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.</p>
+</blockquote>
 <h3 id="entry-format"><a class="header" href="#entry-format">Entry format</a></h3>
 <p>Each operation entry has the same shape:</p>
 <div class="table-wrapper">
@@ -1230,9 +1234,9 @@ can observe it.</p>
 <pre><code class="language-text">0x&lt;hex&gt;[: &lt;type&gt;]
 </code></pre>
 <h4 id="example-1"><a class="header" href="#example-1">Example</a></h4>
-<pre><code class="language-text">let v0 := 0x2a              // 42 at the default i256
-let v1 := 0x1: i1           // boolean true
-let v2 := 0x80: i64         // narrowed by type inference
+<pre><code class="language-text">let v0: i8 := 0x2a
+let v1: i1 := 0x1           // boolean true
+let v2: i64 := 0x80
 </code></pre>
 <h4 id="operands"><a class="header" href="#operands">Operands</a></h4>
 <p>None — literals are leaves.</p>
@@ -1532,9 +1536,9 @@ let v2 := 0x80: i64         // narrowed by type inference
 <h3 id="exp"><a class="header" href="#exp"><code>exp</code></a></h3>
 <p>(<code>Expression::Binary</code> with <code>BinaryOperation::Exp</code>)</p>
 <h4 id="description-9"><a class="header" href="#description-9">Description</a></h4>
-<p>Modular exponentiation: <code>(lhs ^ rhs) mod 2^256</code>. The most expensive arithmetic opcode in EVM (variable gas cost proportional to the byte length of <code>rhs</code>).</p>
+<p>Modular exponentiation: <code>(base ^ exponent) mod 2^256</code>. The most expensive arithmetic opcode in EVM (variable gas cost proportional to the byte length of <code>exponent</code>).</p>
 <h4 id="syntax-9"><a class="header" href="#syntax-9">Syntax</a></h4>
-<pre><code class="language-text">exp($lhs[: &lt;type&gt;], $rhs[: &lt;type&gt;])
+<pre><code class="language-text">exp($base[: &lt;type&gt;], $exponent[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-9"><a class="header" href="#example-9">Example</a></h4>
 <pre><code class="language-text">let v2 := exp(v0, v1)
@@ -1546,8 +1550,8 @@ let v2 := 0x80: i64         // narrowed by type inference
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>lhs</code></td><td><code>i256</code></td><td>Base.</td></tr>
-<tr><td><code>rhs</code></td><td><code>i256</code></td><td>Exponent.</td></tr>
+<tr><td><code>base</code></td><td><code>i256</code></td><td>Base.</td></tr>
+<tr><td><code>exponent</code></td><td><code>i256</code></td><td>Exponent.</td></tr>
 </tbody>
 </table>
 </div>
@@ -1573,8 +1577,8 @@ let v2 := 0x80: i64         // narrowed by type inference
 </code></pre>
 <h4 id="example-10"><a class="header" href="#example-10">Example</a></h4>
 <pre><code class="language-text">let v2 := and(v0, v1)
-let v3: i8 := 0xff              // mask constant gets its own let-binding, narrowed to i8
-let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear bits
+let v3: i8 := 0xff
+let v4: i8 := and(v0, v3: i8)
 </code></pre>
 <h4 id="operands-10"><a class="header" href="#operands-10">Operands</a></h4>
 <div class="table-wrapper">
@@ -1676,10 +1680,10 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <h4 id="description-13"><a class="header" href="#description-13">Description</a></h4>
 <p>Logical left shift. Operand order follows EVM: <code>shl(shift, value)</code> computes <code>value &lt;&lt; shift</code>. Shifts ≥ 256 produce <code>0</code>.</p>
 <h4 id="syntax-13"><a class="header" href="#syntax-13">Syntax</a></h4>
-<pre><code class="language-text">shl($lhs[: &lt;type&gt;], $rhs[: &lt;type&gt;])
+<pre><code class="language-text">shl($shift[: &lt;type&gt;], $value[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-13"><a class="header" href="#example-13">Example</a></h4>
-<pre><code class="language-text">let v2 := shl(v0, v1)       // v1 shifted left by v0 bits
+<pre><code class="language-text">let v2 := shl(v0, v1)
 </code></pre>
 <h4 id="operands-13"><a class="header" href="#operands-13">Operands</a></h4>
 <div class="table-wrapper">
@@ -1688,8 +1692,8 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>lhs</code></td><td><code>i256</code></td><td>Shift amount in bits.</td></tr>
-<tr><td><code>rhs</code></td><td><code>i256</code></td><td>Value to shift.</td></tr>
+<tr><td><code>shift</code></td><td><code>i256</code></td><td>Shift amount in bits.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>Value to shift.</td></tr>
 </tbody>
 </table>
 </div>
@@ -1711,7 +1715,7 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <h4 id="description-14"><a class="header" href="#description-14">Description</a></h4>
 <p>Logical right shift. Operand order follows EVM: <code>shr(shift, value)</code> computes <code>value &gt;&gt; shift</code> with zero-fill from the left. Shifts ≥ 256 produce <code>0</code>.</p>
 <h4 id="syntax-14"><a class="header" href="#syntax-14">Syntax</a></h4>
-<pre><code class="language-text">shr($lhs[: &lt;type&gt;], $rhs[: &lt;type&gt;])
+<pre><code class="language-text">shr($shift[: &lt;type&gt;], $value[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-14"><a class="header" href="#example-14">Example</a></h4>
 <pre><code class="language-text">let v2 := shr(v0, v1)
@@ -1723,8 +1727,8 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>lhs</code></td><td><code>i256</code></td><td>Shift amount in bits.</td></tr>
-<tr><td><code>rhs</code></td><td><code>i256</code></td><td>Value to shift.</td></tr>
+<tr><td><code>shift</code></td><td><code>i256</code></td><td>Shift amount in bits.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>Value to shift.</td></tr>
 </tbody>
 </table>
 </div>
@@ -1735,7 +1739,7 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td>If <code>lhs</code> is a known constant <code>k</code>: tier holding <code>256 - k</code> bits (or <code>i1</code> for <code>k ≥ 256</code>). Otherwise: <code>width(rhs)</code>.</td><td>Pure</td></tr>
+<tr><td>If <code>shift</code> is a known constant <code>k</code>: tier holding <code>256 - k</code> bits (or <code>i1</code> for <code>k ≥ 256</code>). Otherwise: <code>width(value)</code>.</td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
@@ -1746,7 +1750,7 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <h4 id="description-15"><a class="header" href="#description-15">Description</a></h4>
 <p>Arithmetic (signed) right shift. Operand order follows EVM: <code>sar(shift, value)</code> shifts <code>value</code> right by <code>shift</code> bits, preserving the sign bit. Shifts ≥ 256 saturate to <code>0</code> for non-negative values and to <code>-1</code> (all-ones) for negative values.</p>
 <h4 id="syntax-15"><a class="header" href="#syntax-15">Syntax</a></h4>
-<pre><code class="language-text">sar($lhs[: &lt;type&gt;], $rhs[: &lt;type&gt;])
+<pre><code class="language-text">sar($shift[: &lt;type&gt;], $value[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-15"><a class="header" href="#example-15">Example</a></h4>
 <pre><code class="language-text">let v2 := sar(v0, v1)
@@ -1758,8 +1762,8 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>lhs</code></td><td><code>i256</code></td><td>Shift amount in bits.</td></tr>
-<tr><td><code>rhs</code></td><td><code>i256</code></td><td>Value to shift, treated as signed.</td></tr>
+<tr><td><code>shift</code></td><td><code>i256</code></td><td>Shift amount in bits.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>Value to shift, treated as signed.</td></tr>
 </tbody>
 </table>
 </div>
@@ -1770,7 +1774,7 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td><code>width(rhs)</code> — unlike <a href="#shr"><code>shr</code></a>, sign-extension means a constant shift cannot narrow the result</td><td>Pure</td></tr>
+<tr><td><code>width(value)</code> — unlike <a href="#shr"><code>shr</code></a>, sign-extension means a constant shift cannot narrow the result</td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
@@ -1784,7 +1788,7 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <pre><code class="language-text">lt($lhs[: &lt;type&gt;], $rhs[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-16"><a class="header" href="#example-16">Example</a></h4>
-<pre><code class="language-text">let v2 := lt(v0, v1)
+<pre><code class="language-text">let v2: i1 := lt(v0, v1)
 </code></pre>
 <h4 id="operands-16"><a class="header" href="#operands-16">Operands</a></h4>
 <div class="table-wrapper">
@@ -1819,7 +1823,7 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <pre><code class="language-text">gt($lhs[: &lt;type&gt;], $rhs[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-17"><a class="header" href="#example-17">Example</a></h4>
-<pre><code class="language-text">let v2 := gt(v0, v1)
+<pre><code class="language-text">let v2: i1 := gt(v0, v1)
 </code></pre>
 <h4 id="operands-17"><a class="header" href="#operands-17">Operands</a></h4>
 <div class="table-wrapper">
@@ -1854,7 +1858,7 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <pre><code class="language-text">slt($lhs[: &lt;type&gt;], $rhs[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-18"><a class="header" href="#example-18">Example</a></h4>
-<pre><code class="language-text">let v2 := slt(v0, v1)
+<pre><code class="language-text">let v2: i1 := slt(v0, v1)
 </code></pre>
 <h4 id="operands-18"><a class="header" href="#operands-18">Operands</a></h4>
 <div class="table-wrapper">
@@ -1889,7 +1893,7 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <pre><code class="language-text">sgt($lhs[: &lt;type&gt;], $rhs[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-19"><a class="header" href="#example-19">Example</a></h4>
-<pre><code class="language-text">let v2 := sgt(v0, v1)
+<pre><code class="language-text">let v2: i1 := sgt(v0, v1)
 </code></pre>
 <h4 id="operands-19"><a class="header" href="#operands-19">Operands</a></h4>
 <div class="table-wrapper">
@@ -1924,7 +1928,7 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <pre><code class="language-text">eq($lhs[: &lt;type&gt;], $rhs[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-20"><a class="header" href="#example-20">Example</a></h4>
-<pre><code class="language-text">let v2 := eq(v0, v1)
+<pre><code class="language-text">let v2: i1 := eq(v0, v1)
 </code></pre>
 <h4 id="operands-20"><a class="header" href="#operands-20">Operands</a></h4>
 <div class="table-wrapper">
@@ -1956,10 +1960,10 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <h4 id="description-21"><a class="header" href="#description-21">Description</a></h4>
 <p>Extract a single byte from a 256-bit word. <code>byte(i, x)</code> returns the <em>i</em>-th byte of <code>x</code> with byte 0 being the most significant. If <code>i ≥ 32</code>, the result is <code>0</code>.</p>
 <h4 id="syntax-21"><a class="header" href="#syntax-21">Syntax</a></h4>
-<pre><code class="language-text">byte($lhs[: &lt;type&gt;], $rhs[: &lt;type&gt;])
+<pre><code class="language-text">byte($index[: &lt;type&gt;], $word[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-21"><a class="header" href="#example-21">Example</a></h4>
-<pre><code class="language-text">let v2 := byte(v0, v1)      // v0 = byte index, v1 = word
+<pre><code class="language-text">let v2: i8 := byte(v0, v1)
 </code></pre>
 <h4 id="operands-21"><a class="header" href="#operands-21">Operands</a></h4>
 <div class="table-wrapper">
@@ -1968,8 +1972,8 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>lhs</code></td><td><code>i256</code></td><td>Byte position; <code>0</code> = most significant byte. Values <code>≥ 32</code> yield <code>0</code>.</td></tr>
-<tr><td><code>rhs</code></td><td><code>i256</code></td><td>Source word.</td></tr>
+<tr><td><code>index</code></td><td><code>i256</code></td><td>Byte position; <code>0</code> = most significant byte. Values <code>≥ 32</code> yield <code>0</code>.</td></tr>
+<tr><td><code>word</code></td><td><code>i256</code></td><td>Source word.</td></tr>
 </tbody>
 </table>
 </div>
@@ -1991,10 +1995,10 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <h4 id="description-22"><a class="header" href="#description-22">Description</a></h4>
 <p>Sign-extend an integer from a byte position. Per EVM, <code>signextend(b, x)</code> treats byte <code>b</code> of <code>x</code> as the most significant byte of a smaller signed integer and extends its sign through the upper bytes.</p>
 <h4 id="syntax-22"><a class="header" href="#syntax-22">Syntax</a></h4>
-<pre><code class="language-text">signextend($lhs[: &lt;type&gt;], $rhs[: &lt;type&gt;])
+<pre><code class="language-text">signextend($byte_position[: &lt;type&gt;], $value[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-22"><a class="header" href="#example-22">Example</a></h4>
-<pre><code class="language-text">let v2 := signextend(v0, v1)  // v0 = byte position, v1 = value
+<pre><code class="language-text">let v2 := signextend(v0, v1)
 </code></pre>
 <h4 id="operands-22"><a class="header" href="#operands-22">Operands</a></h4>
 <div class="table-wrapper">
@@ -2003,8 +2007,8 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>lhs</code></td><td><code>i256</code></td><td>Byte position of the sign byte (0–31).</td></tr>
-<tr><td><code>rhs</code></td><td><code>i256</code></td><td>Source value.</td></tr>
+<tr><td><code>byte_position</code></td><td><code>i256</code></td><td>Byte position of the sign byte (0–31).</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>Source value.</td></tr>
 </tbody>
 </table>
 </div>
@@ -2101,7 +2105,7 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <pre><code class="language-text">iszero($operand[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-25"><a class="header" href="#example-25">Example</a></h4>
-<pre><code class="language-text">let v1 := iszero(v0)
+<pre><code class="language-text">let v1: i1 := iszero(v0)
 </code></pre>
 <h4 id="operands-25"><a class="header" href="#operands-25">Operands</a></h4>
 <div class="table-wrapper">
@@ -2203,8 +2207,8 @@ let v4: i8 := and(v0, v3: i8)   // result narrows to i8 — AND can only clear b
 <pre><code class="language-text">truncate&lt;i&lt;bits&gt;&gt;($value[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-28"><a class="header" href="#example-28">Example</a></h4>
-<pre><code class="language-text">let v1 := truncate&lt;i64&gt;(v0)
-let v2 := truncate&lt;i8&gt;(v1)
+<pre><code class="language-text">let v1: i64 := truncate&lt;i64&gt;(v0)
+let v2: i8 := truncate&lt;i8&gt;(v1: i64)
 </code></pre>
 <h4 id="operands-28"><a class="header" href="#operands-28">Operands</a></h4>
 <div class="table-wrapper">
@@ -2410,7 +2414,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">caller()
 </code></pre>
 <h4 id="example-34"><a class="header" href="#example-34">Example</a></h4>
-<pre><code class="language-text">let v0 := caller()
+<pre><code class="language-text">let v0: i160 := caller()
 </code></pre>
 <h4 id="operands-34"><a class="header" href="#operands-34">Operands</a></h4>
 <p>None.</p>
@@ -2460,7 +2464,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">origin()
 </code></pre>
 <h4 id="example-36"><a class="header" href="#example-36">Example</a></h4>
-<pre><code class="language-text">let v0 := origin()
+<pre><code class="language-text">let v0: i160 := origin()
 </code></pre>
 <h4 id="operands-36"><a class="header" href="#operands-36">Operands</a></h4>
 <p>None.</p>
@@ -2485,7 +2489,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">address()
 </code></pre>
 <h4 id="example-37"><a class="header" href="#example-37">Example</a></h4>
-<pre><code class="language-text">let v0 := address()
+<pre><code class="language-text">let v0: i160 := address()
 </code></pre>
 <h4 id="operands-37"><a class="header" href="#operands-37">Operands</a></h4>
 <p>None.</p>
@@ -2535,7 +2539,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">gas()
 </code></pre>
 <h4 id="example-39"><a class="header" href="#example-39">Example</a></h4>
-<pre><code class="language-text">let v0 := gas()
+<pre><code class="language-text">let v0: i64 := gas()
 </code></pre>
 <h4 id="operands-39"><a class="header" href="#operands-39">Operands</a></h4>
 <p>None.</p>
@@ -2560,7 +2564,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">msize()
 </code></pre>
 <h4 id="example-40"><a class="header" href="#example-40">Example</a></h4>
-<pre><code class="language-text">let v0 := msize()
+<pre><code class="language-text">let v0: i64 := msize()
 </code></pre>
 <h4 id="operands-40"><a class="header" href="#operands-40">Operands</a></h4>
 <p>None.</p>
@@ -2585,7 +2589,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">coinbase()
 </code></pre>
 <h4 id="example-41"><a class="header" href="#example-41">Example</a></h4>
-<pre><code class="language-text">let v0 := coinbase()
+<pre><code class="language-text">let v0: i160 := coinbase()
 </code></pre>
 <h4 id="operands-41"><a class="header" href="#operands-41">Operands</a></h4>
 <p>None.</p>
@@ -2610,7 +2614,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">timestamp()
 </code></pre>
 <h4 id="example-42"><a class="header" href="#example-42">Example</a></h4>
-<pre><code class="language-text">let v0 := timestamp()
+<pre><code class="language-text">let v0: i64 := timestamp()
 </code></pre>
 <h4 id="operands-42"><a class="header" href="#operands-42">Operands</a></h4>
 <p>None.</p>
@@ -2635,7 +2639,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">number()
 </code></pre>
 <h4 id="example-43"><a class="header" href="#example-43">Example</a></h4>
-<pre><code class="language-text">let v0 := number()
+<pre><code class="language-text">let v0: i64 := number()
 </code></pre>
 <h4 id="operands-43"><a class="header" href="#operands-43">Operands</a></h4>
 <p>None.</p>
@@ -2685,7 +2689,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">gaslimit()
 </code></pre>
 <h4 id="example-45"><a class="header" href="#example-45">Example</a></h4>
-<pre><code class="language-text">let v0 := gaslimit()
+<pre><code class="language-text">let v0: i64 := gaslimit()
 </code></pre>
 <h4 id="operands-45"><a class="header" href="#operands-45">Operands</a></h4>
 <p>None.</p>
@@ -2912,7 +2916,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">calldatasize()
 </code></pre>
 <h4 id="example-53"><a class="header" href="#example-53">Example</a></h4>
-<pre><code class="language-text">let v0 := calldatasize()
+<pre><code class="language-text">let v0: i64 := calldatasize()
 </code></pre>
 <h4 id="operands-53"><a class="header" href="#operands-53">Operands</a></h4>
 <p>None.</p>
@@ -2937,7 +2941,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">returndatasize()
 </code></pre>
 <h4 id="example-54"><a class="header" href="#example-54">Example</a></h4>
-<pre><code class="language-text">let v0 := returndatasize()
+<pre><code class="language-text">let v0: i64 := returndatasize()
 </code></pre>
 <h4 id="operands-54"><a class="header" href="#operands-54">Operands</a></h4>
 <p>None.</p>
@@ -2962,7 +2966,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">codesize()
 </code></pre>
 <h4 id="example-55"><a class="header" href="#example-55">Example</a></h4>
-<pre><code class="language-text">let v0 := codesize()
+<pre><code class="language-text">let v0: i64 := codesize()
 </code></pre>
 <h4 id="operands-55"><a class="header" href="#operands-55">Operands</a></h4>
 <p>None.</p>
@@ -2987,7 +2991,7 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">extcodesize($address[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-56"><a class="header" href="#example-56">Example</a></h4>
-<pre><code class="language-text">let v1 := extcodesize(v0: i160)
+<pre><code class="language-text">let v1: i64 := extcodesize(v0: i160)
 </code></pre>
 <h4 id="operands-56"><a class="header" href="#operands-56">Operands</a></h4>
 <div class="table-wrapper">
@@ -3089,8 +3093,8 @@ let v2 := truncate&lt;i8&gt;(v1)
 <pre><code class="language-text">mload($offset[: &lt;type&gt;]) [/* &lt;region&gt; */]
 </code></pre>
 <h4 id="example-59"><a class="header" href="#example-59">Example</a></h4>
-<pre><code class="language-text">let v1 := mload(v0)
-let v2 := mload(v3) /* free_ptr */
+<pre><code class="language-text">let v1 := mload(v0: i64)
+let v2: i32 := mload(v3: i64) /* free_ptr */
 </code></pre>
 <h4 id="operands-59"><a class="header" href="#operands-59">Operands</a></h4>
 <div class="table-wrapper">
@@ -3282,7 +3286,7 @@ let v2 := sload(v3) /* slot: 0x0 */
 <pre><code class="language-text">datasize("&lt;id&gt;")
 </code></pre>
 <h4 id="example-64"><a class="header" href="#example-64">Example</a></h4>
-<pre><code class="language-text">let v0 := datasize("MyContract_deployed")
+<pre><code class="language-text">let v0: i64 := datasize("MyContract_deployed")
 </code></pre>
 <h4 id="operands-64"><a class="header" href="#operands-64">Operands</a></h4>
 <p>None — the identifier is a quoted string literal in the syntax position, not an operand.</p>
@@ -3350,7 +3354,7 @@ let v2 := sload(v3) /* slot: 0x0 */
 <pre><code class="language-text">linkersymbol("&lt;path&gt;")
 </code></pre>
 <h4 id="example-66"><a class="header" href="#example-66">Example</a></h4>
-<pre><code class="language-text">let v0 := linkersymbol("contracts/Library.sol:L")
+<pre><code class="language-text">let v0: i160 := linkersymbol("contracts/Library.sol:L")
 </code></pre>
 <h4 id="operands-66"><a class="header" href="#operands-66">Operands</a></h4>
 <p>None — the path is a quoted string literal in the syntax position.</p>
@@ -3477,7 +3481,7 @@ mstore(v4, v5) /* free_ptr */     // offset is exactly 0x40
 <pre><code class="language-text">mstore8($offset[: &lt;type&gt;], $value[: &lt;type&gt;]) [/* &lt;region&gt; */]
 </code></pre>
 <h4 id="example-69"><a class="header" href="#example-69">Example</a></h4>
-<pre><code class="language-text">mstore8(v0, v1: i8)             // value narrowed to i8 by type inference
+<pre><code class="language-text">mstore8(v0, v1: i8)
 </code></pre>
 <h4 id="operands-69"><a class="header" href="#operands-69">Operands</a></h4>
 <div class="table-wrapper">
@@ -3639,7 +3643,7 @@ sstore(v2, v3) /* slot: 0x0 */
 <pre><code class="language-text">mapping_sstore($key[: &lt;type&gt;], $slot[: &lt;type&gt;], $value[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-73"><a class="header" href="#example-73">Example</a></h4>
-<pre><code class="language-text">mapping_sstore(v0: i160, v1, v2)        // address key, declared slot, value
+<pre><code class="language-text">mapping_sstore(v0, v1, v2)        // address key, declared slot, value
 </code></pre>
 <h4 id="operands-73"><a class="header" href="#operands-73">Operands</a></h4>
 <div class="table-wrapper">
@@ -3648,7 +3652,7 @@ sstore(v2, v3) /* slot: 0x0 */
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>key</code></td><td><code>i256</code></td><td>Mapping key. Often narrowed to <code>i160</code> for address keys.</td></tr>
+<tr><td><code>key</code></td><td><code>i256</code></td><td>Mapping key. The outlining pass force-widens it to <code>i256</code>, so it always prints at full width, even for address keys.</td></tr>
 <tr><td><code>slot</code></td><td><code>i256</code></td><td>The mapping’s declared storage slot. Typically a small constant.</td></tr>
 <tr><td><code>value</code></td><td><code>i256</code></td><td>The value to store at the computed storage location.</td></tr>
 </tbody>
@@ -3930,7 +3934,7 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 <pre><code class="language-text">setimmutable("&lt;key&gt;", $value[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-81"><a class="header" href="#example-81">Example</a></h4>
-<pre><code class="language-text">setimmutable("MyContract.owner", v0: i160)
+<pre><code class="language-text">setimmutable("MyContract.owner", v0)
 </code></pre>
 <h4 id="operands-81"><a class="header" href="#operands-81">Operands</a></h4>
 <div class="table-wrapper">
@@ -4256,7 +4260,7 @@ leave                       // returns nothing (void function)
 <pre><code class="language-text">let $result := call($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $value[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-89"><a class="header" href="#example-89">Example</a></h4>
-<pre><code class="language-text">let v8 := call(v0, v1: i160, v2, v3, v4, v5, v6)
+<pre><code class="language-text">let v8 := call(v0: i64, v1: i160, v2, v3: i64, v4: i64, v5: i64, v6: i64)
 </code></pre>
 <h4 id="operands-89"><a class="header" href="#operands-89">Operands</a></h4>
 <div class="table-wrapper">
@@ -4265,13 +4269,13 @@ leave                       // returns nothing (void function)
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>gas</code></td><td><code>i256</code></td><td>Gas to forward to the target.</td></tr>
+<tr><td><code>gas</code></td><td><code>i256</code></td><td>Gas to forward to the target; narrows to <code>i64</code>.</td></tr>
 <tr><td><code>address</code></td><td><code>i256</code></td><td>Callee address; narrows to <code>i160</code>.</td></tr>
 <tr><td><code>value</code></td><td><code>i256</code></td><td>Wei to transfer with the call.</td></tr>
-<tr><td><code>args_offset</code></td><td><code>i256</code></td><td>Calldata source offset in linear memory.</td></tr>
-<tr><td><code>args_length</code></td><td><code>i256</code></td><td>Calldata length in bytes.</td></tr>
-<tr><td><code>ret_offset</code></td><td><code>i256</code></td><td>Return-data destination offset in linear memory.</td></tr>
-<tr><td><code>ret_length</code></td><td><code>i256</code></td><td>Maximum return-data length.</td></tr>
+<tr><td><code>args_offset</code></td><td><code>i256</code></td><td>Calldata source offset in linear memory; narrows to <code>i64</code>.</td></tr>
+<tr><td><code>args_length</code></td><td><code>i256</code></td><td>Calldata length in bytes; narrows to <code>i64</code>.</td></tr>
+<tr><td><code>ret_offset</code></td><td><code>i256</code></td><td>Return-data destination offset in linear memory; narrows to <code>i64</code>.</td></tr>
+<tr><td><code>ret_length</code></td><td><code>i256</code></td><td>Maximum return-data length; narrows to <code>i64</code>.</td></tr>
 </tbody>
 </table>
 </div>
@@ -4296,7 +4300,7 @@ leave                       // returns nothing (void function)
 <pre><code class="language-text">let $result := callcode($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $value[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-90"><a class="header" href="#example-90">Example</a></h4>
-<pre><code class="language-text">let v8 := callcode(v0, v1: i160, v2, v3, v4, v5, v6)
+<pre><code class="language-text">let v8 := callcode(v0: i64, v1: i160, v2, v3: i64, v4: i64, v5: i64, v6: i64)
 </code></pre>
 <h4 id="operands-90"><a class="header" href="#operands-90">Operands</a></h4>
 <p>Same shape as <a href="#call"><code>call</code></a>.</p>
@@ -4321,7 +4325,7 @@ leave                       // returns nothing (void function)
 <pre><code class="language-text">let $result := delegatecall($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-91"><a class="header" href="#example-91">Example</a></h4>
-<pre><code class="language-text">let v7 := delegatecall(v0, v1: i160, v2, v3, v4, v5)
+<pre><code class="language-text">let v7 := delegatecall(v0: i64, v1: i160, v2: i64, v3: i64, v4: i64, v5: i64)
 </code></pre>
 <h4 id="operands-91"><a class="header" href="#operands-91">Operands</a></h4>
 <p>Same shape as <a href="#call"><code>call</code></a> minus the <code>value</code> operand.</p>
@@ -4346,7 +4350,7 @@ leave                       // returns nothing (void function)
 <pre><code class="language-text">let $result := staticcall($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-92"><a class="header" href="#example-92">Example</a></h4>
-<pre><code class="language-text">let v7 := staticcall(v0, v1: i160, v2, v3, v4, v5)
+<pre><code class="language-text">let v7 := staticcall(v0: i64, v1: i160, v2: i64, v3: i64, v4: i64, v5: i64)
 </code></pre>
 <h4 id="operands-92"><a class="header" href="#operands-92">Operands</a></h4>
 <p>Same shape as <a href="#call"><code>call</code></a> minus the <code>value</code> operand.</p>
@@ -4371,7 +4375,7 @@ leave                       // returns nothing (void function)
 <pre><code class="language-text">let $result := create($value[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-93"><a class="header" href="#example-93">Example</a></h4>
-<pre><code class="language-text">let v4 := create(v0, v1, v2)
+<pre><code class="language-text">let v4 := create(v0, v1: i64, v2: i64)
 </code></pre>
 <h4 id="operands-93"><a class="header" href="#operands-93">Operands</a></h4>
 <div class="table-wrapper">
@@ -4381,8 +4385,8 @@ leave                       // returns nothing (void function)
 </thead>
 <tbody>
 <tr><td><code>value</code></td><td><code>i256</code></td><td>Wei to transfer to the new contract.</td></tr>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Linear-memory offset of the init code.</td></tr>
-<tr><td><code>length</code></td><td><code>i256</code></td><td>Length of the init code in bytes.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Linear-memory offset of the init code; narrows to <code>i64</code>.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Length of the init code in bytes; narrows to <code>i64</code>.</td></tr>
 </tbody>
 </table>
 </div>
@@ -4407,7 +4411,7 @@ leave                       // returns nothing (void function)
 <pre><code class="language-text">let $result := create2($value[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;], $salt[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-94"><a class="header" href="#example-94">Example</a></h4>
-<pre><code class="language-text">let v5 := create2(v0, v1, v2, v3)
+<pre><code class="language-text">let v5 := create2(v0, v1: i64, v2: i64, v3)
 </code></pre>
 <h4 id="operands-94"><a class="header" href="#operands-94">Operands</a></h4>
 <p>Same as <a href="#create"><code>create</code></a> plus <code>salt: i256</code>.</p>
@@ -4432,8 +4436,8 @@ leave                       // returns nothing (void function)
 <pre><code class="language-text">log&lt;N&gt;($offset[: &lt;type&gt;], $length[: &lt;type&gt;][, $topic_0[: &lt;type&gt;], …])
 </code></pre>
 <h4 id="example-95"><a class="header" href="#example-95">Example</a></h4>
-<pre><code class="language-text">log0(v0, v1)
-log2(v0, v1, v2, v3)            // two topics
+<pre><code class="language-text">log0(v0: i64, v1: i64)
+log2(v0: i64, v1: i64, v2, v3)            // two topics
 </code></pre>
 <h4 id="operands-95"><a class="header" href="#operands-95">Operands</a></h4>
 <div class="table-wrapper">
@@ -4442,8 +4446,8 @@ log2(v0, v1, v2, v3)            // two topics
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Data source offset in linear memory.</td></tr>
-<tr><td><code>length</code></td><td><code>i256</code></td><td>Data length in bytes.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Data source offset in linear memory; narrows to <code>i64</code>.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Data length in bytes; narrows to <code>i64</code>.</td></tr>
 <tr><td><code>topics</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Zero to four indexed topic values; the length determines the mnemonic suffix.</td></tr>
 </tbody>
 </table>
@@ -4471,7 +4475,7 @@ log2(v0, v1, v2, v3)            // two topics
 <pre><code class="language-text">return($offset[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-96"><a class="header" href="#example-96">Example</a></h4>
-<pre><code class="language-text">return(v0, v1)
+<pre><code class="language-text">return(v0: i64, v1: i64)
 </code></pre>
 <h4 id="operands-96"><a class="header" href="#operands-96">Operands</a></h4>
 <div class="table-wrapper">
@@ -4480,8 +4484,8 @@ log2(v0, v1, v2, v3)            // two topics
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Return-data source offset.</td></tr>
-<tr><td><code>length</code></td><td><code>i256</code></td><td>Return-data length.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Return-data source offset; narrows to <code>i64</code>.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Return-data length; narrows to <code>i64</code>.</td></tr>
 </tbody>
 </table>
 </div>
@@ -4506,7 +4510,7 @@ log2(v0, v1, v2, v3)            // two topics
 <pre><code class="language-text">revert($offset[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-97"><a class="header" href="#example-97">Example</a></h4>
-<pre><code class="language-text">revert(v0, v1)
+<pre><code class="language-text">revert(v0: i64, v1: i64)
 </code></pre>
 <h4 id="operands-97"><a class="header" href="#operands-97">Operands</a></h4>
 <div class="table-wrapper">
@@ -4515,8 +4519,8 @@ log2(v0, v1, v2, v3)            // two topics
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Revert-data source offset.</td></tr>
-<tr><td><code>length</code></td><td><code>i256</code></td><td>Revert-data length.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Revert-data source offset; narrows to <code>i64</code>.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Revert-data length; narrows to <code>i64</code>.</td></tr>
 </tbody>
 </table>
 </div>

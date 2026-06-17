@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-2d09764a.js";
+            window.path_to_searchindex_js = "searchindex-d099962a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1290cc30.js"></script>
@@ -357,7 +357,7 @@ Please find our <a href="https://paritytech.github.io/resolc-bin/">binary releas
 <p>A boolean value allowing to enable debug information. Corresponds to <code>resolc -g</code>.</p>
 <h3 id="settingspolkavmnewyork"><a class="header" href="#settingspolkavmnewyork"><code>settings.polkavm.newyork</code></a></h3>
 <p>A boolean value allowing to enable the experimental <a href="#the-newyork-optimizer">newyork IR pipeline</a> for Yul lowering. Corresponds to <code>resolc --newyork</code>. Off by default.</p>
-<p>The output JSON includes which pipeline actually ran, via the top-level <code>resolc_pipeline</code> field (<code>"newyork"</code> or <code>"yul"</code> for the standard Yul-to-LLVM pipeline) .</p>
+<p>The output JSON includes which pipeline actually ran, via the top-level <code>resolc_pipeline</code> field (<code>"newyork"</code> or <code>"yul"</code> for the standard Yul-to-LLVM pipeline).</p>
 <h3 id="the-settingspolkavmmemoryconfig-object"><a class="header" href="#the-settingspolkavmmemoryconfig-object">The <code>settings.polkavm.memoryConfig</code> object</a></h3>
 <p>Used to apply PVM specific memory configuration settings.</p>
 <h4 id="settingspolkavmmemoryconfigheapsize"><a class="header" href="#settingspolkavmmemoryconfigheapsize"><code>settings.polkavm.memoryConfig.heapSize</code></a></h4>
@@ -4449,7 +4449,7 @@ leave                       // returns nothing (void function)
 <pre><code class="language-text">log&lt;N&gt;($offset[: &lt;type&gt;], $length[: &lt;type&gt;][, $topic_0[: &lt;type&gt;], …])
 </code></pre>
 <h4 id="example-95"><a class="header" href="#example-95">Example</a></h4>
-<pre><code class="language-text">log0(v0: i64, v1: i64)
+<pre><code class="language-text">log0(v0: i64, v1: i64)                    // no topics
 log2(v0: i64, v1: i64, v2, v3)            // two topics
 </code></pre>
 <h4 id="operands-95"><a class="header" href="#operands-95">Operands</a></h4>

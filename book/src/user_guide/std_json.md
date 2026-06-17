@@ -14,7 +14,7 @@ A boolean value allowing to enable debug information. Corresponds to `resolc -g`
 
 A boolean value allowing to enable the experimental [newyork IR pipeline](../developer_guide/newyork_optimizer.md) for Yul lowering. Corresponds to `resolc --newyork`. Off by default.
 
-The output JSON includes which pipeline actually ran, via the top-level `resolc_pipeline` field (`"newyork"` or `"yul"` for the standard Yul-to-LLVM pipeline) .
+The output JSON includes which pipeline actually ran, via the top-level `resolc_pipeline` field (`"newyork"` or `"yul"` for the standard Yul-to-LLVM pipeline).
 
 ### The `settings.polkavm.memoryConfig` object
 

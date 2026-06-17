@@ -3834,7 +3834,7 @@ log<N>($offset[: <type>], $length[: <type>][, $topic_0[: <type>], …])
 #### Example
 
 ```text
-log0(v0: i64, v1: i64)
+log0(v0: i64, v1: i64)                    // no topics
 log2(v0: i64, v1: i64, v2, v3)            // two topics
 ```
 

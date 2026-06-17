@@ -307,10 +307,10 @@ Passing `--debug-output-dir <path>` makes the newyork pipeline write IR and anal
 
 | File | Content |
 |---|---|
-| `<contract-stem>.newyork` | Final optimized IR, annotated with the inferred type widths |
-| `<contract-stem>.snapshot.newyork` | IR snapshot taken before the late passes (only when captured during translation) |
-| `<contract-stem>.heap.newyork` | Heap analysis summary (native regions/offsets, taintedness, escapes, dynamic accesses) |
-| `<contract-stem>.mem.newyork` | Memory optimization counters (loads/stores eliminated, keccak fusions, FMP loads eliminated) |
+| `<file-stem>.newyork` | Final optimized IR, annotated with the inferred type widths |
+| `<file-stem>.snapshot.newyork` | IR snapshot taken before the late passes (only when captured during translation) |
+| `<file-stem>.heap.newyork` | Heap analysis summary (native regions/offsets, taintedness, escapes, dynamic accesses) |
+| `<file-stem>.mem.newyork` | Memory optimization counters (loads/stores eliminated, keccak fusions, FMP loads eliminated) |
 
 ## Module reference
 

@@ -3388,14 +3388,19 @@ for { $variable_0 := $initial_0[, …] }
 #### Example
 
 ```text
-for { v1 := 0x0 }
-    condition: lt(v1, 0xa)
+let v0: i1 := 0x0
+let v6 := for { v1 := v0: i1 }
+    // condition statements:
+    let v2: i8 := 0xa
+    condition: lt(v1, v2: i8)
     post (v3) {
-        let v4 := add(v1, 0x1)
-        yield v4
+        let v4: i64 := 0x1
+        let v5 := add(v3, v4: i64)
+        yield v5
     }
     body {
-        sstore(v1, v2)
+        sstore(v1, v1)
+        0x0: void
         yield v1
     }
 ```

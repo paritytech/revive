@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-d07daed5.js";
+            window.path_to_searchindex_js = "searchindex-2d09764a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1290cc30.js"></script>
@@ -3655,7 +3655,7 @@ sstore(v2, v3) /* slot: 0x0 */
 <pre><code class="language-text">mapping_sstore($key[: &lt;type&gt;], $slot[: &lt;type&gt;], $value[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-73"><a class="header" href="#example-73">Example</a></h4>
-<pre><code class="language-text">mapping_sstore(v0, v1, v2)        // address key, declared slot, value
+<pre><code class="language-text">mapping_sstore(v0, v1, v2)
 </code></pre>
 <h4 id="operands-73"><a class="header" href="#operands-73">Operands</a></h4>
 <div class="table-wrapper">
@@ -3738,7 +3738,7 @@ sstore(v2, v3) /* slot: 0x0 */
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>address</code></td><td><code>i256</code></td><td>Account whose code to read; narrows to <code>i160</code>.</td></tr>
+<tr><td><code>address</code></td><td><code>i256</code></td><td>Account whose code to read; forward analysis widens to at least <code>i160</code>.</td></tr>
 <tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
 <tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the external code.</td></tr>
 <tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy.</td></tr>
@@ -4282,13 +4282,13 @@ leave                       // returns nothing (void function)
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>gas</code></td><td><code>i256</code></td><td>Gas to forward to the target; narrows to <code>i64</code>.</td></tr>
-<tr><td><code>address</code></td><td><code>i256</code></td><td>Callee address; narrows to <code>i160</code>.</td></tr>
+<tr><td><code>gas</code></td><td><code>i256</code></td><td>Gas to forward to the target; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>address</code></td><td><code>i256</code></td><td>Callee address; forward analysis widens to at least <code>i160</code>.</td></tr>
 <tr><td><code>value</code></td><td><code>i256</code></td><td>Wei to transfer with the call.</td></tr>
-<tr><td><code>args_offset</code></td><td><code>i256</code></td><td>Calldata source offset in linear memory; narrows to <code>i64</code>.</td></tr>
-<tr><td><code>args_length</code></td><td><code>i256</code></td><td>Calldata length in bytes; narrows to <code>i64</code>.</td></tr>
-<tr><td><code>ret_offset</code></td><td><code>i256</code></td><td>Return-data destination offset in linear memory; narrows to <code>i64</code>.</td></tr>
-<tr><td><code>ret_length</code></td><td><code>i256</code></td><td>Maximum return-data length; narrows to <code>i64</code>.</td></tr>
+<tr><td><code>args_offset</code></td><td><code>i256</code></td><td>Calldata source offset in linear memory; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>args_length</code></td><td><code>i256</code></td><td>Calldata length in bytes; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>ret_offset</code></td><td><code>i256</code></td><td>Return-data destination offset in linear memory; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>ret_length</code></td><td><code>i256</code></td><td>Maximum return-data length; forward analysis widens to at least <code>i64</code>.</td></tr>
 </tbody>
 </table>
 </div>
@@ -4398,8 +4398,8 @@ leave                       // returns nothing (void function)
 </thead>
 <tbody>
 <tr><td><code>value</code></td><td><code>i256</code></td><td>Wei to transfer to the new contract.</td></tr>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Linear-memory offset of the init code; narrows to <code>i64</code>.</td></tr>
-<tr><td><code>length</code></td><td><code>i256</code></td><td>Length of the init code in bytes; narrows to <code>i64</code>.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Linear-memory offset of the init code; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Length of the init code in bytes; forward analysis widens to at least <code>i64</code>.</td></tr>
 </tbody>
 </table>
 </div>
@@ -4459,8 +4459,8 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Data source offset in linear memory; narrows to <code>i64</code>.</td></tr>
-<tr><td><code>length</code></td><td><code>i256</code></td><td>Data length in bytes; narrows to <code>i64</code>.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Data source offset in linear memory; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Data length in bytes; forward analysis widens to at least <code>i64</code>.</td></tr>
 <tr><td><code>topics</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Zero to four indexed topic values; the length determines the mnemonic suffix.</td></tr>
 </tbody>
 </table>
@@ -4497,8 +4497,8 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Return-data source offset; narrows to <code>i64</code>.</td></tr>
-<tr><td><code>length</code></td><td><code>i256</code></td><td>Return-data length; narrows to <code>i64</code>.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Return-data source offset; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Return-data length; forward analysis widens to at least <code>i64</code>.</td></tr>
 </tbody>
 </table>
 </div>
@@ -4532,8 +4532,8 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Revert-data source offset; narrows to <code>i64</code>.</td></tr>
-<tr><td><code>length</code></td><td><code>i256</code></td><td>Revert-data length; narrows to <code>i64</code>.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Revert-data source offset; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Revert-data length; forward analysis widens to at least <code>i64</code>.</td></tr>
 </tbody>
 </table>
 </div>
@@ -4617,7 +4617,7 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>address</code></td><td><code>i256</code></td><td>Recipient of the contract’s balance; narrows to <code>i160</code>.</td></tr>
+<tr><td><code>address</code></td><td><code>i256</code></td><td>Recipient of the contract’s balance; forward analysis widens to at least <code>i160</code>.</td></tr>
 </tbody>
 </table>
 </div>

@@ -2946,7 +2946,7 @@ mapping_sstore($key[: <type>], $slot[: <type>], $value[: <type>])
 #### Example
 
 ```text
-mapping_sstore(v0, v1, v2)        // address key, declared slot, value
+mapping_sstore(v0, v1, v2)
 ```
 
 #### Operands
@@ -3033,7 +3033,7 @@ extcodecopy(v0: i160, v1, v2, v3)
 
 | Name | Type | Notes |
 |---|---|---|
-| `address` | `i256` | Account whose code to read; narrows to `i160`. |
+| `address` | `i256` | Account whose code to read; forward analysis widens to at least `i160`. |
 | `dest` | `i256` | Destination byte offset in linear memory. |
 | `offset` | `i256` | Source byte offset in the external code. |
 | `length` | `i256` | Number of bytes to copy. |
@@ -3625,13 +3625,13 @@ let v8 := call(v0: i64, v1: i160, v2, v3: i64, v4: i64, v5: i64, v6: i64)
 
 | Name | Type | Notes |
 |---|---|---|
-| `gas` | `i256` | Gas to forward to the target; narrows to `i64`. |
-| `address` | `i256` | Callee address; narrows to `i160`. |
+| `gas` | `i256` | Gas to forward to the target; forward analysis widens to at least `i64`. |
+| `address` | `i256` | Callee address; forward analysis widens to at least `i160`. |
 | `value` | `i256` | Wei to transfer with the call. |
-| `args_offset` | `i256` | Calldata source offset in linear memory; narrows to `i64`. |
-| `args_length` | `i256` | Calldata length in bytes; narrows to `i64`. |
-| `ret_offset` | `i256` | Return-data destination offset in linear memory; narrows to `i64`. |
-| `ret_length` | `i256` | Maximum return-data length; narrows to `i64`. |
+| `args_offset` | `i256` | Calldata source offset in linear memory; forward analysis widens to at least `i64`. |
+| `args_length` | `i256` | Calldata length in bytes; forward analysis widens to at least `i64`. |
+| `ret_offset` | `i256` | Return-data destination offset in linear memory; forward analysis widens to at least `i64`. |
+| `ret_length` | `i256` | Maximum return-data length; forward analysis widens to at least `i64`. |
 
 #### Result and purity
 
@@ -3770,8 +3770,8 @@ let v4 := create(v0, v1: i64, v2: i64)
 | Name | Type | Notes |
 |---|---|---|
 | `value` | `i256` | Wei to transfer to the new contract. |
-| `offset` | `i256` | Linear-memory offset of the init code; narrows to `i64`. |
-| `length` | `i256` | Length of the init code in bytes; narrows to `i64`. |
+| `offset` | `i256` | Linear-memory offset of the init code; forward analysis widens to at least `i64`. |
+| `length` | `i256` | Length of the init code in bytes; forward analysis widens to at least `i64`. |
 
 #### Result and purity
 
@@ -3842,8 +3842,8 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 
 | Name | Type | Notes |
 |---|---|---|
-| `offset` | `i256` | Data source offset in linear memory; narrows to `i64`. |
-| `length` | `i256` | Data length in bytes; narrows to `i64`. |
+| `offset` | `i256` | Data source offset in linear memory; forward analysis widens to at least `i64`. |
+| `length` | `i256` | Data length in bytes; forward analysis widens to at least `i64`. |
 | `topics` | `Vec<Value>` | Zero to four indexed topic values; the length determines the mnemonic suffix. |
 
 #### Result and purity
@@ -3884,8 +3884,8 @@ return(v0: i64, v1: i64)
 
 | Name | Type | Notes |
 |---|---|---|
-| `offset` | `i256` | Return-data source offset; narrows to `i64`. |
-| `length` | `i256` | Return-data length; narrows to `i64`. |
+| `offset` | `i256` | Return-data source offset; forward analysis widens to at least `i64`. |
+| `length` | `i256` | Return-data length; forward analysis widens to at least `i64`. |
 
 #### Result and purity
 
@@ -3921,8 +3921,8 @@ revert(v0: i64, v1: i64)
 
 | Name | Type | Notes |
 |---|---|---|
-| `offset` | `i256` | Revert-data source offset; narrows to `i64`. |
-| `length` | `i256` | Revert-data length; narrows to `i64`. |
+| `offset` | `i256` | Revert-data source offset; forward analysis widens to at least `i64`. |
+| `length` | `i256` | Revert-data length; forward analysis widens to at least `i64`. |
 
 #### Result and purity
 
@@ -4026,7 +4026,7 @@ selfdestruct(v0: i160)
 
 | Name | Type | Notes |
 |---|---|---|
-| `address` | `i256` | Recipient of the contract's balance; narrows to `i160`. |
+| `address` | `i256` | Recipient of the contract's balance; forward analysis widens to at least `i160`. |
 
 #### Result and purity
 

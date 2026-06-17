@@ -9,6 +9,15 @@ contract ExtCode {
         }
     }
 
+    // Two distinct addresses queried in a single function body: regression guard
+    // for the `code_size` import memory-attribute bug where LLVM CSE'd the two
+    // syscalls into one and returned `2 * extcodesize(a)`.
+    function ExtCodeSizeSum(address a, address b) public view returns (uint ret) {
+        assembly {
+            ret := add(extcodesize(a), extcodesize(b))
+        }
+    }
+
     function CodeSize() public pure returns (uint ret) {
         assembly {
             ret := codesize()

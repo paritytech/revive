@@ -10,6 +10,7 @@ pub(crate) mod extension;
 pub(crate) mod keccak256;
 pub(crate) mod metadata;
 pub(crate) mod object;
+pub(crate) mod solidity_selector;
 pub(crate) mod utils;
 
 pub use self::base::*;
@@ -21,5 +22,6 @@ pub use self::extension::*;
 pub use self::keccak256::*;
 pub use self::metadata::*;
 pub use self::object::*;
+pub use self::solidity_selector::*;
 pub use self::utils::*;
 pub use contract_identifier::*;

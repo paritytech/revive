@@ -3,15 +3,32 @@
 use inkwell::values::BasicValue;
 use revive_common::BIT_LENGTH_WORD;
 
+use crate::polkavm::context::attribute::Attribute;
+use crate::polkavm::context::attribute::MemoryEffect;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::WriteLLVM;
+
+/// Standard attribute set for the pure arithmetic helpers. Each helper pairs
+/// this list with [`PURE_MEMORY_EFFECT`] so that LLVM GVN/CSE can merge
+/// repeated calls and hoist invariant divisions out of loops.
+const PURE_ATTRIBUTES: &[Attribute] = &[
+    Attribute::NoFree,
+    Attribute::NoRecurse,
+    Attribute::WillReturn,
+];
+
+/// The arithmetic helpers are pure (only depend on their integer arguments).
+const PURE_MEMORY_EFFECT: MemoryEffect = MemoryEffect::None;
 
 /// Implements the division operator according to the EVM specification.
 pub struct Division;
 
 impl RuntimeFunction for Division {
     const NAME: &'static str = "__revive_division";
+
+    const ATTRIBUTES: &'static [Attribute] = PURE_ATTRIBUTES;
+    const MEMORY_EFFECT: MemoryEffect = PURE_MEMORY_EFFECT;
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
@@ -51,6 +68,9 @@ pub struct SignedDivision;
 
 impl RuntimeFunction for SignedDivision {
     const NAME: &'static str = "__revive_signed_division";
+
+    const ATTRIBUTES: &'static [Attribute] = PURE_ATTRIBUTES;
+    const MEMORY_EFFECT: MemoryEffect = PURE_MEMORY_EFFECT;
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
@@ -126,6 +146,9 @@ pub struct Remainder;
 impl RuntimeFunction for Remainder {
     const NAME: &'static str = "__revive_remainder";
 
+    const ATTRIBUTES: &'static [Attribute] = PURE_ATTRIBUTES;
+    const MEMORY_EFFECT: MemoryEffect = PURE_MEMORY_EFFECT;
+
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
             &[context.word_type().into(), context.word_type().into()],
@@ -173,6 +196,9 @@ pub struct SignedRemainder;
 
 impl RuntimeFunction for SignedRemainder {
     const NAME: &'static str = "__revive_signed_remainder";
+
+    const ATTRIBUTES: &'static [Attribute] = PURE_ATTRIBUTES;
+    const MEMORY_EFFECT: MemoryEffect = PURE_MEMORY_EFFECT;
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(

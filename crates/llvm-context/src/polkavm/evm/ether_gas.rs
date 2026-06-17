@@ -30,6 +30,46 @@ pub fn value<'ctx>(
     context.build_load(output_pointer, "value_transferred")
 }
 
+/// Calls the outlined `__revive_callvalue() -> i256` runtime function.
+///
+/// This is functionally identical to [`value`] but calls a shared outlined function
+/// instead of inlining the alloca+store+call+load sequence at every call site.
+/// For contracts with many non-payable checks (e.g. OpenZeppelin ERC20: 37 sites),
+/// this significantly reduces code size.
+pub fn value_outlined<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    use crate::polkavm::context::function::runtime::revive::CallValue;
+    use crate::polkavm::context::runtime::RuntimeFunction;
+    let function = context
+        .get_function(CallValue::NAME, false)
+        .expect("ICE: __revive_callvalue should be declared");
+    let result = context
+        .build_call(function.borrow().declaration(), &[], "callvalue_result")
+        .expect("ICE: __revive_callvalue should return a value");
+    Ok(result)
+}
+
+/// Calls the outlined `__revive_callvalue_nonzero() -> i1` runtime function.
+///
+/// Returns true (i1) if callvalue is nonzero. This is more efficient than
+/// `value_outlined()` followed by `icmp ne i256 %cv, 0` because the
+/// 256-bit comparison is done once inside the outlined function body,
+/// and each call site only receives a single boolean flag.
+pub fn value_nonzero_outlined<'ctx>(
+    context: &mut Context<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    use crate::polkavm::context::function::runtime::revive::CallValueNonzero;
+    use crate::polkavm::context::runtime::RuntimeFunction;
+    let function = context
+        .get_function(CallValueNonzero::NAME, false)
+        .expect("ICE: __revive_callvalue_nonzero should be declared");
+    let result = context
+        .build_call(function.borrow().declaration(), &[], "callvalue_nonzero")
+        .expect("ICE: __revive_callvalue_nonzero should return a value");
+    Ok(result)
+}
+
 /// Translates the `balance` instructions.
 pub fn balance<'ctx>(
     context: &mut Context<'ctx>,

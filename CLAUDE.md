@@ -33,10 +33,21 @@ make test-yul            # Yul parser tests
 make format              # Check formatting (cargo fmt --all --check)
 make clippy              # Run clippy with --deny warnings
 
-# Run single test
-cargo test --package <crate-name> <test_name>
-cargo test --package revive-integration <test_name>
 ```
+
+**For verifying work, claiming a task done, or pre-commit checks: only ever run
+`make test*` targets — never raw `cargo test`.** Integration and resolc tests
+invoke the installed `resolc` binary as a subprocess. Each `make test*` target
+already declares `install-bin` (or `install`) as a dependency, so it always
+rebuilds and installs a fresh binary before running tests. Raw `cargo test`
+does not — it builds the test binary but leaves system `resolc` stale, so it
+passes against code the test isn't actually exercising. That mismatch is
+exactly why raw `cargo test` is an anti-pattern for validation.
+
+The one legitimate exception is **actively debugging a single test** for fast
+iteration: run `make install-bin` first to refresh the binary, then iterate with
+`cargo test --package <crate> <test_name>`, re-running `make install-bin`
+between code changes. Never use this exception for validation.
 
 ## Crate Architecture
 

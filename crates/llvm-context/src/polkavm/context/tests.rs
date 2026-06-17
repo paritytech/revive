@@ -7,7 +7,13 @@ use crate::PolkaVMTarget;
 
 /// Initializes the LLVM compiler backend.
 fn initialize_llvm() {
-    crate::initialize_llvm(PolkaVMTarget::PVM, "resolc", Default::default());
+    crate::initialize_llvm(
+        PolkaVMTarget::PVM,
+        "resolc",
+        crate::OptimizerSettingsSizeLevel::Zero,
+        false,
+        Default::default(),
+    );
 }
 
 #[test]

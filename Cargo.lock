@@ -9443,6 +9443,7 @@ dependencies = [
  "rayon",
  "revive-common",
  "revive-llvm-context",
+ "revive-newyork",
  "revive-solc-json-interface",
  "revive-yul",
  "semver 1.0.28",
@@ -9570,6 +9571,20 @@ dependencies = [
  "revive-stdlib",
  "semver 1.0.28",
  "serde",
+]
+
+[[package]]
+name = "revive-newyork"
+version = "1.0.0"
+dependencies = [
+ "anyhow",
+ "inkwell",
+ "log",
+ "num",
+ "revive-common",
+ "revive-llvm-context",
+ "revive-yul",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

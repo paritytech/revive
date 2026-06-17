@@ -10,6 +10,7 @@ use inkwell::debug_info::AsDIScope;
 use inkwell::debug_info::DIScope;
 use inkwell::types::BasicType;
 use inkwell::values::BasicValue;
+use inkwell::values::InstructionOpcode;
 use revive_solc_json_interface::PolkaVMDefaultHeapMemorySize;
 use revive_solc_json_interface::PolkaVMDefaultStackMemorySize;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
@@ -20,11 +21,14 @@ use crate::polkavm::DebugConfig;
 use crate::target_machine::target::Target;
 use crate::target_machine::TargetMachine;
 use crate::PolkaVMLoadHeapWordFunction;
+use crate::PolkaVMLoadHeapWordNativeFunction;
 use crate::PolkaVMSbrkFunction;
 use crate::PolkaVMStoreHeapWordFunction;
+use crate::PolkaVMStoreHeapWordNativeFunction;
 
 use self::address_space::AddressSpace;
 use self::attribute::Attribute;
+use self::attribute::MemoryEffect;
 use self::build::Build;
 use self::code_type::CodeType;
 use self::debug_info::DebugInfo;
@@ -58,6 +62,29 @@ pub mod yul_data;
 
 #[cfg(test)]
 mod tests;
+
+/// Imported host syscalls whose only externally visible effect is a read of
+/// pallet-revive runtime state. Each takes no arguments and returns a scalar —
+/// no input/output buffer and no heap traffic from the caller's view — so we
+/// can attach [`MemoryEffect::ReadInaccessible`] and let LLVM GVN dedupe
+/// repeated calls across heap mstores.
+///
+/// `code_size` is deliberately **not** in this list. Unlike the entries above,
+/// `extcodesize` passes the queried address to the syscall through the
+/// [`crate::polkavm::GLOBAL_ADDRESS_SPILL_BUFFER`] global (see
+/// [`Context::build_address_argument_store`]), so the call reads caller-accessible
+/// memory. That access lives in LLVM's "other" location, not "inaccessiblemem"
+/// (the address reaches the call as an integer, so it is not "argmem" either).
+/// Tagging it `inaccessiblemem: read` would hide the buffer read, letting GVN
+/// merge two `extcodesize` calls for different addresses — and DSE drop the
+/// first address store — so that `extcodesize(a) + extcodesize(b)` miscompiles
+/// to `2 * extcodesize(a)`. With no attribute the import keeps the inline-asm
+/// `~{memory}` barrier, matching its pre-newyork behaviour.
+const MEMORY_READ_IMPORTS: &[&str] = &[
+    revive_runtime_api::polkavm_imports::CALL_DATA_SIZE,
+    revive_runtime_api::polkavm_imports::GAS_LIMIT,
+    revive_runtime_api::polkavm_imports::RETURNDATASIZE,
+];
 
 /// The LLVM IR generator context.
 /// It is a not-so-big god-like object glueing all the compilers' complexity and act as an adapter
@@ -123,8 +150,10 @@ impl<'ctx> Context<'ctx> {
             .expect("the stdlib module should be linkable");
     }
 
-    /// Link in the PolkaVM imports module, containing imported functions,
-    /// and marking them as external (they need to be relocatable as too).
+    /// Link in the PolkaVM imports module, mark host syscall imports as
+    /// `Internal` linkage (they need to be relocatable too), and attach a
+    /// [`MemoryEffect::ReadInaccessible`] attribute to every entry of
+    /// [`MEMORY_READ_IMPORTS`].
     fn link_polkavm_imports(
         llvm: &'ctx inkwell::context::Context,
         module: &inkwell::module::Module<'ctx>,
@@ -140,6 +169,20 @@ impl<'ctx> Context<'ctx> {
                 .get_function(import)
                 .unwrap_or_else(|| panic!("{import} import should be declared"))
                 .set_linkage(inkwell::module::Linkage::Internal);
+        }
+
+        let read_inaccessible_encoding = MemoryEffect::ReadInaccessible
+            .encoding()
+            .expect("ICE: ReadInaccessible always encodes to an integer");
+        let memory_read_attr =
+            llvm.create_enum_attribute(Attribute::Memory as u32, read_inaccessible_encoding);
+        for import in MEMORY_READ_IMPORTS {
+            if let Some(function) = module.get_function(import) {
+                function.add_attribute(
+                    inkwell::attributes::AttributeLoc::Function,
+                    memory_read_attr,
+                );
+            }
         }
     }
 
@@ -287,7 +330,11 @@ impl<'ctx> Context<'ctx> {
     ) -> anyhow::Result<Build> {
         self.link_polkavm_exports(contract_path)?;
         self.link_immutable_data(contract_path)?;
-        let target_machine = TargetMachine::new(Target::PVM, self.optimizer.settings())?;
+        let target_machine = TargetMachine::new(
+            Target::PVM,
+            self.optimizer.settings(),
+            self.optimizer.is_newyork(),
+        )?;
         self.module().set_triple(&target_machine.get_triple());
 
         self.debug_config
@@ -310,6 +357,12 @@ impl<'ctx> Context<'ctx> {
                     error
                 )
             })?;
+
+        // Narrow large integer div/rem where operands provably fit in a smaller
+        // type. LLVM's i256 div/rem backend expansion produces enormous basic
+        // blocks that pallet-revive rejects as `BasicBlockTooLarge`; narrowing
+        // here keeps the expansion compact.
+        self.narrow_divrem_instructions();
 
         self.debug_config
             .dump_llvm_ir_optimized(contract_path, self.module())?;
@@ -441,10 +494,33 @@ impl<'ctx> Context<'ctx> {
         &self.llvm_runtime
     }
 
+    /// Returns the topmost frontend function-name → mangled-name scope.
+    ///
+    /// Panics if no scope has been pushed; callers must invoke this from inside a region
+    /// that has already set up its function scope.
     pub fn get_current_scope(&mut self) -> &mut BTreeMap<String, String> {
         self.function_scope
             .last_mut()
             .expect("ICE: function scope must be pushed before declaring frontend functions")
+    }
+
+    /// Returns the mangled symbol name for a frontend (Solidity-emitted) function.
+    ///
+    /// Frontend names collide across compilation units: separate Yul objects can both define
+    /// `fun_main` for example. The mangling appends a code-section tag (deploy / runtime) and a
+    /// per-context counter so each definition gets a globally unique LLVM symbol, while the
+    /// original name remains the lookup key in `function_scope`.
+    fn mangle_frontend_function_name(&mut self, name: &str) -> String {
+        assert!(
+            !self.get_current_scope().contains_key(name),
+            "ICE: function '{name}' declared subsequently in the same scope"
+        );
+        let counter = self.function_counter;
+        self.function_counter += 1;
+        let mangled = format!("{name}_{}__{counter}", self.code_type().unwrap());
+        self.get_current_scope()
+            .insert(name.to_string(), mangled.clone());
+        mangled
     }
 
     /// Appends a function to the current module.
@@ -458,16 +534,7 @@ impl<'ctx> Context<'ctx> {
         is_frontend: bool,
     ) -> anyhow::Result<Rc<RefCell<Function<'ctx>>>> {
         let name = if is_frontend {
-            assert!(
-                !self.get_current_scope().contains_key(name),
-                "ICE: function '{name}' declared subsequently in the same scope"
-            );
-            let counter = self.function_counter;
-            self.function_counter += 1;
-            let mangled = format!("{name}_{}__{counter}", self.code_type().unwrap());
-            self.get_current_scope()
-                .insert(name.to_string(), mangled.clone());
-            mangled
+            self.mangle_frontend_function_name(name)
         } else {
             name.to_string()
         };
@@ -492,21 +559,28 @@ impl<'ctx> Context<'ctx> {
         let entry_block = self.llvm.append_basic_block(value, "entry");
         let return_block = self.llvm.append_basic_block(value, "return");
 
+        // Allocate return slots using the actual return type from the function signature.
+        // Narrowed return types (e.g. i64 instead of i256) flow through unchanged, reducing
+        // register pressure and spills.
         let r#return = match return_values_length {
             0 => FunctionReturn::none(),
             1 => {
                 self.set_basic_block(entry_block);
-                let pointer = self.build_alloca(self.word_type(), "return_pointer");
+                let alloca_type = r#type
+                    .get_return_type()
+                    .unwrap_or_else(|| self.word_type().as_basic_type_enum());
+                let pointer = self.build_alloca(alloca_type, "return_pointer");
                 FunctionReturn::primitive(pointer)
             }
             size => {
                 self.set_basic_block(entry_block);
-                let pointer = self.build_alloca(
+                let alloca_type = r#type.get_return_type().unwrap_or_else(|| {
                     self.structure_type(
                         vec![self.word_type().as_basic_type_enum(); size].as_slice(),
-                    ),
-                    "return_pointer",
-                );
+                    )
+                    .as_basic_type_enum()
+                });
+                let pointer = self.build_alloca(alloca_type, "return_pointer");
                 FunctionReturn::compound(pointer, size)
             }
         };
@@ -633,6 +707,20 @@ impl<'ctx> Context<'ctx> {
         Ok(())
     }
 
+    /// Anchors the current debug location to the active function's own subprogram.
+    ///
+    /// Synthetic trailing instructions (the implicit branch to the return block
+    /// and the terminator) are emitted after the function body has been lowered,
+    /// at which point the debug-info scope stack may still point at a nested or
+    /// helper function generated along the way. Resolving `None` to the top scope
+    /// there would attach a `!dbg` from an unrelated subprogram, which the LLVM
+    /// verifier rejects. Using the function's own scope keeps the attachment valid.
+    /// No-op when debug info is disabled.
+    pub fn set_debug_location_to_function_scope(&self) -> anyhow::Result<()> {
+        let scope = self.current_function().borrow().get_debug_scope();
+        self.set_debug_location(0, 0, scope)
+    }
+
     /// Pushes a debug-info scope to the stack.
     pub fn push_debug_scope(&self, scope: DIScope<'ctx>) {
         if let Some(debug_info) = self.debug_info() {
@@ -709,28 +797,35 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Builds an aligned stack allocation at the function entry.
+    ///
+    /// Allocas placed at the entry block coalesce into a single stack-frame allocation,
+    /// eliminating per-alloca dynamic stack adjustment. LLVM's stack coloring pass handles
+    /// lifetime-based slot reuse regardless of alloca placement.
     pub fn build_alloca_at_entry<T: BasicType<'ctx> + Clone + Copy>(
         &self,
         r#type: T,
         name: &str,
     ) -> Pointer<'ctx> {
-        // TODO: Revisit. While at entry should be preferred in theory:
-        // - It has negligible code size impact on real word contracts.
-        // - Sometimes has negative impact on code size.
-        // - Messes up debug information used to analyze code size issues.
-        self.build_alloca(r#type, name)
+        let current_block = self.builder.get_insert_block().unwrap();
+        let function = current_block.get_parent().unwrap();
+        let entry_block = function.get_first_basic_block().unwrap();
 
-        // let current_block = self.basic_block();
-        // let entry_block = self.current_function().borrow().entry_block();
+        if let Some(terminator) = entry_block.get_terminator() {
+            self.builder.position_before(&terminator);
+        } else {
+            self.builder.position_at_end(entry_block);
+        }
 
-        // match entry_block.get_first_instruction() {
-        //     Some(instruction) => self.builder().position_before(&instruction),
-        //     None => self.builder().position_at_end(entry_block),
-        // }
+        let pointer = self.builder.build_alloca(r#type, name).unwrap();
+        pointer
+            .as_instruction()
+            .unwrap()
+            .set_alignment(revive_common::BYTE_LENGTH_STACK_ALIGN as u32)
+            .expect("ICE: alignment is valid");
 
-        // let pointer = self.build_alloca(r#type, name);
-        // self.set_basic_block(current_block);
-        // pointer
+        self.builder.position_at_end(current_block);
+
+        Pointer::new(r#type, AddressSpace::Stack, pointer)
     }
 
     /// Builds an aligned stack allocation at the current position.
@@ -845,6 +940,34 @@ impl<'ctx> Context<'ctx> {
             }
         };
 
+        Ok(())
+    }
+
+    /// Builds a heap load instruction without byte-swapping.
+    /// Used for internal memory operations that don't escape to external code.
+    pub fn build_load_native(
+        &self,
+        offset: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+        let name = <PolkaVMLoadHeapWordNativeFunction as RuntimeFunction>::NAME;
+        let declaration = <PolkaVMLoadHeapWordNativeFunction as RuntimeFunction>::declaration(self);
+        let arguments = [offset.as_basic_value_enum()];
+        Ok(self
+            .build_call(declaration, &arguments, "heap_load_native")
+            .unwrap_or_else(|| panic!("revive runtime function {name} should return a value")))
+    }
+
+    /// Builds a heap store instruction without byte-swapping.
+    /// Used for internal memory operations that don't escape to external code.
+    pub fn build_store_native(
+        &self,
+        offset: inkwell::values::IntValue<'ctx>,
+        value: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<()> {
+        let declaration =
+            <PolkaVMStoreHeapWordNativeFunction as RuntimeFunction>::declaration(self);
+        let arguments = [offset.as_basic_value_enum(), value.as_basic_value_enum()];
+        self.build_call(declaration, &arguments, "heap_store_native");
         Ok(())
     }
 
@@ -1053,45 +1176,111 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Truncate a memory offset to register size, trapping if it doesn't fit.
+    ///
+    /// Handles all integer widths: at xlen the value is returned unchanged, narrower types are
+    /// zero-extended (no overflow possible), word-typed values delegate to the
+    /// `WordToPointer` runtime function (which returns the truncated value or jumps to invalid),
+    /// and intermediate widths inline a truncate-extend-compare at the source width because that
+    /// is much cheaper on 32-bit PVM than extending to i256 first (i64 compare is 2 register
+    /// pairs vs i256's 8 words — roughly 10 fewer instructions per check).
     pub fn safe_truncate_int_to_xlen(
         &self,
         value: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
-        if value.get_type() == self.xlen_type() {
+        let value_width = value.get_type().get_bit_width();
+        let xlen_width = self.xlen_type().get_bit_width();
+        let word_width = self.word_type().get_bit_width();
+
+        if value_width == xlen_width {
             return Ok(value);
         }
-        assert_eq!(
-            value.get_type(),
-            self.word_type(),
-            "expected XLEN or WORD sized int type for memory offset",
-        );
 
-        Ok(self
-            .build_call(
-                <WordToPointer as RuntimeFunction>::declaration(self),
-                &[value.into()],
-                "word_to_pointer",
-            )
-            .unwrap_or_else(|| {
-                panic!(
-                    "revive runtime function {} should return a value",
-                    <WordToPointer as RuntimeFunction>::NAME,
+        if value_width < xlen_width {
+            return Ok(self.builder().build_int_z_extend(
+                value,
+                self.xlen_type(),
+                "narrow_to_xlen",
+            )?);
+        }
+
+        if value_width == word_width {
+            return Ok(self
+                .build_call(
+                    <WordToPointer as RuntimeFunction>::declaration(self),
+                    &[value.into()],
+                    "word_to_pointer",
                 )
-            })
-            .into_int_value())
+                .unwrap_or_else(|| {
+                    panic!(
+                        "ICE: revive runtime function {} should return a value",
+                        <WordToPointer as RuntimeFunction>::NAME,
+                    )
+                })
+                .into_int_value());
+        }
+
+        let truncated =
+            self.builder()
+                .build_int_truncate(value, self.xlen_type(), "offset_truncated")?;
+        let extended =
+            self.builder()
+                .build_int_z_extend(truncated, value.get_type(), "offset_extended")?;
+        let is_overflow = self.builder().build_int_compare(
+            inkwell::IntPredicate::NE,
+            value,
+            extended,
+            "compare_truncated_extended",
+        )?;
+
+        let block_continue = self.append_basic_block("offset_pointer_ok");
+        let block_invalid = self.append_basic_block("offset_pointer_overflow");
+        self.build_conditional_branch(is_overflow, block_invalid, block_continue)?;
+
+        self.set_basic_block(block_invalid);
+        self.build_runtime_call(revive_runtime_api::polkavm_imports::INVALID, &[]);
+        self.build_unreachable();
+
+        self.set_basic_block(block_continue);
+        Ok(truncated)
     }
 
     /// Clip a memory offset to the maximum value that fits into a register.
+    ///
+    /// Behaves like [`Self::safe_truncate_int_to_xlen`] up to xlen-and-narrower widths, but for
+    /// wider types it saturates to `xlen::MAX` rather than trapping. The wider-type branch
+    /// keeps the original-width comparison so the codegen stays compact (word-type values
+    /// remain at word_type; intermediate widths use the value's own type).
     pub fn clip_to_xlen(
         &self,
         value: inkwell::values::IntValue<'ctx>,
     ) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
+        let value_width = value.get_type().get_bit_width();
+        let xlen_width = self.xlen_type().get_bit_width();
+        let word_width = self.word_type().get_bit_width();
+
+        if value_width == xlen_width {
+            return Ok(value);
+        }
+
+        if value_width < xlen_width {
+            return Ok(self.builder().build_int_z_extend(
+                value,
+                self.xlen_type(),
+                "narrow_to_xlen",
+            )?);
+        }
+
         let clipped = self.xlen_type().const_all_ones();
+        let comparison_type = if value_width == word_width {
+            self.word_type()
+        } else {
+            value.get_type()
+        };
         let is_overflow = self.builder().build_int_compare(
             inkwell::IntPredicate::UGT,
             value,
             self.builder()
-                .build_int_z_extend(clipped, self.word_type(), "value_clipped")?,
+                .build_int_z_extend(clipped, comparison_type, "value_clipped")?,
             "is_value_overflow",
         )?;
         let truncated =
@@ -1156,6 +1345,64 @@ impl<'ctx> Context<'ctx> {
 
         let pointer = self.build_sbrk(offset, length)?;
         Ok(Pointer::new(self.byte_type(), AddressSpace::Stack, pointer))
+    }
+
+    /// Returns a pointer to `offset` into the heap WITHOUT calling sbrk.
+    ///
+    /// The heap global is a fixed-size byte array (the static heap) that is always live for the
+    /// full duration of contract execution. sbrk only updates the *high-water mark* tracked in
+    /// `GLOBAL_HEAP_SIZE`; the underlying memory backing offsets up to `HEAP_SIZE` is always
+    /// addressable. Skipping sbrk is therefore safe whenever the *byte-order semantics* of the
+    /// access do not depend on a previously published high-water mark — i.e., for offsets known
+    /// to live inside the statically reserved scratch area (0x00-0x7f, including the free
+    /// memory pointer slot at 0x40), and for compiler-internal native-mode I/O whose offset
+    /// bound is proven by the type system.
+    ///
+    /// # Panics
+    /// Assumes `offset` to be a register sized value.
+    pub fn build_heap_gep_unchecked(
+        &self,
+        offset: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<Pointer<'ctx>> {
+        assert_eq!(offset.get_type(), self.xlen_type());
+        let heap_global: Pointer<'ctx> =
+            self.get_global(crate::polkavm::GLOBAL_HEAP_MEMORY)?.into();
+        let pointer = self.build_gep(
+            heap_global,
+            &[self.xlen_type().const_zero(), offset],
+            self.byte_type(),
+            "heap_unchecked_ptr",
+        );
+        Ok(Pointer::new(
+            self.byte_type(),
+            AddressSpace::Stack,
+            pointer.value,
+        ))
+    }
+
+    /// Ensures the heap size (msize) is at least `min_size`.
+    /// This emits a branchless max(current_msize, min_size) update.
+    /// Used after native stores that bypass sbrk to keep msize consistent.
+    pub fn ensure_heap_size(
+        &self,
+        min_size: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<()> {
+        let current = self
+            .get_global_value(crate::polkavm::GLOBAL_HEAP_SIZE)?
+            .into_int_value();
+        let needs_update = self.builder().build_int_compare(
+            inkwell::IntPredicate::UGT,
+            min_size,
+            current,
+            "msize_needs_update",
+        )?;
+        let new_size = self
+            .builder()
+            .build_select(needs_update, min_size, current, "msize_new")?
+            .into_int_value();
+        let heap_size_global = self.get_global(crate::polkavm::GLOBAL_HEAP_SIZE)?;
+        self.build_store(heap_size_global.into(), new_size)?;
+        Ok(())
     }
 
     /// Returns a boolean type constant.
@@ -1292,6 +1539,8 @@ impl<'ctx> Context<'ctx> {
     }
 
     /// Returns a Yul function type with the specified arguments and number of return values.
+    /// All return values use word_type (i256). For narrowed return types, use
+    /// `function_type_with_returns`.
     pub fn function_type<T>(
         &self,
         argument_types: Vec<T>,
@@ -1315,6 +1564,39 @@ impl<'ctx> Context<'ctx> {
             size => self
                 .structure_type(vec![self.word_type().as_basic_type_enum(); size].as_slice())
                 .fn_type(argument_types.as_slice(), false),
+        }
+    }
+
+    /// Returns a function type with explicit return types instead of word_type.
+    /// Used by the newyork codegen for functions with narrowed return types.
+    pub fn function_type_with_returns<T>(
+        &self,
+        argument_types: Vec<T>,
+        return_types: &[inkwell::types::IntType<'ctx>],
+    ) -> inkwell::types::FunctionType<'ctx>
+    where
+        T: BasicType<'ctx>,
+    {
+        let argument_types: Vec<inkwell::types::BasicMetadataTypeEnum> = argument_types
+            .as_slice()
+            .iter()
+            .map(T::as_basic_type_enum)
+            .map(inkwell::types::BasicMetadataTypeEnum::from)
+            .collect();
+        match return_types.len() {
+            0 => self
+                .llvm
+                .void_type()
+                .fn_type(argument_types.as_slice(), false),
+            1 => return_types[0].fn_type(argument_types.as_slice(), false),
+            _ => {
+                let field_types: Vec<inkwell::types::BasicTypeEnum> = return_types
+                    .iter()
+                    .map(|t| t.as_basic_type_enum())
+                    .collect();
+                self.structure_type(&field_types)
+                    .fn_type(argument_types.as_slice(), false)
+            }
         }
     }
 
@@ -1468,6 +1750,12 @@ impl<'ctx> Context<'ctx> {
         self.optimizer.settings()
     }
 
+    /// Whether this module is being compiled through the newyork IR generator.
+    /// Gates newyork-specific codegen that is unsound on the stock Yul path.
+    pub fn is_newyork(&self) -> bool {
+        self.optimizer.is_newyork()
+    }
+
     pub fn heap_size(&self) -> inkwell::values::IntValue<'ctx> {
         self.xlen_type().const_int(
             self.memory_config
@@ -1475,5 +1763,215 @@ impl<'ctx> Context<'ctx> {
                 .unwrap_or(PolkaVMDefaultHeapMemorySize) as u64,
             false,
         )
+    }
+
+    /// Narrows large integer div/rem instructions whose operands provably fit
+    /// in a smaller type.
+    ///
+    /// LLVM's i256 div/rem backend expansion produces enormous basic blocks
+    /// that pallet-revive rejects as `BasicBlockTooLarge`. LLVM's own
+    /// `DivRemNarrowing` pass also sometimes fails to narrow div/rem in large
+    /// functions after inlining. This runs as a safety net after the full
+    /// LLVM optimization pipeline so we operate on the final form where the
+    /// proof sources we accept (LLVM constants, `and` masks, `zext`) are
+    /// observable across function boundaries after IPSCCP and inlining.
+    fn narrow_divrem_instructions(&self) {
+        let builder = self.llvm.create_builder();
+
+        for function in self.module().get_functions() {
+            let mut to_narrow = Vec::new();
+
+            for basic_block in function.get_basic_blocks() {
+                for instruction in basic_block.get_instructions() {
+                    let is_divrem = matches!(
+                        instruction.get_opcode(),
+                        InstructionOpcode::UDiv
+                            | InstructionOpcode::SDiv
+                            | InstructionOpcode::URem
+                            | InstructionOpcode::SRem
+                    );
+                    if !is_divrem {
+                        continue;
+                    }
+                    if instruction.get_type().into_int_type().get_bit_width() < 256 {
+                        continue;
+                    }
+
+                    let lhs = instruction.get_operand(0).and_then(|op| op.value());
+                    let rhs = instruction.get_operand(1).and_then(|op| op.value());
+
+                    if let (Some(lhs), Some(rhs)) = (lhs, rhs) {
+                        let lhs_width = Self::provable_bit_width(lhs);
+                        let rhs_width = Self::provable_bit_width(rhs);
+
+                        if let (Some(lw), Some(rw)) = (lhs_width, rhs_width) {
+                            let max_operand_width = lw.max(rw);
+                            let narrow_width = Self::round_up_bit_width(max_operand_width);
+                            // Signed div/rem narrowing is sound only when bit (narrow_width - 1) of every operand is provably zero — otherwise the
+                            // narrow signed division treats a non-negative i256 operand as negative and the sign-extended result diverges from the
+                            // i256 sdiv. The proof sources accepted here (constants, AND-masks, ZExt) all pin the upper bits to zero strictly above
+                            // the operand width, so this holds iff the operand fits with at least one bit of headroom in the narrow type.
+                            let is_signed = matches!(
+                                instruction.get_opcode(),
+                                InstructionOpcode::SDiv | InstructionOpcode::SRem
+                            );
+                            let signed_sign_bit_safe =
+                                !is_signed || narrow_width > max_operand_width;
+                            if narrow_width < 256 && signed_sign_bit_safe {
+                                to_narrow.push((instruction, narrow_width));
+                            }
+                        }
+                    }
+                }
+            }
+
+            for (instruction, narrow_width) in to_narrow {
+                let lhs = instruction
+                    .get_operand(0)
+                    .unwrap()
+                    .value()
+                    .unwrap()
+                    .into_int_value();
+                let rhs = instruction
+                    .get_operand(1)
+                    .unwrap()
+                    .value()
+                    .unwrap()
+                    .into_int_value();
+                let wide_type = instruction.get_type().into_int_type();
+                let narrow_type = self
+                    .llvm
+                    .custom_width_int_type(
+                        std::num::NonZeroU32::new(narrow_width).expect("narrow width is non-zero"),
+                    )
+                    .expect("valid integer width");
+
+                builder.position_before(&instruction);
+
+                let lhs_truncated = builder.build_int_truncate(lhs, narrow_type, "").unwrap();
+                let rhs_truncated = builder.build_int_truncate(rhs, narrow_type, "").unwrap();
+
+                let narrow_result = match instruction.get_opcode() {
+                    InstructionOpcode::UDiv => builder
+                        .build_int_unsigned_div(lhs_truncated, rhs_truncated, "")
+                        .unwrap(),
+                    InstructionOpcode::SDiv => builder
+                        .build_int_signed_div(lhs_truncated, rhs_truncated, "")
+                        .unwrap(),
+                    InstructionOpcode::URem => builder
+                        .build_int_unsigned_rem(lhs_truncated, rhs_truncated, "")
+                        .unwrap(),
+                    InstructionOpcode::SRem => builder
+                        .build_int_signed_rem(lhs_truncated, rhs_truncated, "")
+                        .unwrap(),
+                    _ => unreachable!(),
+                };
+
+                let wide_result = if matches!(
+                    instruction.get_opcode(),
+                    InstructionOpcode::SDiv | InstructionOpcode::SRem
+                ) {
+                    builder
+                        .build_int_s_extend(narrow_result, wide_type, "")
+                        .unwrap()
+                } else {
+                    builder
+                        .build_int_z_extend(narrow_result, wide_type, "")
+                        .unwrap()
+                };
+
+                let wide_instruction = wide_result.as_instruction().unwrap();
+                instruction.replace_all_uses_with(&wide_instruction);
+                instruction.erase_from_basic_block();
+            }
+        }
+    }
+
+    /// Returns the provable bit width of a value, if it can be determined.
+    ///
+    /// Checks for:
+    /// - Constants: bit width needed to represent the value.
+    /// - `and %x, mask`: bit width of the mask.
+    /// - `zext from smaller_type`: bit width of the source type.
+    /// - `trunc to smaller_type`: bit width of the result type.
+    fn provable_bit_width(value: inkwell::values::BasicValueEnum) -> Option<u32> {
+        let integer_value = value.into_int_value();
+        if integer_value.is_const() {
+            return Self::constant_bit_width(integer_value);
+        }
+
+        let instruction = integer_value.as_instruction()?;
+        match instruction.get_opcode() {
+            InstructionOpcode::And => {
+                let operand_0 = instruction.get_operand(0)?.value()?.into_int_value();
+                let operand_1 = instruction.get_operand(1)?.value()?.into_int_value();
+                if operand_1.is_const() {
+                    Self::constant_bit_width(operand_1)
+                } else if operand_0.is_const() {
+                    Self::constant_bit_width(operand_0)
+                } else {
+                    None
+                }
+            }
+            InstructionOpcode::ZExt => {
+                let source = instruction.get_operand(0)?.value()?.into_int_value();
+                Some(source.get_type().get_bit_width())
+            }
+            InstructionOpcode::Trunc => {
+                Some(instruction.get_type().into_int_type().get_bit_width())
+            }
+            _ => None,
+        }
+    }
+
+    /// Returns the minimum number of bits needed to represent a constant integer.
+    ///
+    /// For types up to 64 bits the direct LLVM API suffices. For wider types (e.g. i256) we
+    /// truncate to i64 and verify the round-trip: if the reconstructed wide constant equals the
+    /// original (LLVM constants are interned, so pointer equality is correct), the value fits
+    /// in u64 and we report `64 - leading_zeros`.
+    fn constant_bit_width(integer_value: inkwell::values::IntValue) -> Option<u32> {
+        if let Some(value) = integer_value.get_zero_extended_constant() {
+            return Some(if value == 0 {
+                1
+            } else {
+                64 - value.leading_zeros()
+            });
+        }
+
+        let wide_type = integer_value.get_type();
+        if wide_type.get_bit_width() > 64 {
+            let i64_type = wide_type.get_context().i64_type();
+            let truncated = integer_value.const_truncate(i64_type);
+            if let Some(value) = truncated.get_zero_extended_constant() {
+                let reconstructed = wide_type.const_int(value, false);
+                if reconstructed == integer_value {
+                    return Some(if value == 0 {
+                        1
+                    } else {
+                        64 - value.leading_zeros()
+                    });
+                }
+            }
+        }
+
+        None
+    }
+
+    /// Rounds a bit width up to the next standard integer type width.
+    fn round_up_bit_width(bits: u32) -> u32 {
+        if bits <= 8 {
+            8
+        } else if bits <= 16 {
+            16
+        } else if bits <= 32 {
+            32
+        } else if bits <= 64 {
+            64
+        } else if bits <= 128 {
+            128
+        } else {
+            256
+        }
     }
 }

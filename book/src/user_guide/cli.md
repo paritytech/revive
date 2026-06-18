@@ -28,7 +28,7 @@ By default, `-Oz` is applied.
 --newyork
 ```
 
-Route Yul lowering through the **experimental** [newyork IR pipeline](../developer_guide/newyork_optimizer.md) instead of the standard Yul-to-LLVM path. Orthogonal to the input mode: composes with `--yul`, `--standard-json`, `--combined-json`, and the default Solidity mode. Equivalent to setting `settings.polkavm.newyork: true` in standard JSON input. Off by default.
+Enables the [newyork optimizer](../developer_guide/newyork_optimizer.md) to reduced compiled contract code size, by routing Yul lowering through the **experimental** newyork IR pipeline instead of the standard Yul-to-LLVM path. Composes with `--yul`, `--combined-json`, and the default Solidity mode. In standard JSON mode this flag is rejected; enable the pipeline via the [`settings.polkavm.newyork`](std_json.md#settingspolkavmnewyork) input field instead. Off by default.
 
 ### Stack size
 ```bash

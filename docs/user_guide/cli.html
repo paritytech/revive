@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d099962a.js";
+            window.path_to_searchindex_js = "../searchindex-339ac392.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-1290cc30.js"></script>
@@ -197,7 +197,7 @@
 <h3 id="newyork-ir-pipeline"><a class="header" href="#newyork-ir-pipeline">newyork IR pipeline</a></h3>
 <pre><code class="language-bash">--newyork
 </code></pre>
-<p>Route Yul lowering through the <strong>experimental</strong> <a href="../developer_guide/newyork_optimizer.html">newyork IR pipeline</a> instead of the standard Yul-to-LLVM path. Orthogonal to the input mode: composes with <code>--yul</code>, <code>--standard-json</code>, <code>--combined-json</code>, and the default Solidity mode. Equivalent to setting <code>settings.polkavm.newyork: true</code> in standard JSON input. Off by default.</p>
+<p>Enables the <a href="../developer_guide/newyork_optimizer.html">newyork optimizer</a> to reduced compiled contract code size, by routing Yul lowering through the <strong>experimental</strong> newyork IR pipeline instead of the standard Yul-to-LLVM path. Composes with <code>--yul</code>, <code>--combined-json</code>, and the default Solidity mode. In standard JSON mode this flag is rejected; enable the pipeline via the <a href="std_json.html#settingspolkavmnewyork"><code>settings.polkavm.newyork</code></a> input field instead. Off by default.</p>
 <h3 id="stack-size"><a class="header" href="#stack-size">Stack size</a></h3>
 <pre><code class="language-bash">--stack-size &lt;STACK_SIZE&gt;
 </code></pre>

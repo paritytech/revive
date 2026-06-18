@@ -4,11 +4,15 @@ A per-operation reference for the newyork IR: textual syntax, operand and result
 
 ## How to read this reference
 
-This appendix enumerates every operation the newyork IR supports. It is a lookup, not a walkthrough: each entry is self-contained and intended to be reachable by anchor.
+This reference page enumerates every operation the newyork IR supports. It is a lookup, not a walkthrough: each entry is self-contained and intended to be reachable by anchor.
 
 Operations are grouped by function (memory and storage writes, pure expressions, control flow, and so on) rather than alphabetically. Jump to a specific operation from the [operation index](#operation-index) below, or use the sidebar.
 
-Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either `Expression` or `Statement` in `ir.rs`. The textual rendering used by debug dumps and by this appendix is produced by the printer in `printer.rs`. Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.
+Every operation appears in two places in the codebase. The canonical Rust definition is a variant of either `Expression` or `Statement` in `ir.rs`. The textual rendering used by debug dumps and by this reference page is produced by the printer in `printer.rs`.
+
+> [!NOTE]
+>
+> Treat the printed syntax as a debug surface, not a stable input language: there is no parser for it, and printer details change when passes add new annotations.
 
 ### Entry format
 
@@ -37,6 +41,26 @@ Syntax templates in each entry use the following conventions:
 | `[: <type>]` | Optional type suffix on a value reference. Suppressed when the value's type is the default `i256` integer; present otherwise (`: i32`, `: ptr<heap>`, …). |
 | `/* … */` | Debug-only annotations the printer attaches to certain operations (memory region tag, static-slot hint, etc.). |
 | `…` | Repetition: "more entries of the same shape." Used in vector operand lists (`$arg_0, $arg_1, …`) and in multi-line block bodies (`{ … }`). |
+
+For instance, this template:
+
+```text
+let $result[: <type>] := and($lhs[: <type>], $rhs[: <type>])
+```
+
+prints as:
+
+```text
+let v2: i8 := and(v0, v1: i8)
+```
+
+`$result` rendered as `v2` with an `i8` type suffix, `$lhs` as `v0` at the default `i256` (type suffix omitted), and `$rhs` as `v1` with an `i8` type suffix.
+
+> [!NOTE]
+>
+> **A value's printed width is use-driven.** Type inference assigns each value a forward width from its definition, then widens it to satisfy its uses. The type suffix shown for a value in an example (such as `i8`) is therefore only illustrative — a short example may not show the uses that determine it, and the same operation can appear with a wider suffix, or none (it is omitted for the default `i256`), in another program.
+>
+> For instance, a value used as a memory offset widens to `i64`; as an address (a `call` target, `extcodesize`) to `i160`; stored as a full word (an `mstore`/`sstore` value) to `i256`; and an `add`/`mul` operand up to the `i64` register width.
 
 ### Operation index
 
@@ -197,17 +221,17 @@ Every value in the IR carries a `Type`. The operation entries below refer to wid
 
 ### `Type`
 
-The umbrella enum. Three variants:
+The umbrella enum, with these variants:
 
 | Variant | Printed as | Description |
 |---|---|---|
-| `Int(BitWidth)` | `i1`, `i8`, …, `i256` | An integer at one of seven widths; see [BitWidth](#bitwidth). |
+| `Int(BitWidth)` | `i1`, `i8`, …, `i256` | An integer at one of the [BitWidth](#bitwidth) widths. |
 | `Ptr(AddressSpace)` | `ptr<heap>`, `ptr<stack>`, `ptr<storage>`, `ptr<code>` | A pointer tagged with its address space; see [AddressSpace](#addressspace). |
 | `Void` | `void` | Unit type. Used for statements that produce no value and for `void`-returning functions. |
 
 ### `BitWidth`
 
-The seven rungs of integer width. Newly minted values default to `I256`; type inference narrows them down to one of the lower rungs when it can prove the upper bits are zero or unused.
+The rungs of integer width. Newly minted values default to `I256`; type inference narrows them down to one of the lower rungs when it can prove the upper bits are zero or unused.
 
 | Variant | Printed as | Typical use |
 |---|---|---|
@@ -262,9 +286,9 @@ A compile-time constant value with a declared type. New literals minted by the t
 #### Example
 
 ```text
-let v0 := 0x2a              // 42 at the default i256
-let v1 := 0x1: i1           // boolean true
-let v2 := 0x80: i64         // narrowed by type inference
+let v0: i8 := 0x2a
+let v1: i1 := 0x1           // boolean true
+let v2: i64 := 0x80
 ```
 
 #### Operands
@@ -497,7 +521,7 @@ let v2 := sdiv(v0, v1)
 
 | Result | Purity |
 |---|---|
-| `width(lhs)` | Pure |
+| `max(width(lhs), width(rhs))` — a negative divisor can push the result to full width | Pure |
 
 #### Annotations
 
@@ -583,12 +607,12 @@ None.
 
 #### Description
 
-Modular exponentiation: `(lhs ^ rhs) mod 2^256`. The most expensive arithmetic opcode in EVM (variable gas cost proportional to the byte length of `rhs`).
+Modular exponentiation: `(base ^ exponent) mod 2^256`. The most expensive arithmetic opcode in EVM (variable gas cost proportional to the byte length of `exponent`).
 
 #### Syntax
 
 ```text
-exp($lhs[: <type>], $rhs[: <type>])
+exp($base[: <type>], $exponent[: <type>])
 ```
 
 #### Example
@@ -601,8 +625,8 @@ let v2 := exp(v0, v1)
 
 | Name | Type | Notes |
 |---|---|---|
-| `lhs` | `i256` | Base. |
-| `rhs` | `i256` | Exponent. |
+| `base` | `i256` | Base. |
+| `exponent` | `i256` | Exponent. |
 
 #### Result and purity
 
@@ -632,7 +656,8 @@ and($lhs[: <type>], $rhs[: <type>])
 
 ```text
 let v2 := and(v0, v1)
-let v3 := and(v0, 0xff)     // type inference narrows result to i8
+let v3: i8 := 0xff
+let v4: i8 := and(v0, v3: i8)
 ```
 
 #### Operands
@@ -737,21 +762,21 @@ Logical left shift. Operand order follows EVM: `shl(shift, value)` computes `val
 #### Syntax
 
 ```text
-shl($lhs[: <type>], $rhs[: <type>])
+shl($shift[: <type>], $value[: <type>])
 ```
 
 #### Example
 
 ```text
-let v2 := shl(v0, v1)       // v1 shifted left by v0 bits
+let v2 := shl(v0, v1)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `lhs` | `i256` | Shift amount in bits. |
-| `rhs` | `i256` | Value to shift. |
+| `shift` | `i256` | Shift amount in bits. |
+| `value` | `i256` | Value to shift. |
 
 #### Result and purity
 
@@ -774,7 +799,7 @@ Logical right shift. Operand order follows EVM: `shr(shift, value)` computes `va
 #### Syntax
 
 ```text
-shr($lhs[: <type>], $rhs[: <type>])
+shr($shift[: <type>], $value[: <type>])
 ```
 
 #### Example
@@ -787,14 +812,14 @@ let v2 := shr(v0, v1)
 
 | Name | Type | Notes |
 |---|---|---|
-| `lhs` | `i256` | Shift amount in bits. |
-| `rhs` | `i256` | Value to shift. |
+| `shift` | `i256` | Shift amount in bits. |
+| `value` | `i256` | Value to shift. |
 
 #### Result and purity
 
 | Result | Purity |
 |---|---|
-| If `lhs` is a known constant `k`: tier holding `256 - k` bits (or `i1` for `k ≥ 256`). Otherwise: `width(rhs)`. | Pure |
+| If `shift` is a known constant `k`: tier holding `256 - k` bits (or `i1` for `k ≥ 256`). Otherwise: `width(value)`. | Pure |
 
 #### Annotations
 
@@ -811,7 +836,7 @@ Arithmetic (signed) right shift. Operand order follows EVM: `sar(shift, value)` 
 #### Syntax
 
 ```text
-sar($lhs[: <type>], $rhs[: <type>])
+sar($shift[: <type>], $value[: <type>])
 ```
 
 #### Example
@@ -824,14 +849,14 @@ let v2 := sar(v0, v1)
 
 | Name | Type | Notes |
 |---|---|---|
-| `lhs` | `i256` | Shift amount in bits. |
-| `rhs` | `i256` | Value to shift, treated as signed. |
+| `shift` | `i256` | Shift amount in bits. |
+| `value` | `i256` | Value to shift, treated as signed. |
 
 #### Result and purity
 
 | Result | Purity |
 |---|---|
-| Same shape as [`shr`](#shr) forward inference (constant shift narrows the result; non-constant falls back to `width(rhs)`). | Pure |
+| `width(value)` — unlike [`shr`](#shr), sign-extension means a constant shift cannot narrow the result | Pure |
 
 #### Annotations
 
@@ -854,7 +879,7 @@ lt($lhs[: <type>], $rhs[: <type>])
 #### Example
 
 ```text
-let v2 := lt(v0, v1)
+let v2: i1 := lt(v0, v1)
 ```
 
 #### Operands
@@ -891,7 +916,7 @@ gt($lhs[: <type>], $rhs[: <type>])
 #### Example
 
 ```text
-let v2 := gt(v0, v1)
+let v2: i1 := gt(v0, v1)
 ```
 
 #### Operands
@@ -928,7 +953,7 @@ slt($lhs[: <type>], $rhs[: <type>])
 #### Example
 
 ```text
-let v2 := slt(v0, v1)
+let v2: i1 := slt(v0, v1)
 ```
 
 #### Operands
@@ -965,7 +990,7 @@ sgt($lhs[: <type>], $rhs[: <type>])
 #### Example
 
 ```text
-let v2 := sgt(v0, v1)
+let v2: i1 := sgt(v0, v1)
 ```
 
 #### Operands
@@ -1002,7 +1027,7 @@ eq($lhs[: <type>], $rhs[: <type>])
 #### Example
 
 ```text
-let v2 := eq(v0, v1)
+let v2: i1 := eq(v0, v1)
 ```
 
 #### Operands
@@ -1033,21 +1058,21 @@ Extract a single byte from a 256-bit word. `byte(i, x)` returns the *i*-th byte 
 #### Syntax
 
 ```text
-byte($lhs[: <type>], $rhs[: <type>])
+byte($index[: <type>], $word[: <type>])
 ```
 
 #### Example
 
 ```text
-let v2 := byte(v0, v1)      // v0 = byte index, v1 = word
+let v2: i8 := byte(v0, v1)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `lhs` | `i256` | Byte position; `0` = most significant byte. Values `≥ 32` yield `0`. |
-| `rhs` | `i256` | Source word. |
+| `index` | `i256` | Byte position; `0` = most significant byte. Values `≥ 32` yield `0`. |
+| `word` | `i256` | Source word. |
 
 #### Result and purity
 
@@ -1070,21 +1095,21 @@ Sign-extend an integer from a byte position. Per EVM, `signextend(b, x)` treats 
 #### Syntax
 
 ```text
-signextend($lhs[: <type>], $rhs[: <type>])
+signextend($byte_position[: <type>], $value[: <type>])
 ```
 
 #### Example
 
 ```text
-let v2 := signextend(v0, v1)  // v0 = byte position, v1 = value
+let v2 := signextend(v0, v1)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `lhs` | `i256` | Byte position of the sign byte (0–31). |
-| `rhs` | `i256` | Source value. |
+| `byte_position` | `i256` | Byte position of the sign byte (0–31). |
+| `value` | `i256` | Source value. |
 
 #### Result and purity
 
@@ -1189,7 +1214,7 @@ iszero($operand[: <type>])
 #### Example
 
 ```text
-let v1 := iszero(v0)
+let v1: i1 := iszero(v0)
 ```
 
 #### Operands
@@ -1297,8 +1322,8 @@ truncate<i<bits>>($value[: <type>])
 #### Example
 
 ```text
-let v1 := truncate<i64>(v0)
-let v2 := truncate<i8>(v1)
+let v1: i64 := truncate<i64>(v0)
+let v2: i8 := truncate<i8>(v1: i64)
 ```
 
 #### Operands
@@ -1395,7 +1420,7 @@ None.
 
 #### Description
 
-Compute the Keccak-256 hash of `length` bytes of emulated EVM linear memory starting at `offset`. The general-purpose hashing primitive; the two specialized variants below cover the common scratch-space patterns more compactly.
+Compute the Keccak-256 hash of `length` bytes of emulated EVM linear memory starting at `offset`. The general-purpose hashing primitive; the specialized variants below cover the common scratch-space patterns more compactly.
 
 #### Syntax
 
@@ -1432,7 +1457,7 @@ None.
 
 #### Description
 
-Compound hash of two 256-bit words. Equivalent to `mstore(0, word0); mstore(32, word1); keccak256(0, 64)` but emitted as a single outlined call after the keccak-fusion pass recognizes the pattern. The mapping-key idiom; see also [`mapping_sload`](#mapping_sload).
+Compound hash of two 256-bit words. Equivalent to `mstore(0, word0); mstore(32, word1); keccak256(0, 64)` but emitted as a single outlined call after `mem_opt`'s keccak fusion recognizes the pattern. The mapping-key idiom; see also [`mapping_sload`](#mapping_sload).
 
 #### Syntax
 
@@ -1469,7 +1494,7 @@ None.
 
 #### Description
 
-Compound hash of a single 256-bit word. Equivalent to `mstore(0, word0); keccak256(0, 32)` but emitted as a single outlined call after the keccak-fusion pass.
+Compound hash of a single 256-bit word. Equivalent to `mstore(0, word0); keccak256(0, 32)` but emitted as a single outlined call after `mem_opt`'s keccak fusion.
 
 #### Syntax
 
@@ -1516,7 +1541,7 @@ caller()
 #### Example
 
 ```text
-let v0 := caller()
+let v0: i160 := caller()
 ```
 
 #### Operands
@@ -1584,7 +1609,7 @@ origin()
 #### Example
 
 ```text
-let v0 := origin()
+let v0: i160 := origin()
 ```
 
 #### Operands
@@ -1618,7 +1643,7 @@ address()
 #### Example
 
 ```text
-let v0 := address()
+let v0: i160 := address()
 ```
 
 #### Operands
@@ -1675,7 +1700,7 @@ None.
 
 #### Description
 
-Remaining gas at the point of evaluation. Modelled as a pure expression for IR purposes; in practice it changes between evaluations, so any simplifier that deduplicates pure expressions must respect `gas` as a barrier.
+Remaining gas at the point of evaluation. Modeled as a pure expression for IR purposes; in practice it changes between evaluations, so any simplifier that deduplicates pure expressions must respect `gas` as a barrier.
 
 #### Syntax
 
@@ -1686,7 +1711,7 @@ gas()
 #### Example
 
 ```text
-let v0 := gas()
+let v0: i64 := gas()
 ```
 
 #### Operands
@@ -1720,7 +1745,7 @@ msize()
 #### Example
 
 ```text
-let v0 := msize()
+let v0: i64 := msize()
 ```
 
 #### Operands
@@ -1754,7 +1779,7 @@ coinbase()
 #### Example
 
 ```text
-let v0 := coinbase()
+let v0: i160 := coinbase()
 ```
 
 #### Operands
@@ -1788,7 +1813,7 @@ timestamp()
 #### Example
 
 ```text
-let v0 := timestamp()
+let v0: i64 := timestamp()
 ```
 
 #### Operands
@@ -1822,7 +1847,7 @@ number()
 #### Example
 
 ```text
-let v0 := number()
+let v0: i64 := number()
 ```
 
 #### Operands
@@ -1890,7 +1915,7 @@ gaslimit()
 #### Example
 
 ```text
-let v0 := gaslimit()
+let v0: i64 := gaslimit()
 ```
 
 #### Operands
@@ -2035,7 +2060,7 @@ let v1 := blockhash(v0)
 
 | Name | Type | Notes |
 |---|---|---|
-| `number` | `i256` | Block number; forward analysis widens to at least `i64`. |
+| `number` | `i256` | Block number; forward analysis widens to `i256`. |
 
 #### Result and purity
 
@@ -2168,7 +2193,7 @@ calldatasize()
 #### Example
 
 ```text
-let v0 := calldatasize()
+let v0: i64 := calldatasize()
 ```
 
 #### Operands
@@ -2191,7 +2216,7 @@ None.
 
 #### Description
 
-Length of the most recently returned data buffer from a sub-call, in bytes. Modelled as pure per IR but reflects the last `ExternalCall` / `Create` result; consumers must respect that ordering.
+Length of the most recently returned data buffer from a sub-call, in bytes. Modeled as pure per IR but reflects the last `ExternalCall` / `Create` result; consumers must respect that ordering.
 
 #### Syntax
 
@@ -2202,7 +2227,7 @@ returndatasize()
 #### Example
 
 ```text
-let v0 := returndatasize()
+let v0: i64 := returndatasize()
 ```
 
 #### Operands
@@ -2236,7 +2261,7 @@ codesize()
 #### Example
 
 ```text
-let v0 := codesize()
+let v0: i64 := codesize()
 ```
 
 #### Operands
@@ -2270,7 +2295,7 @@ extcodesize($address[: <type>])
 #### Example
 
 ```text
-let v1 := extcodesize(v0: i160)
+let v1: i64 := extcodesize(v0: i160)
 ```
 
 #### Operands
@@ -2378,8 +2403,8 @@ mload($offset[: <type>]) [/* <region> */]
 #### Example
 
 ```text
-let v1 := mload(v0)
-let v2 := mload(v3) /* free_ptr */
+let v1 := mload(v0: i64)
+let v2: i32 := mload(v3: i64) /* free_ptr */
 ```
 
 #### Operands
@@ -2485,7 +2510,7 @@ None. The IR does not track a static slot for `tload`.
 
 #### Description
 
-Compound load for a Solidity mapping element. Equivalent to `mstore(0, key); mstore(32, slot); sload(keccak256(0, 64))` but emitted as a single outlined call after the `compound_outlining` pass recognizes the pattern (it fuses a `keccak256_pair` — itself produced by `mem_opt`'s keccak fusion — followed by an `sload` whose key has a single consumer). Only valid when the intermediate hash is used exclusively by this load.
+Compound load for a Solidity mapping element. Equivalent to `mstore(0, key); mstore(32, slot); sload(keccak256(0, 64))` but emitted as a single outlined call after the `mapping_access_outlining` pass recognizes the pattern (it fuses a `keccak256_pair` — itself produced by `mem_opt`'s keccak fusion — followed by an `sload` whose key has a single consumer). Only valid when the intermediate hash is used exclusively by this load.
 
 #### Syntax
 
@@ -2569,7 +2594,7 @@ datasize("<id>")
 #### Example
 
 ```text
-let v0 := datasize("MyContract_deployed")
+let v0: i64 := datasize("MyContract_deployed")
 ```
 
 #### Operands
@@ -2641,7 +2666,7 @@ linkersymbol("<path>")
 #### Example
 
 ```text
-let v0 := linkersymbol("contracts/Library.sol:L")
+let v0: i160 := linkersymbol("contracts/Library.sol:L")
 ```
 
 #### Operands
@@ -2701,7 +2726,7 @@ let v4, v5 := returns_two(v0)           // multi-return via let multi-binding
 
 ## Memory and storage writes
 
-The six operations in this section all modify external state: emulated EVM linear memory, persistent storage, or transient storage. They are statements (not expressions) and they are never pure. Simplification and deduplication never reorder them with respect to each other or with respect to reverts; the memory passes treat them as the side-effect boundary for their analyses.
+The operations in this section all modify external state: emulated EVM linear memory, persistent storage, or transient storage. They are statements (not expressions) and they are never pure. Simplification and deduplication never reorder them with respect to each other or with respect to reverts; the memory passes treat them as the side-effect boundary for their analyses.
 
 ### `mstore`
 
@@ -2763,7 +2788,7 @@ mstore8($offset[: <type>], $value[: <type>]) [/* <region> */]
 #### Example
 
 ```text
-mstore8(v0, v1: i8)             // value narrowed to i8 by type inference
+mstore8(v0, v1: i8)
 ```
 
 #### Operands
@@ -2804,7 +2829,7 @@ mcopy($dest[: <type>], $src[: <type>], $length[: <type>])
 #### Example
 
 ```text
-mcopy(v0, v1, v2)               // dest, src, length
+mcopy(v0, v1, v2)
 ```
 
 #### Operands
@@ -2910,7 +2935,7 @@ None. Unlike `sstore`, the IR does not track a static slot for `tstore`: transie
 
 #### Description
 
-Compound store for a Solidity mapping element. Equivalent to the three-operation sequence `mstore(0, key); mstore(32, slot); sstore(keccak256(0, 64), value)` but emitted as a single outlined statement after the `compound_outlining` pass recognizes the pattern (it fuses a `keccak256_pair` followed by an `sstore` whose key has a single consumer). Only valid when the intermediate hash is not observed by any other statement.
+Compound store for a Solidity mapping element. Equivalent to `mstore(0, key); mstore(32, slot); sstore(keccak256(0, 64), value)` but emitted as a single outlined statement after the `mapping_access_outlining` pass recognizes the pattern (it fuses a `keccak256_pair` followed by an `sstore` whose key has a single consumer). Only valid when the intermediate hash is not observed by any other statement.
 
 #### Syntax
 
@@ -2921,14 +2946,14 @@ mapping_sstore($key[: <type>], $slot[: <type>], $value[: <type>])
 #### Example
 
 ```text
-mapping_sstore(v0: i160, v1, v2)        // address key, declared slot, value
+mapping_sstore(v0, v1, v2)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `key` | `i256` | Mapping key. Often narrowed to `i160` for address keys. |
+| `key` | `i256` | Mapping key. The outlining pass force-widens it to `i256`, so it always prints at full width, even for address keys. |
 | `slot` | `i256` | The mapping's declared storage slot. Typically a small constant. |
 | `value` | `i256` | The value to store at the computed storage location. |
 
@@ -2944,7 +2969,7 @@ None. `mapping_sstore` deliberately drops the `static_slot` annotation that the 
 
 ## Bulk copies
 
-Multi-byte memory copies from the five EVM-accessible byte sources (code, external code, returndata, embedded data, and calldata) into emulated EVM linear memory. All five take the same shape: a destination memory offset, a source offset, and a length. They are effectful and act as opaque barriers to the memory passes.
+Multi-byte memory copies from the EVM-accessible byte sources (code, external code, returndata, embedded data, and calldata) into emulated EVM linear memory. They all take the same shape: a destination memory offset, a source offset, and a length. They are effectful and act as opaque barriers to the memory passes.
 
 ### `codecopy`
 
@@ -3008,7 +3033,7 @@ extcodecopy(v0: i160, v1, v2, v3)
 
 | Name | Type | Notes |
 |---|---|---|
-| `address` | `i256` | Account whose code to read; narrows to `i160`. |
+| `address` | `i256` | Account whose code to read; forward analysis widens to at least `i160`. |
 | `dest` | `i256` | Destination byte offset in linear memory. |
 | `offset` | `i256` | Source byte offset in the external code. |
 | `length` | `i256` | Number of bytes to copy. |
@@ -3139,7 +3164,7 @@ None.
 
 ## Bindings and wrappers
 
-The statements that bind SSA values, hold loose expressions evaluated for their side effects, and write to immutable storage. Every pure expression in the appendix's earlier sections appears on the right-hand side of one of these statements (almost always `let`).
+The statements that bind SSA values, hold loose expressions evaluated for their side effects, and write to immutable storage. Every pure expression in this reference's earlier sections appears on the right-hand side of one of these statements (almost always `let`).
 
 ### `let`
 
@@ -3185,7 +3210,7 @@ None.
 
 #### Description
 
-Wraps an expression evaluated for its observable consequences but whose value is not bound. Typically a user-defined function call (`Expression::Call`) whose return values the source code discarded, or another Yul expression statement that does not have a dedicated `Statement::` variant. EVM external calls (`call`, `delegatecall`, etc.) and contract creation (`create`, `create2`) translate to dedicated `Statement::ExternalCall` and `Statement::Create` variants, not through this wrapper.
+Wraps an expression evaluated for its observable consequences but whose value is not bound. Typically a zero-return (void) user-defined function call (`Expression::Call`) evaluated for its side effects, or the discarded void result of a Yul builtin used as a statement (a value-producing expression is bound by a `let` instead). EVM external calls (`call`, `delegatecall`, etc.) and contract creation (`create`, `create2`) translate to dedicated `Statement::ExternalCall` and `Statement::Create` variants, not through this wrapper.
 
 #### Syntax
 
@@ -3196,7 +3221,7 @@ $expression
 #### Example
 
 ```text
-keccak256(v0, v1)           // hash computed but not bound to a value
+update_balance(v0)          // void function called for its side effects
 ```
 
 #### Operands
@@ -3232,7 +3257,7 @@ setimmutable("<key>", $value[: <type>])
 #### Example
 
 ```text
-setimmutable("MyContract.owner", v0: i160)
+setimmutable("MyContract.owner", v0)
 ```
 
 #### Operands
@@ -3255,7 +3280,7 @@ setimmutable("MyContract.owner", v0: i160)
 
 ## Structured control flow
 
-The IR's control flow is structured: `if`, `switch`, and `for` are statements with explicit nested regions, each carrying input values and yielding output values. The three jump-like statements (`break`, `continue`, `leave`) are scoped to their nearest enclosing construct. Nested blocks create lexical scope without otherwise changing control flow.
+The IR's control flow is structured: `if`, `switch`, and `for` are statements with explicit nested regions, each carrying input values and yielding output values. The jump-like statements (`break`, `continue`, `leave`) are scoped to their nearest enclosing construct. Nested blocks create lexical scope without otherwise changing control flow.
 
 ### `if`
 
@@ -3274,13 +3299,14 @@ if $condition[: <type>] [[$input_0, $input_1, …]] { … } [else { … }]
 #### Example
 
 ```text
-if v0 {
+if v0: i1 {
     sstore(v1, v2)
 }
 
-let v5, v6 := if v3 [v1, v2] {
-    let v7 := add(v2, 0x1)
-    yield v1, v7
+let v5, v6 := if v3: i1 [v1, v2] {
+    let v7: i64 := 0x1          // add widens its operands to the i64 register width
+    let v8 := add(v2, v7: i64)
+    yield v1, v8
 } else {
     yield v1, v2
 }
@@ -3373,30 +3399,35 @@ Structured loop with explicit loop-carried variables. Each iteration evaluates `
 
 ```text
 for { $variable_0 := $initial_0[, …] }
-    [// condition_statements:
+    [// condition statements:
         …]
-    $condition
-    { // post
+    condition: $condition
+    post [($post_input_variable_0[, …])] {
         …
     }
-{
-    … body …
-}
+    body {
+        … body …
+    }
 ```
 
 #### Example
 
 ```text
-for { v1 := 0x0 }
-    lt(v1, 0xa)
-    { // post
-        let v3 := add(v1, 0x1)
-        yield v3
+let v0: i1 := 0x0
+let v6 := for { v1 := v0: i1 }
+    // condition statements:
+    let v2: i8 := 0xa
+    condition: lt(v1, v2: i8)
+    post (v3) {
+        let v4: i64 := 0x1
+        let v5 := add(v3, v4: i64)
+        yield v5
     }
-{
-    sstore(v1, v2)
-    yield v1
-}
+    body {
+        sstore(v1, v1)
+        0x0: void
+        yield v1
+    }
 ```
 
 #### Operands
@@ -3405,7 +3436,7 @@ for { v1 := 0x0 }
 |---|---|---|
 | `initial_values` | `Vec<Value>` | Starting values for the loop-carried variables. |
 | `loop_variables` | `Vec<ValueId>` | SSA ids visible inside condition, body, and post. |
-| `condition_statements` | `Vec<Statement>` | Statements evaluated each iteration *before* the condition expression; emitted into the loop header block. Printed only when non-empty, behind a `// condition_statements:` comment. |
+| `condition_statements` | `Vec<Statement>` | Statements evaluated each iteration *before* the condition expression; emitted into the loop header block. Printed only when non-empty, behind a `// condition statements:` comment. |
 | `condition` | `Expression` | Re-evaluated each iteration; non-zero continues, zero exits. |
 | `body` | `Region` | Loop body; yields current loop-carried values. |
 | `post_input_variables` | `Vec<ValueId>` | Input SSA ids for the post region (one per loop-carried variable); receive the body's yielded values merged with continue-site values via phi nodes in the LLVM codegen. |
@@ -3439,12 +3470,12 @@ break
 #### Example
 
 ```text
-if v0 { break }
+if v0 { break [v1, v2] }
 ```
 
 #### Operands
 
-None in the printed form; the IR's `values: Vec<Value>` field carries the loop-carried values internally.
+The loop-carried `values: Vec<Value>` print in brackets when non-empty (e.g. `break [v1, v2]`).
 
 #### Result and purity
 
@@ -3473,12 +3504,12 @@ continue
 #### Example
 
 ```text
-if v0 { continue }
+if v0 { continue [v1, v2] }
 ```
 
 #### Operands
 
-None in the printed form; the IR's `values` field carries the loop-carried values internally.
+The loop-carried `values` print in brackets when non-empty (e.g. `continue [v1, v2]`).
 
 #### Result and purity
 
@@ -3568,7 +3599,7 @@ None.
 
 ## External interaction
 
-Statements that cross the contract boundary: external calls (four kinds), contract creation (two kinds), and event log emission. All produce or rely on external state and act as barriers to memory and storage analyses.
+Statements that cross the contract boundary: external calls, contract creation, and event log emission. All produce or rely on external state and act as barriers to memory and storage analyses.
 
 ### `call`
 
@@ -3587,20 +3618,20 @@ let $result := call($gas[: <type>], $address[: <type>], $value[: <type>], $args_
 #### Example
 
 ```text
-let v8 := call(v0, v1: i160, v2, v3, v4, v5, v6)
+let v8 := call(v0: i64, v1: i160, v2, v3: i64, v4: i64, v5: i64, v6: i64)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `gas` | `i256` | Gas to forward to the target. |
-| `address` | `i256` | Callee address; narrows to `i160`. |
+| `gas` | `i256` | Gas to forward to the target; forward analysis widens to at least `i64`. |
+| `address` | `i256` | Callee address; forward analysis widens to at least `i160`. |
 | `value` | `i256` | Wei to transfer with the call. |
-| `args_offset` | `i256` | Calldata source offset in linear memory. |
-| `args_length` | `i256` | Calldata length in bytes. |
-| `ret_offset` | `i256` | Return-data destination offset in linear memory. |
-| `ret_length` | `i256` | Maximum return-data length. |
+| `args_offset` | `i256` | Calldata source offset in linear memory; forward analysis widens to at least `i64`. |
+| `args_length` | `i256` | Calldata length in bytes; forward analysis widens to at least `i64`. |
+| `ret_offset` | `i256` | Return-data destination offset in linear memory; forward analysis widens to at least `i64`. |
+| `ret_length` | `i256` | Maximum return-data length; forward analysis widens to at least `i64`. |
 
 #### Result and purity
 
@@ -3618,7 +3649,7 @@ None.
 
 #### Description
 
-Deprecated EVM opcode that executes the callee's code in the caller's context but with the callee's storage. Preserved for Solidity compatibility; new code should use [`delegatecall`](#delegatecall).
+Deprecated EVM opcode that executes the callee's code in the caller's context but with the callee's storage. Not supported by the newyork backend (codegen rejects it); use [`delegatecall`](#delegatecall) instead.
 
 #### Syntax
 
@@ -3629,7 +3660,7 @@ let $result := callcode($gas[: <type>], $address[: <type>], $value[: <type>], $a
 #### Example
 
 ```text
-let v8 := callcode(v0, v1: i160, v2, v3, v4, v5, v6)
+let v8 := callcode(v0: i64, v1: i160, v2, v3: i64, v4: i64, v5: i64, v6: i64)
 ```
 
 #### Operands
@@ -3663,7 +3694,7 @@ let $result := delegatecall($gas[: <type>], $address[: <type>], $args_offset[: <
 #### Example
 
 ```text
-let v7 := delegatecall(v0, v1: i160, v2, v3, v4, v5)
+let v7 := delegatecall(v0: i64, v1: i160, v2: i64, v3: i64, v4: i64, v5: i64)
 ```
 
 #### Operands
@@ -3697,7 +3728,7 @@ let $result := staticcall($gas[: <type>], $address[: <type>], $args_offset[: <ty
 #### Example
 
 ```text
-let v7 := staticcall(v0, v1: i160, v2, v3, v4, v5)
+let v7 := staticcall(v0: i64, v1: i160, v2: i64, v3: i64, v4: i64, v5: i64)
 ```
 
 #### Operands
@@ -3731,7 +3762,7 @@ let $result := create($value[: <type>], $offset[: <type>], $length[: <type>])
 #### Example
 
 ```text
-let v4 := create(v0, v1, v2)
+let v4 := create(v0, v1: i64, v2: i64)
 ```
 
 #### Operands
@@ -3739,8 +3770,8 @@ let v4 := create(v0, v1, v2)
 | Name | Type | Notes |
 |---|---|---|
 | `value` | `i256` | Wei to transfer to the new contract. |
-| `offset` | `i256` | Linear-memory offset of the init code. |
-| `length` | `i256` | Length of the init code in bytes. |
+| `offset` | `i256` | Linear-memory offset of the init code; forward analysis widens to at least `i64`. |
+| `length` | `i256` | Length of the init code in bytes; forward analysis widens to at least `i64`. |
 
 #### Result and purity
 
@@ -3769,7 +3800,7 @@ let $result := create2($value[: <type>], $offset[: <type>], $length[: <type>], $
 #### Example
 
 ```text
-let v5 := create2(v0, v1, v2, v3)
+let v5 := create2(v0, v1: i64, v2: i64, v3)
 ```
 
 #### Operands
@@ -3803,16 +3834,16 @@ log<N>($offset[: <type>], $length[: <type>][, $topic_0[: <type>], …])
 #### Example
 
 ```text
-log0(v0, v1)
-log2(v0, v1, v2, v3)            // two topics
+log0(v0: i64, v1: i64)                    // no topics
+log2(v0: i64, v1: i64, v2, v3)            // two topics
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `offset` | `i256` | Data source offset in linear memory. |
-| `length` | `i256` | Data length in bytes. |
+| `offset` | `i256` | Data source offset in linear memory; forward analysis widens to at least `i64`. |
+| `length` | `i256` | Data length in bytes; forward analysis widens to at least `i64`. |
 | `topics` | `Vec<Value>` | Zero to four indexed topic values; the length determines the mnemonic suffix. |
 
 #### Result and purity
@@ -3827,7 +3858,7 @@ None.
 
 ## Termination
 
-Statements that end the current call frame. Three plain forms (`return`, `revert`, `stop`), two unconditional traps (`invalid`, `selfdestruct`), and three outlined revert variants that encode common Solidity error patterns into single nodes that can be deduplicated across call sites.
+Statements that end the current call frame. Plain forms (`return`, `revert`, `stop`), unconditional traps (`invalid`, `selfdestruct`), and outlined revert variants (`panic_revert`, `error_string_revert`, `custom_error_revert`) that encode common Solidity error patterns into single nodes that can be deduplicated across call sites.
 
 ### `return`
 
@@ -3846,15 +3877,15 @@ return($offset[: <type>], $length[: <type>])
 #### Example
 
 ```text
-return(v0, v1)
+return(v0: i64, v1: i64)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `offset` | `i256` | Return-data source offset. |
-| `length` | `i256` | Return-data length. |
+| `offset` | `i256` | Return-data source offset; forward analysis widens to at least `i64`. |
+| `length` | `i256` | Return-data length; forward analysis widens to at least `i64`. |
 
 #### Result and purity
 
@@ -3883,15 +3914,15 @@ revert($offset[: <type>], $length[: <type>])
 #### Example
 
 ```text
-revert(v0, v1)
+revert(v0: i64, v1: i64)
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `offset` | `i256` | Revert-data source offset. |
-| `length` | `i256` | Revert-data length. |
+| `offset` | `i256` | Revert-data source offset; forward analysis widens to at least `i64`. |
+| `length` | `i256` | Revert-data length; forward analysis widens to at least `i64`. |
 
 #### Result and purity
 
@@ -3995,7 +4026,7 @@ selfdestruct(v0: i160)
 
 | Name | Type | Notes |
 |---|---|---|
-| `address` | `i256` | Recipient of the contract's balance; narrows to `i160`. |
+| `address` | `i256` | Recipient of the contract's balance; forward analysis widens to at least `i160`. |
 
 #### Result and purity
 
@@ -4086,7 +4117,7 @@ None — the string length and data are compile-time fields, not SSA operands.
 
 #### Description
 
-Outlined Solidity custom-error revert. Encodes the error selector (left-shifted by 224 bits) and zero to three argument values into scratch memory and reverts. No FMP load is needed; the encoding uses the scratch region at offset `0`.
+Outlined Solidity custom-error revert. Encodes the error selector (left-shifted by 224 bits) and zero or more argument values into scratch memory and reverts. No FMP load is needed; the encoding uses the scratch region at offset `0`.
 
 #### Syntax
 
@@ -4097,14 +4128,14 @@ custom_error_revert(0x<hex>, [$arg_0, $arg_1, …])
 #### Example
 
 ```text
-custom_error_revert(0xa28c4c1100000000000000000000000000000000000000000000000000000000, [v0, v1])
+custom_error_revert(0xa28c4c11, [v0, v1])
 ```
 
 #### Operands
 
 | Name | Type | Notes |
 |---|---|---|
-| `arguments` | `Vec<Value>` | 0–3 argument values; the selector is a compile-time field. |
+| `arguments` | `Vec<Value>` | Zero or more argument values; the selector is a compile-time field. |
 
 #### Result and purity
 
@@ -4116,4 +4147,4 @@ custom_error_revert(0xa28c4c1100000000000000000000000000000000000000000000000000
 
 | Source field | Printed as |
 |---|---|
-| `selector: BigUint` | The 4-byte error selector shifted left by 224 bits, printed in hex in the first syntax position. |
+| `selector: BigUint` | The 4-byte error selector in hex, in the first syntax position. The selector is stored left-shifted by 224 bits; the printer right-shifts it back and prints the bare 4-byte value. |

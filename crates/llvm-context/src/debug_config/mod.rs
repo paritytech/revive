@@ -115,6 +115,29 @@ impl DebugConfig {
         Ok(())
     }
 
+    /// Dumps a newyork IR debug artifact for the current contract.
+    ///
+    /// The file name is derived from the contract path (set via [`Self::set_contract_path`]) so it
+    /// matches the other dumps and maps back to the source. `suffix` distinguishes artifacts
+    /// (`"snapshot"`, `"heap"`, `"mem"`); `None` is the final optimized IR. A no-op when no output
+    /// directory or contract path is configured.
+    pub fn dump_newyork(&self, suffix: Option<&str>, text: &str) -> anyhow::Result<()> {
+        if let Some(contract_path) = self.contract_path.as_ref() {
+            let stem = contract_path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or_default();
+            let extension = IRType::NewYork.file_extension();
+            let file_name = match suffix {
+                Some(suffix) => format!("{stem}.{suffix}.{extension}"),
+                None => format!("{stem}.{extension}"),
+            };
+            std::fs::write(contract_path.with_file_name(file_name), text)?;
+        }
+
+        Ok(())
+    }
+
     /// Creates a full file name, given the contract full path, suffix, and extension.
     fn full_file_name(contract_path: &str, suffix: Option<&str>, ir_type: IRType) -> String {
         let mut full_file_name = contract_path.replace('/', "_").replace(':', ".");

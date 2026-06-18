@@ -5,8 +5,7 @@ use crate::test_utils::build_yul;
 /// Reproducer from GH-474: duplicate `f` across switch cases.
 #[test]
 fn duplicate_function_names_in_switch_cases() {
-    let code = r#"
-object "Test" {
+    let code = r#"object "Test" {
     code {
         {
             let size := datasize("Test_deployed")

@@ -49,7 +49,7 @@ where
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         self.inner.into_llvm(context)?;
-        context.set_debug_location(0, 0, None)?;
+        context.set_debug_location_to_function_scope()?;
 
         match context
             .basic_block()

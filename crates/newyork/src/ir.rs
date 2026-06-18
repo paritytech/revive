@@ -1,0 +1,1783 @@
+//! IR data structures for the newyork intermediate representation.
+//!
+//! This module defines the core IR types based on an SSA form with structured
+//! control flow, similar to MLIR's SCF dialect. The design preserves high-level
+//! structure from Yul while enabling domain-specific optimizations.
+
+use num::BigUint;
+use revive_common::BYTE_LENGTH_WORD;
+use std::collections::BTreeMap;
+
+/// Bit width for integer types.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub enum BitWidth {
+    I1 = 1,
+    I8 = 8,
+    I32 = 32,
+    I64 = 64,
+    I128 = 128,
+    I160 = 160,
+    I256 = 256,
+}
+
+impl BitWidth {
+    /// Returns the bit width as a u32 for LLVM type construction.
+    pub fn bits(self) -> u32 {
+        self as u32
+    }
+
+    /// Returns the smallest BitWidth variant that has at least `bits` bits.
+    pub fn from_bits(bits: u32) -> Self {
+        if bits <= 1 {
+            BitWidth::I1
+        } else if bits <= 8 {
+            BitWidth::I8
+        } else if bits <= 32 {
+            BitWidth::I32
+        } else if bits <= 64 {
+            BitWidth::I64
+        } else if bits <= 128 {
+            BitWidth::I128
+        } else if bits <= 160 {
+            BitWidth::I160
+        } else {
+            BitWidth::I256
+        }
+    }
+
+    /// Determines the minimum bit width that can hold the given value.
+    pub fn from_max_value(value: &BigUint) -> Self {
+        if *value <= BigUint::from(1u8) {
+            BitWidth::I1
+        } else if *value <= BigUint::from(u8::MAX) {
+            BitWidth::I8
+        } else if *value <= BigUint::from(u32::MAX) {
+            BitWidth::I32
+        } else if *value <= BigUint::from(u64::MAX) {
+            BitWidth::I64
+        } else if *value <= BigUint::from(u128::MAX) {
+            BitWidth::I128
+        } else if *value < BigUint::from(2u8).pow(160) {
+            BitWidth::I160
+        } else {
+            BitWidth::I256
+        }
+    }
+}
+
+/// Address space for pointers - distinguishes memory regions.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum AddressSpace {
+    /// EVM heap memory (linear, big-endian).
+    Heap,
+    /// Native stack allocations (little-endian, optimizable).
+    Stack,
+    /// Contract storage (key-value, 256-bit slots).
+    Storage,
+    /// Code/data segment (read-only).
+    Code,
+}
+
+/// Type of a value in the IR.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum Type {
+    /// Integer with specific bit width.
+    Int(BitWidth),
+    /// Pointer with address space.
+    Ptr(AddressSpace),
+    /// No value (for statements/void returns).
+    Void,
+}
+
+impl Default for Type {
+    fn default() -> Self {
+        Type::Int(BitWidth::I256)
+    }
+}
+
+/// Memory region annotation for heap operations.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+pub enum MemoryRegion {
+    /// Scratch space: addresses 0x00-0x3f (64 bytes).
+    Scratch,
+    /// Free memory pointer location: address 0x40.
+    FreePointerSlot,
+    /// Dynamic allocation region: 0x80+.
+    Dynamic,
+    /// Unknown region (conservative).
+    #[default]
+    Unknown,
+}
+
+impl MemoryRegion {
+    /// Determines the memory region from a statically known address.
+    pub fn from_address(address: &BigUint) -> Self {
+        let address_u64 = address.to_u64_digits();
+        if address_u64.is_empty() || (address_u64.len() == 1 && address_u64[0] < 0x40) {
+            MemoryRegion::Scratch
+        } else if address_u64.len() == 1 && address_u64[0] == 0x40 {
+            MemoryRegion::FreePointerSlot
+        } else if address_u64.len() == 1 && address_u64[0] >= 0x80 {
+            MemoryRegion::Dynamic
+        } else {
+            MemoryRegion::Unknown
+        }
+    }
+
+    /// Returns whether a memory access targets the free memory pointer slot (`0x40`).
+    ///
+    /// Two independent signals identify an FMP access and neither subsumes the
+    /// other, so both must be checked:
+    /// - `self == FreePointerSlot`: the region tag assigned by [`MemoryRegion::from_address`]
+    ///   at translation time from a literal `0x40` offset. This catches accesses
+    ///   whose offset value a later pass cannot fold back to a constant (offset
+    ///   resolution only tracks locally visible literal bindings).
+    /// - `resolved_offset == Some(0x40)`: a *computed* offset (e.g. `add(0x20, 0x20)`)
+    ///   that a constant-folding pass resolves to `0x40` but that was tagged
+    ///   `Unknown` at translation time because no literal was visible then.
+    ///
+    /// `resolved_offset` is the caller's best constant resolution of the access
+    /// offset, or `None` when it could not be resolved.
+    pub fn is_free_pointer_slot(self, resolved_offset: Option<u64>) -> bool {
+        self == MemoryRegion::FreePointerSlot || resolved_offset == Some(0x40)
+    }
+}
+
+/// Rounds a byte address down to the start of its EVM word.
+pub fn word_align(address: u64) -> u64 {
+    address / BYTE_LENGTH_WORD as u64 * BYTE_LENGTH_WORD as u64
+}
+
+/// Whether a 32-byte (`mstore`) write at this resolved byte offset *misaligned-overlaps* the
+/// free-memory-pointer word `[0x40, 0x60)`.
+///
+/// A word store at `o` covers `[o, o + 32)`, so it touches the FMP word when `o ∈ [0x21, 0x5f]`.
+/// The aligned `o == 0x40` is the ordinary free-pointer update — recognized by
+/// [`MemoryRegion::is_free_pointer_slot`] and subject to the usual sbrk-bounded value check — so it
+/// is excluded here. Every *other* offset in the range is a misaligned store that partially
+/// overwrites, and therefore corrupts, the pointer regardless of the value written.
+/// [`MemoryRegion::from_address`] tags such a store by its start byte (`Scratch` for `0x21..0x40`,
+/// `Unknown` for `0x41..0x60`), so the store-side FMP-corruption checks must consult this predicate
+/// in addition to `is_free_pointer_slot`.
+///
+/// Only meaningful for a statically-resolved offset; a dynamic offset that could wrap onto the FMP
+/// word is a separate, deliberately-unflagged gap (see the `fmp_could_be_unbounded` field docs in
+/// `heap_opt`).
+pub fn word_store_overlaps_free_pointer_slot(resolved_offset: Option<u64>) -> bool {
+    matches!(resolved_offset, Some(offset) if (0x21..0x60).contains(&offset) && offset != 0x40)
+}
+
+/// An SSA value reference (index into value table).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct ValueId(pub u32);
+
+impl ValueId {
+    /// Creates a new value ID.
+    pub fn new(id: u32) -> Self {
+        ValueId(id)
+    }
+
+    /// Returns the current value ID and advances `self` to the next one.
+    /// Used by counter fields and locals that allocate fresh IDs.
+    pub fn fresh(&mut self) -> ValueId {
+        let id = *self;
+        self.0 += 1;
+        id
+    }
+}
+
+/// A typed SSA value.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Value {
+    /// SSA identity of the value.
+    pub id: ValueId,
+    /// Static type of the value (bit width and integer/pointer kind).
+    pub value_type: Type,
+}
+
+impl Value {
+    /// Creates a new typed value.
+    pub fn new(id: ValueId, value_type: Type) -> Self {
+        Value { id, value_type }
+    }
+
+    /// Creates an integer value with default I256 type.
+    pub fn int(id: ValueId) -> Self {
+        Value::new(id, Type::Int(BitWidth::I256))
+    }
+}
+
+/// Binary operation kinds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum BinaryOperation {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    SDiv,
+    Mod,
+    SMod,
+    Exp,
+    AddMod,
+    MulMod,
+    And,
+    Or,
+    Xor,
+    Shl,
+    Shr,
+    Sar,
+    Lt,
+    Gt,
+    Slt,
+    Sgt,
+    Eq,
+    Byte,
+    SignExtend,
+}
+
+/// Unary operation kinds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum UnaryOperation {
+    /// Zero check - result is I1.
+    IsZero,
+    /// Bitwise NOT.
+    Not,
+    /// Count leading zeros.
+    Clz,
+}
+
+/// External call kinds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CallKind {
+    Call,
+    CallCode,
+    DelegateCall,
+    StaticCall,
+}
+
+/// Contract creation kinds.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CreateKind {
+    Create,
+    Create2,
+}
+
+/// Function identifier, unique within a single [`Object`] but **not** across objects.
+///
+/// Each [`Object`] (top-level and every subobject) owns its own `functions` map
+/// and issues IDs starting from `0`, so the same `FunctionId(N)` in two different
+/// objects refers to two unrelated functions. Passes that walk an object tree
+/// must look up names/bodies in the *current* object's table — never the parent's.
+///
+/// Cross-object references go through the [`Object`] `subobjects` field and
+/// contract-creation expressions, not through `FunctionId`.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct FunctionId(pub u32);
+
+impl FunctionId {
+    /// Creates a new function ID.
+    pub fn new(id: u32) -> Self {
+        FunctionId(id)
+    }
+
+    /// Returns the current function ID and advances `self` to the next one.
+    /// Used by counter fields that allocate fresh IDs.
+    pub fn fresh(&mut self) -> FunctionId {
+        let id = *self;
+        self.0 += 1;
+        id
+    }
+}
+
+/// Pure expressions that produce values without side effects.
+#[derive(Clone, Debug)]
+pub enum Expression {
+    /// Literal constant.
+    Literal {
+        value: BigUint,
+        value_type: Type,
+    },
+
+    /// Reference to an SSA value.
+    Var(ValueId),
+
+    /// Binary operation.
+    Binary {
+        operation: BinaryOperation,
+        lhs: Value,
+        rhs: Value,
+    },
+
+    /// Ternary operation (addmod, mulmod).
+    Ternary {
+        operation: BinaryOperation,
+        a: Value,
+        b: Value,
+        n: Value,
+    },
+
+    /// Unary operation.
+    Unary {
+        operation: UnaryOperation,
+        operand: Value,
+    },
+
+    CallDataLoad {
+        offset: Value,
+    },
+    CallValue,
+    Caller,
+    Origin,
+    CallDataSize,
+    CodeSize,
+    GasPrice,
+    ExtCodeSize {
+        address: Value,
+    },
+    ReturnDataSize,
+    ExtCodeHash {
+        address: Value,
+    },
+    BlockHash {
+        number: Value,
+    },
+    Coinbase,
+    Timestamp,
+    Number,
+    Difficulty,
+    GasLimit,
+    ChainId,
+    SelfBalance,
+    BaseFee,
+    BlobHash {
+        index: Value,
+    },
+    BlobBaseFee,
+    Gas,
+    MSize,
+    Address,
+    Balance {
+        address: Value,
+    },
+
+    /// Memory load with region annotation.
+    MLoad {
+        offset: Value,
+        region: MemoryRegion,
+    },
+
+    /// Storage load with optional static slot.
+    SLoad {
+        key: Value,
+        /// If key is a compile-time constant, store it here for analysis.
+        static_slot: Option<BigUint>,
+    },
+
+    /// Transient storage load.
+    TLoad {
+        key: Value,
+    },
+
+    /// Function call.
+    Call {
+        function: FunctionId,
+        arguments: Vec<Value>,
+    },
+
+    Truncate {
+        value: Value,
+        to: BitWidth,
+    },
+    ZeroExtend {
+        value: Value,
+        to: BitWidth,
+    },
+    SignExtendTo {
+        value: Value,
+        to: BitWidth,
+    },
+
+    /// Keccak256 hash (pure but expensive).
+    Keccak256 {
+        offset: Value,
+        length: Value,
+    },
+
+    /// Keccak256 hash of two 256-bit words stored at scratch memory.
+    /// Equivalent to: mstore(0, word0); mstore(32, word1); keccak256(0, 64)
+    /// but lowered to a single function call to avoid code duplication.
+    Keccak256Pair {
+        word0: Value,
+        word1: Value,
+    },
+
+    /// Keccak256 hash of one 256-bit word stored at scratch memory.
+    /// Equivalent to: mstore(0, word0); keccak256(0, 32)
+    /// but lowered to a single function call to avoid code duplication.
+    Keccak256Single {
+        word0: Value,
+    },
+
+    /// Compound mapping load: keccak256(key, slot) → sload.
+    /// Combines a Keccak256Pair hash with a storage load into one outlined call.
+    /// Only valid when the hash intermediate is used exclusively by this load.
+    MappingSLoad {
+        /// The mapping key (first word of keccak256 input).
+        key: Value,
+        /// The storage slot (second word of keccak256 input).
+        slot: Value,
+    },
+
+    /// Data offset (for deployed bytecode).
+    DataOffset {
+        id: String,
+    },
+
+    /// Data size (for deployed bytecode).
+    DataSize {
+        id: String,
+    },
+
+    /// Load immutable variable.
+    LoadImmutable {
+        /// The immutable variable identifier.
+        key: String,
+    },
+
+    /// Linker symbol - returns the address of an external library.
+    LinkerSymbol {
+        /// The library path (e.g., "contracts/Library.sol:L").
+        path: String,
+    },
+}
+
+/// Switch case.
+#[derive(Clone, Debug)]
+pub struct SwitchCase {
+    /// Selector value that triggers this case.
+    pub value: BigUint,
+    /// Statements executed when the selector matches.
+    pub body: Region,
+}
+
+/// A region is a block that can yield values.
+#[derive(Clone, Debug, Default)]
+pub struct Region {
+    /// Statements in this region.
+    pub statements: Vec<Statement>,
+    /// Values yielded by this region (for structured control flow).
+    pub yields: Vec<Value>,
+}
+
+impl Region {
+    /// Creates a new empty region.
+    pub fn new() -> Self {
+        Region::default()
+    }
+
+    /// Adds a statement to this region.
+    pub fn push(&mut self, statement: Statement) {
+        self.statements.push(statement);
+    }
+}
+
+/// A basic block of statements (no yields - for function bodies).
+#[derive(Clone, Debug, Default)]
+pub struct Block {
+    /// Statements in this block.
+    pub statements: Vec<Statement>,
+}
+
+impl Block {
+    /// Creates a new empty block.
+    pub fn new() -> Self {
+        Block::default()
+    }
+
+    /// Adds a statement to this block.
+    pub fn push(&mut self, statement: Statement) {
+        self.statements.push(statement);
+    }
+}
+
+/// Statements with effects and structured control flow.
+#[derive(Clone, Debug)]
+pub enum Statement {
+    /// SSA binding: let x, y, z = expression
+    Let {
+        bindings: Vec<ValueId>,
+        value: Expression,
+    },
+
+    /// Memory store with region annotation.
+    MStore {
+        offset: Value,
+        value: Value,
+        region: MemoryRegion,
+    },
+
+    /// Memory store (single byte).
+    MStore8 {
+        offset: Value,
+        value: Value,
+        region: MemoryRegion,
+    },
+
+    /// Memory copy.
+    MCopy {
+        destination: Value,
+        source: Value,
+        length: Value,
+    },
+
+    /// Storage store with optional static slot.
+    SStore {
+        key: Value,
+        value: Value,
+        /// If key is a compile-time constant, store it here for analysis.
+        static_slot: Option<BigUint>,
+    },
+
+    /// Transient storage store.
+    TStore { key: Value, value: Value },
+
+    /// Structured if with explicit yields.
+    If {
+        condition: Value,
+        /// Input values passed into regions (for SSA).
+        inputs: Vec<Value>,
+        /// Then region.
+        then_region: Region,
+        /// Optional else region (defaults to yielding inputs unchanged).
+        else_region: Option<Region>,
+        /// Output value bindings (SSA values defined by this If).
+        outputs: Vec<ValueId>,
+    },
+
+    /// Switch statement with explicit yields.
+    Switch {
+        scrutinee: Value,
+        inputs: Vec<Value>,
+        cases: Vec<SwitchCase>,
+        default: Option<Region>,
+        outputs: Vec<ValueId>,
+    },
+
+    /// For loop with structured regions and explicit loop-carried values.
+    For {
+        /// Initial values for loop-carried variables.
+        initial_values: Vec<Value>,
+        /// Loop-carried variable bindings (visible in condition, body, post).
+        loop_variables: Vec<ValueId>,
+        /// Statements to execute before evaluating condition (evaluated each iteration).
+        /// These are generated inside the loop header block.
+        condition_statements: Vec<Statement>,
+        /// Condition expression (evaluated each iteration after condition_statements).
+        condition: Expression,
+        /// Loop body (yields current values of loop-carried variables).
+        body: Region,
+        /// Input ValueIds for the post region, one per loop-carried variable.
+        /// These receive the body's yielded values (merged with continue-site values
+        /// via phi nodes in the LLVM codegen).
+        post_input_variables: Vec<ValueId>,
+        /// Post-iteration block (yields updated loop variables).
+        post: Region,
+        /// Final values after loop exits.
+        outputs: Vec<ValueId>,
+    },
+
+    /// Loop control - break out of the innermost for loop.
+    /// Carries the current values of loop-carried variables at the point of break.
+    Break {
+        /// Current values of loop-carried variables at the break point.
+        values: Vec<Value>,
+    },
+    /// Loop control - continue to the next iteration of the innermost for loop.
+    /// Carries the current values of loop-carried variables at the continue point.
+    Continue {
+        /// Current values of loop-carried variables at the continue point.
+        values: Vec<Value>,
+    },
+    /// Leave the current function, returning the given values.
+    Leave {
+        /// The current values of the return variables to return.
+        return_values: Vec<Value>,
+    },
+
+    /// Revert execution, returning the data at `[offset, offset + length)`.
+    Revert { offset: Value, length: Value },
+    /// Halt execution successfully, returning the data at `[offset, offset + length)`.
+    Return { offset: Value, length: Value },
+    /// Halt execution successfully with no return data.
+    Stop,
+    /// Abort execution with the invalid instruction, consuming all remaining gas.
+    Invalid,
+    /// Destroy the current account, sending its balance to `address`.
+    SelfDestruct { address: Value },
+
+    /// Solidity panic revert: emits `Panic(uint256)` ABI encoding and reverts.
+    /// Equivalent to: mstore(0, 0x4e487b71...), mstore(4, code), revert(0, 0x24).
+    /// Outlined to a shared helper function to avoid duplicating the pattern.
+    PanicRevert {
+        /// The panic error code (e.g., 0x11 = overflow, 0x22 = encoding, 0x41 = memory).
+        code: u8,
+    },
+
+    /// Error string revert: emits `Error(string)` ABI encoding and reverts.
+    /// Equivalent to: mload(0x40) → mstore(fmp, selector) → mstore(fmp+4, 0x20) →
+    /// mstore(fmp+0x24, length) → mstore(fmp+0x44, word0) → [...] → revert(fmp, total).
+    /// Outlined to a shared helper function parameterized by string length and data words.
+    ErrorStringRevert {
+        /// The string length in bytes.
+        length: u8,
+        /// The string data words (1-4 words of 32 bytes each).
+        data: Vec<BigUint>,
+    },
+
+    /// Custom error revert: emits a custom error revert using scratch space.
+    /// Pattern: mstore(0, selector) + [mstore(4, arg0) + mstore(0x24, arg1) + ...] + revert(0, 4+32*N).
+    /// Uses scratch space (offset 0), so no FMP load needed.
+    CustomErrorRevert {
+        /// The 4-byte error selector, left-shifted by 224 bits (as stored in scratch).
+        selector: BigUint,
+        /// The arguments to the custom error (0-3 values).
+        arguments: Vec<Value>,
+    },
+
+    /// Compound mapping store: keccak256(key, slot) → sstore(hash, value).
+    /// Combines a Keccak256Pair hash with a storage store into one outlined call.
+    /// Only valid when the hash intermediate is used exclusively by this store.
+    MappingSStore {
+        /// The mapping key (first word of keccak256 input).
+        key: Value,
+        /// The storage slot (second word of keccak256 input).
+        slot: Value,
+        /// The value to store.
+        value: Value,
+    },
+
+    /// External call, dispatched by `kind`; `result` receives the success flag.
+    ExternalCall {
+        kind: CallKind,
+        gas: Value,
+        address: Value,
+        value: Option<Value>,
+        args_offset: Value,
+        args_length: Value,
+        ret_offset: Value,
+        ret_length: Value,
+        result: ValueId,
+    },
+
+    /// Deploy a new contract, dispatched by `kind`; `result` receives the address.
+    Create {
+        kind: CreateKind,
+        value: Value,
+        offset: Value,
+        length: Value,
+        salt: Option<Value>,
+        result: ValueId,
+    },
+
+    /// Emit a log with `topics` over the data at `[offset, offset + length)`.
+    Log {
+        offset: Value,
+        length: Value,
+        topics: Vec<Value>,
+    },
+
+    /// Copy the contract's own code into memory.
+    CodeCopy {
+        destination: Value,
+        offset: Value,
+        length: Value,
+    },
+    /// Copy `address`'s code into memory.
+    ExtCodeCopy {
+        address: Value,
+        destination: Value,
+        offset: Value,
+        length: Value,
+    },
+    /// Copy the last external call's return data into memory.
+    ReturnDataCopy {
+        destination: Value,
+        offset: Value,
+        length: Value,
+    },
+    /// Copy from the object's data section into memory.
+    DataCopy {
+        destination: Value,
+        offset: Value,
+        length: Value,
+    },
+    /// Copy call data into memory.
+    CallDataCopy {
+        destination: Value,
+        offset: Value,
+        length: Value,
+    },
+
+    /// Nested block scope.
+    Block(Region),
+
+    /// Expression evaluated for side effects only (result discarded).
+    Expression(Expression),
+
+    /// Set immutable variable.
+    SetImmutable {
+        /// The immutable variable identifier.
+        key: String,
+        /// The value to store.
+        value: Value,
+    },
+}
+
+/// Function definition.
+#[derive(Clone, Debug)]
+pub struct Function {
+    /// Unique identifier within the enclosing object.
+    pub id: FunctionId,
+    /// Source-level function name as it appears in Yul.
+    pub name: String,
+    /// Formal parameter list as (SSA value id, type) pairs.
+    pub parameters: Vec<(ValueId, Type)>,
+    /// Return value types, in declaration order.
+    pub returns: Vec<Type>,
+    /// Initial SSA value IDs for return variables (allocated at function entry).
+    /// These are the IDs that the function body's If statements will reference
+    /// as "before" values.
+    pub return_values_initial: Vec<ValueId>,
+    /// Final SSA value IDs for return variables (after body execution).
+    /// These are the values that should be stored to the return pointer.
+    pub return_values: Vec<ValueId>,
+    /// Function body.
+    pub body: Block,
+    /// Number of call sites (for inlining decisions).
+    pub call_count: usize,
+    /// Instruction count estimate (for inlining decisions).
+    pub size_estimate: usize,
+}
+
+impl Function {
+    /// Creates a new function.
+    pub fn new(id: FunctionId, name: String) -> Self {
+        Function {
+            id,
+            name,
+            parameters: Vec::new(),
+            returns: Vec::new(),
+            return_values_initial: Vec::new(),
+            return_values: Vec::new(),
+            body: Block::new(),
+            call_count: 0,
+            size_estimate: 0,
+        }
+    }
+}
+
+/// Top-level object (contract).
+#[derive(Clone, Debug)]
+pub struct Object {
+    /// Yul-level object name (used as the LLVM module identifier).
+    pub name: String,
+    /// Top-level code block executed when this object is invoked.
+    pub code: Block,
+    /// Functions defined at object scope.
+    pub functions: BTreeMap<FunctionId, Function>,
+    /// Nested objects (e.g. the deployed-code object for a contract).
+    pub subobjects: Vec<Object>,
+    /// Embedded data sections keyed by Yul `datasize`/`dataoffset` identifier.
+    pub data: BTreeMap<String, Vec<u8>>,
+}
+
+impl Object {
+    /// Creates a new object.
+    pub fn new(name: String) -> Self {
+        Object {
+            name,
+            code: Block::new(),
+            functions: BTreeMap::new(),
+            subobjects: Vec::new(),
+            data: BTreeMap::new(),
+        }
+    }
+
+    /// Counts the total number of heap memory operations (MLoad, MStore, MStore8, MCopy)
+    /// in this object including all functions and subobjects.
+    /// This is used to estimate the number of `__sbrk_internal` call sites after LLVM codegen.
+    pub fn count_heap_operations(&self) -> usize {
+        let mut count = count_heap_ops_in_block(&self.code);
+        for function in self.functions.values() {
+            count += count_heap_ops_in_block(&function.body);
+        }
+        for subobject in &self.subobjects {
+            count += subobject.count_heap_operations();
+        }
+        count
+    }
+
+    /// Counts the total number of `Keccak256Single` expression nodes in this object
+    /// (including functions and subobjects).
+    /// Used to conditionally emit the `__revive_keccak256_one_word` helper function
+    /// only when enough call sites exist to justify the function body cost.
+    pub fn count_keccak256_single(&self) -> usize {
+        let mut count = count_keccak_single_in_block(&self.code);
+        for function in self.functions.values() {
+            count += count_keccak_single_in_block(&function.body);
+        }
+        for subobject in &self.subobjects {
+            count += subobject.count_keccak256_single();
+        }
+        count
+    }
+
+    /// Counts the total number of `ErrorStringRevert` statements grouped by
+    /// number of data words. Returns a map from num_words → count.
+    /// Used to conditionally outline: only profitable with >= 2 call sites.
+    /// Recurses into subobjects for the same reason as [`Object::count_syscall_sites`]:
+    /// the revert helper is shared module-wide across the deploy and runtime code.
+    pub fn count_error_string_reverts(&self) -> BTreeMap<usize, usize> {
+        let mut counts = BTreeMap::new();
+        count_error_string_reverts_in_block(&self.code, &mut counts);
+        for function in self.functions.values() {
+            count_error_string_reverts_in_block(&function.body, &mut counts);
+        }
+        for subobject in &self.subobjects {
+            for (length, count) in subobject.count_error_string_reverts() {
+                *counts.entry(length).or_insert(0) += count;
+            }
+        }
+        counts
+    }
+
+    /// Counts the total number of `CustomErrorRevert` statements grouped by
+    /// num_args. Returns a map from num_args → count.
+    /// Used to conditionally outline: only profitable with >= 3 call sites.
+    /// Recurses into subobjects for the same reason as [`Object::count_syscall_sites`]:
+    /// the revert helper is shared module-wide across the deploy and runtime code.
+    pub fn count_custom_error_reverts(&self) -> BTreeMap<usize, usize> {
+        let mut counts = BTreeMap::new();
+        count_custom_error_reverts_in_block(&self.code, &mut counts);
+        for function in self.functions.values() {
+            count_custom_error_reverts_in_block(&function.body, &mut counts);
+        }
+        for subobject in &self.subobjects {
+            for (length, count) in subobject.count_custom_error_reverts() {
+                *counts.entry(length).or_insert(0) += count;
+            }
+        }
+        counts
+    }
+
+    /// Returns true if any code in this object uses the `msize()` expression.
+    /// When false, the msize watermark (`GLOBAL_HEAP_SIZE`) doesn't need updating,
+    /// allowing InlineNative stores to skip the `ensure_heap_size` call.
+    pub fn has_msize(&self) -> bool {
+        has_msize_in_block(&self.code)
+            || self
+                .functions
+                .values()
+                .any(|function| has_msize_in_block(&function.body))
+            || self
+                .subobjects
+                .iter()
+                .any(|subobject| subobject.has_msize())
+    }
+
+    /// Finds the maximum `ValueId` used anywhere in this object — its code, its
+    /// functions (parameters, return slots, and bodies), and, recursively, its
+    /// subobjects. Callers use the result `+ 1` as the next free id, so spanning
+    /// subobjects keeps that bound conservative across the whole object tree.
+    pub fn find_max_value_id(&self) -> u32 {
+        fn scan_block(block: &Block, max_id: &mut u32) {
+            for statement in &block.statements {
+                statement.for_each_value_id(&mut |id| *max_id = (*max_id).max(id.0));
+            }
+            for_each_statement(&block.statements, &mut |statement| {
+                statement.for_each_value_id_def(&mut |id| *max_id = (*max_id).max(id.0));
+            });
+        }
+
+        let mut max_id: u32 = 0;
+        scan_block(&self.code, &mut max_id);
+        for function in self.functions.values() {
+            for (parameter_id, _) in &function.parameters {
+                max_id = max_id.max(parameter_id.0);
+            }
+            for id in &function.return_values_initial {
+                max_id = max_id.max(id.0);
+            }
+            for id in &function.return_values {
+                max_id = max_id.max(id.0);
+            }
+            scan_block(&function.body, &mut max_id);
+        }
+        for sub_object in &self.subobjects {
+            max_id = max_id.max(sub_object.find_max_value_id());
+        }
+        max_id
+    }
+}
+
+/// Counts the occurrences of callvalue and calldataload expressions.
+///
+/// Returns `(callvalue_count, calldataload_count)`.
+/// Used to decide whether outlining these into shared functions saves code.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct SyscallCounts {
+    /// Number of `callvalue()` expression sites.
+    pub callvalue: usize,
+    /// Number of `calldataload(offset)` expression sites.
+    pub calldataload: usize,
+    /// Number of `caller()` expression sites.
+    pub caller: usize,
+}
+
+impl std::ops::AddAssign for SyscallCounts {
+    fn add_assign(&mut self, rhs: Self) {
+        self.callvalue += rhs.callvalue;
+        self.calldataload += rhs.calldataload;
+        self.caller += rhs.caller;
+    }
+}
+
+impl Object {
+    /// Counts the syscall expression sites (`callvalue`, `calldataload`, `caller`)
+    /// in this object — its code, its functions, and, recursively, its subobjects.
+    ///
+    /// Subobjects are included because the whole object tree compiles into a single
+    /// LLVM module with a shared set of outlined helper functions: the deploy code
+    /// (top object) and runtime code (`_deployed` subobject) call the *same*
+    /// `__revive_callvalue`/`caller`/... helper. The outlining decision is therefore
+    /// a module-wide question, so the count must span the tree — dropping the
+    /// recursion regresses the OpenZeppelin suite by ~650 bytes.
+    pub fn count_syscall_sites(&self) -> SyscallCounts {
+        let mut counts = count_syscalls_in_block(&self.code);
+        for function in self.functions.values() {
+            counts += count_syscalls_in_block(&function.body);
+        }
+        for subobject in &self.subobjects {
+            counts += subobject.count_syscall_sites();
+        }
+        counts
+    }
+}
+
+impl Statement {
+    /// Visits every immediate `Expression` in this statement (NOT recursing into
+    /// nested regions, and NOT into `For::condition_statements`). Pair with
+    /// [`for_each_statement`] to walk all `Expression`s reachable from a statement list:
+    ///
+    /// ```ignore
+    /// for_each_statement(&block.statements, &mut |statement| {
+    ///     statement.for_each_expression(&mut |expression| { /* ... */ });
+    /// });
+    /// ```
+    pub fn for_each_expression(&self, visit: &mut dyn FnMut(&Expression)) {
+        match self {
+            Statement::Let { value, .. } | Statement::Expression(value) => visit(value),
+            Statement::For { condition, .. } => visit(condition),
+            _ => {}
+        }
+    }
+
+    /// Mutating variant of [`Statement::for_each_expression`].
+    pub fn for_each_expression_mut(&mut self, visit: &mut dyn FnMut(&mut Expression)) {
+        match self {
+            Statement::Let { value, .. } | Statement::Expression(value) => visit(value),
+            Statement::For { condition, .. } => visit(condition),
+            _ => {}
+        }
+    }
+
+    /// Visits every `ValueId` *used* by this statement, recursing through
+    /// nested regions, `For::condition_statements`, and region yields. Does NOT
+    /// visit defining `ValueId`s (Let bindings, If/Switch/For outputs,
+    /// loop_variables, post_input_variables, ExternalCall/Create result). Use
+    /// [`Statement::for_each_value_id_def`] for those.
+    pub fn for_each_value_id(&self, visit: &mut dyn FnMut(ValueId)) {
+        match self {
+            Statement::Let { value, .. } | Statement::Expression(value) => {
+                value.for_each_value_id(visit)
+            }
+            Statement::MStore { offset, value, .. } | Statement::MStore8 { offset, value, .. } => {
+                visit(offset.id);
+                visit(value.id);
+            }
+            Statement::MCopy {
+                destination,
+                source,
+                length,
+            } => {
+                visit(destination.id);
+                visit(source.id);
+                visit(length.id);
+            }
+            Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
+                visit(key.id);
+                visit(value.id);
+            }
+            Statement::MappingSStore { key, slot, value } => {
+                visit(key.id);
+                visit(slot.id);
+                visit(value.id);
+            }
+            Statement::If {
+                condition,
+                inputs,
+                then_region,
+                else_region,
+                ..
+            } => {
+                visit(condition.id);
+                for input in inputs {
+                    visit(input.id);
+                }
+                walk_region_uses(then_region, visit);
+                if let Some(region) = else_region {
+                    walk_region_uses(region, visit);
+                }
+            }
+            Statement::Switch {
+                scrutinee,
+                inputs,
+                cases,
+                default,
+                ..
+            } => {
+                visit(scrutinee.id);
+                for input in inputs {
+                    visit(input.id);
+                }
+                for case in cases {
+                    walk_region_uses(&case.body, visit);
+                }
+                if let Some(region) = default {
+                    walk_region_uses(region, visit);
+                }
+            }
+            Statement::For {
+                initial_values,
+                condition_statements,
+                condition,
+                body,
+                post,
+                ..
+            } => {
+                for initial_value in initial_values {
+                    visit(initial_value.id);
+                }
+                for statement in condition_statements {
+                    statement.for_each_value_id(visit);
+                }
+                condition.for_each_value_id(visit);
+                walk_region_uses(body, visit);
+                walk_region_uses(post, visit);
+            }
+            Statement::Block(region) => walk_region_uses(region, visit),
+            Statement::Revert { offset, length } | Statement::Return { offset, length } => {
+                visit(offset.id);
+                visit(length.id);
+            }
+            Statement::SelfDestruct { address } => visit(address.id),
+            Statement::ExternalCall {
+                gas,
+                address,
+                value,
+                args_offset,
+                args_length,
+                ret_offset,
+                ret_length,
+                ..
+            } => {
+                visit(gas.id);
+                visit(address.id);
+                if let Some(transferred_value) = value {
+                    visit(transferred_value.id);
+                }
+                visit(args_offset.id);
+                visit(args_length.id);
+                visit(ret_offset.id);
+                visit(ret_length.id);
+            }
+            Statement::Create {
+                value,
+                offset,
+                length,
+                salt,
+                ..
+            } => {
+                visit(value.id);
+                visit(offset.id);
+                visit(length.id);
+                if let Some(salt_value) = salt {
+                    visit(salt_value.id);
+                }
+            }
+            Statement::Log {
+                offset,
+                length,
+                topics,
+            } => {
+                visit(offset.id);
+                visit(length.id);
+                for topic in topics {
+                    visit(topic.id);
+                }
+            }
+            Statement::CodeCopy {
+                destination,
+                offset,
+                length,
+            }
+            | Statement::ReturnDataCopy {
+                destination,
+                offset,
+                length,
+            }
+            | Statement::DataCopy {
+                destination,
+                offset,
+                length,
+            }
+            | Statement::CallDataCopy {
+                destination,
+                offset,
+                length,
+            } => {
+                visit(destination.id);
+                visit(offset.id);
+                visit(length.id);
+            }
+            Statement::ExtCodeCopy {
+                address,
+                destination,
+                offset,
+                length,
+            } => {
+                visit(address.id);
+                visit(destination.id);
+                visit(offset.id);
+                visit(length.id);
+            }
+            Statement::SetImmutable { value, .. } => visit(value.id),
+            Statement::Leave { return_values }
+            | Statement::Break {
+                values: return_values,
+            }
+            | Statement::Continue {
+                values: return_values,
+            } => {
+                for return_value in return_values {
+                    visit(return_value.id);
+                }
+            }
+            Statement::CustomErrorRevert { arguments, .. } => {
+                for argument in arguments {
+                    visit(argument.id);
+                }
+            }
+            Statement::Stop
+            | Statement::Invalid
+            | Statement::PanicRevert { .. }
+            | Statement::ErrorStringRevert { .. } => {}
+        }
+    }
+
+    /// Mutating variant of [`Statement::for_each_value_id`]. Same traversal
+    /// rules — visits use sites, recurses into nested regions, skips definitions.
+    pub fn for_each_value_id_mut(&mut self, visit: &mut dyn FnMut(&mut ValueId)) {
+        match self {
+            Statement::Let { value, .. } | Statement::Expression(value) => {
+                value.for_each_value_id_mut(visit)
+            }
+            Statement::MStore { offset, value, .. } | Statement::MStore8 { offset, value, .. } => {
+                visit(&mut offset.id);
+                visit(&mut value.id);
+            }
+            Statement::MCopy {
+                destination,
+                source,
+                length,
+            } => {
+                visit(&mut destination.id);
+                visit(&mut source.id);
+                visit(&mut length.id);
+            }
+            Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
+                visit(&mut key.id);
+                visit(&mut value.id);
+            }
+            Statement::MappingSStore { key, slot, value } => {
+                visit(&mut key.id);
+                visit(&mut slot.id);
+                visit(&mut value.id);
+            }
+            Statement::If {
+                condition,
+                inputs,
+                then_region,
+                else_region,
+                ..
+            } => {
+                visit(&mut condition.id);
+                for input in inputs {
+                    visit(&mut input.id);
+                }
+                walk_region_uses_mut(then_region, visit);
+                if let Some(region) = else_region {
+                    walk_region_uses_mut(region, visit);
+                }
+            }
+            Statement::Switch {
+                scrutinee,
+                inputs,
+                cases,
+                default,
+                ..
+            } => {
+                visit(&mut scrutinee.id);
+                for input in inputs {
+                    visit(&mut input.id);
+                }
+                for case in cases {
+                    walk_region_uses_mut(&mut case.body, visit);
+                }
+                if let Some(region) = default {
+                    walk_region_uses_mut(region, visit);
+                }
+            }
+            Statement::For {
+                initial_values,
+                condition_statements,
+                condition,
+                body,
+                post,
+                ..
+            } => {
+                for initial_value in initial_values {
+                    visit(&mut initial_value.id);
+                }
+                for statement in condition_statements {
+                    statement.for_each_value_id_mut(visit);
+                }
+                condition.for_each_value_id_mut(visit);
+                walk_region_uses_mut(body, visit);
+                walk_region_uses_mut(post, visit);
+            }
+            Statement::Block(region) => walk_region_uses_mut(region, visit),
+            Statement::Revert { offset, length } | Statement::Return { offset, length } => {
+                visit(&mut offset.id);
+                visit(&mut length.id);
+            }
+            Statement::SelfDestruct { address } => visit(&mut address.id),
+            Statement::ExternalCall {
+                gas,
+                address,
+                value,
+                args_offset,
+                args_length,
+                ret_offset,
+                ret_length,
+                ..
+            } => {
+                visit(&mut gas.id);
+                visit(&mut address.id);
+                if let Some(transferred_value) = value {
+                    visit(&mut transferred_value.id);
+                }
+                visit(&mut args_offset.id);
+                visit(&mut args_length.id);
+                visit(&mut ret_offset.id);
+                visit(&mut ret_length.id);
+            }
+            Statement::Create {
+                value,
+                offset,
+                length,
+                salt,
+                ..
+            } => {
+                visit(&mut value.id);
+                visit(&mut offset.id);
+                visit(&mut length.id);
+                if let Some(salt_value) = salt {
+                    visit(&mut salt_value.id);
+                }
+            }
+            Statement::Log {
+                offset,
+                length,
+                topics,
+            } => {
+                visit(&mut offset.id);
+                visit(&mut length.id);
+                for topic in topics {
+                    visit(&mut topic.id);
+                }
+            }
+            Statement::CodeCopy {
+                destination,
+                offset,
+                length,
+            }
+            | Statement::ReturnDataCopy {
+                destination,
+                offset,
+                length,
+            }
+            | Statement::DataCopy {
+                destination,
+                offset,
+                length,
+            }
+            | Statement::CallDataCopy {
+                destination,
+                offset,
+                length,
+            } => {
+                visit(&mut destination.id);
+                visit(&mut offset.id);
+                visit(&mut length.id);
+            }
+            Statement::ExtCodeCopy {
+                address,
+                destination,
+                offset,
+                length,
+            } => {
+                visit(&mut address.id);
+                visit(&mut destination.id);
+                visit(&mut offset.id);
+                visit(&mut length.id);
+            }
+            Statement::SetImmutable { value, .. } => visit(&mut value.id),
+            Statement::Leave { return_values }
+            | Statement::Break {
+                values: return_values,
+            }
+            | Statement::Continue {
+                values: return_values,
+            } => {
+                for return_value in return_values {
+                    visit(&mut return_value.id);
+                }
+            }
+            Statement::CustomErrorRevert { arguments, .. } => {
+                for argument in arguments {
+                    visit(&mut argument.id);
+                }
+            }
+            Statement::Stop
+            | Statement::Invalid
+            | Statement::PanicRevert { .. }
+            | Statement::ErrorStringRevert { .. } => {}
+        }
+    }
+
+    /// Visits every `ValueId` *defined* by this statement (NOT used by it).
+    /// This is the dual of [`Statement::for_each_value_id`]. Does not recurse
+    /// into nested regions — for that, use [`for_each_statement`] to walk and call
+    /// this on each statement.
+    pub fn for_each_value_id_def(&self, visit: &mut dyn FnMut(ValueId)) {
+        match self {
+            Statement::Let { bindings, .. } => {
+                for binding in bindings {
+                    visit(*binding);
+                }
+            }
+            Statement::If { outputs, .. } | Statement::Switch { outputs, .. } => {
+                for output in outputs {
+                    visit(*output);
+                }
+            }
+            Statement::For {
+                loop_variables,
+                post_input_variables,
+                outputs,
+                ..
+            } => {
+                for loop_variable in loop_variables {
+                    visit(*loop_variable);
+                }
+                for post_input_variable in post_input_variables {
+                    visit(*post_input_variable);
+                }
+                for output in outputs {
+                    visit(*output);
+                }
+            }
+            Statement::ExternalCall { result, .. } | Statement::Create { result, .. } => {
+                visit(*result)
+            }
+            _ => {}
+        }
+    }
+
+    /// Mutating variant of [`Statement::for_each_value_id_def`]. Same per-statement
+    /// scope (no recursion into nested regions). Used by the inliner to
+    /// allocate fresh IDs for definitions in a cloned function body.
+    pub fn for_each_value_id_def_mut(&mut self, visit: &mut dyn FnMut(&mut ValueId)) {
+        match self {
+            Statement::Let { bindings, .. } => {
+                for binding in bindings {
+                    visit(binding);
+                }
+            }
+            Statement::If { outputs, .. } | Statement::Switch { outputs, .. } => {
+                for output in outputs {
+                    visit(output);
+                }
+            }
+            Statement::For {
+                loop_variables,
+                post_input_variables,
+                outputs,
+                ..
+            } => {
+                for loop_variable in loop_variables {
+                    visit(loop_variable);
+                }
+                for post_input_variable in post_input_variables {
+                    visit(post_input_variable);
+                }
+                for output in outputs {
+                    visit(output);
+                }
+            }
+            Statement::ExternalCall { result, .. } | Statement::Create { result, .. } => {
+                visit(result)
+            }
+            _ => {}
+        }
+    }
+}
+
+fn walk_region_uses(region: &Region, visit: &mut dyn FnMut(ValueId)) {
+    for statement in &region.statements {
+        statement.for_each_value_id(visit);
+    }
+    for yielded in &region.yields {
+        visit(yielded.id);
+    }
+}
+
+fn walk_region_uses_mut(region: &mut Region, visit: &mut dyn FnMut(&mut ValueId)) {
+    for statement in &mut region.statements {
+        statement.for_each_value_id_mut(visit);
+    }
+    for yielded in &mut region.yields {
+        visit(&mut yielded.id);
+    }
+}
+
+impl Expression {
+    /// Visits every `ValueId` *used* by this expression. Includes the
+    /// `ValueId` of `Expression::Var` and the `id` of every `Value` operand.
+    pub fn for_each_value_id(&self, visit: &mut dyn FnMut(ValueId)) {
+        match self {
+            Expression::Var(id) => visit(*id),
+            Expression::Binary { lhs, rhs, .. } => {
+                visit(lhs.id);
+                visit(rhs.id);
+            }
+            Expression::Ternary { a, b, n, .. } => {
+                visit(a.id);
+                visit(b.id);
+                visit(n.id);
+            }
+            Expression::Unary { operand, .. } => visit(operand.id),
+            Expression::CallDataLoad { offset } | Expression::MLoad { offset, .. } => {
+                visit(offset.id)
+            }
+            Expression::ExtCodeSize { address }
+            | Expression::ExtCodeHash { address }
+            | Expression::Balance { address } => visit(address.id),
+            Expression::BlockHash { number } => visit(number.id),
+            Expression::BlobHash { index } => visit(index.id),
+            Expression::SLoad { key, .. } | Expression::TLoad { key } => visit(key.id),
+            Expression::Call { arguments, .. } => {
+                for argument in arguments {
+                    visit(argument.id);
+                }
+            }
+            Expression::Truncate { value, .. }
+            | Expression::ZeroExtend { value, .. }
+            | Expression::SignExtendTo { value, .. } => visit(value.id),
+            Expression::Keccak256 { offset, length } => {
+                visit(offset.id);
+                visit(length.id);
+            }
+            Expression::Keccak256Pair { word0, word1 } => {
+                visit(word0.id);
+                visit(word1.id);
+            }
+            Expression::MappingSLoad { key, slot } => {
+                visit(key.id);
+                visit(slot.id);
+            }
+            Expression::Keccak256Single { word0 } => visit(word0.id),
+            Expression::Literal { .. }
+            | Expression::CallValue
+            | Expression::Caller
+            | Expression::Origin
+            | Expression::CallDataSize
+            | Expression::CodeSize
+            | Expression::GasPrice
+            | Expression::ReturnDataSize
+            | Expression::Coinbase
+            | Expression::Timestamp
+            | Expression::Number
+            | Expression::Difficulty
+            | Expression::GasLimit
+            | Expression::ChainId
+            | Expression::SelfBalance
+            | Expression::BaseFee
+            | Expression::BlobBaseFee
+            | Expression::Gas
+            | Expression::MSize
+            | Expression::Address
+            | Expression::DataOffset { .. }
+            | Expression::DataSize { .. }
+            | Expression::LoadImmutable { .. }
+            | Expression::LinkerSymbol { .. } => {}
+        }
+    }
+
+    /// Mutating variant of [`Expression::for_each_value_id`].
+    pub fn for_each_value_id_mut(&mut self, visit: &mut dyn FnMut(&mut ValueId)) {
+        match self {
+            Expression::Var(id) => visit(id),
+            Expression::Binary { lhs, rhs, .. } => {
+                visit(&mut lhs.id);
+                visit(&mut rhs.id);
+            }
+            Expression::Ternary { a, b, n, .. } => {
+                visit(&mut a.id);
+                visit(&mut b.id);
+                visit(&mut n.id);
+            }
+            Expression::Unary { operand, .. } => visit(&mut operand.id),
+            Expression::CallDataLoad { offset } | Expression::MLoad { offset, .. } => {
+                visit(&mut offset.id)
+            }
+            Expression::ExtCodeSize { address }
+            | Expression::ExtCodeHash { address }
+            | Expression::Balance { address } => visit(&mut address.id),
+            Expression::BlockHash { number } => visit(&mut number.id),
+            Expression::BlobHash { index } => visit(&mut index.id),
+            Expression::SLoad { key, .. } | Expression::TLoad { key } => visit(&mut key.id),
+            Expression::Call { arguments, .. } => {
+                for argument in arguments {
+                    visit(&mut argument.id);
+                }
+            }
+            Expression::Truncate { value, .. }
+            | Expression::ZeroExtend { value, .. }
+            | Expression::SignExtendTo { value, .. } => visit(&mut value.id),
+            Expression::Keccak256 { offset, length } => {
+                visit(&mut offset.id);
+                visit(&mut length.id);
+            }
+            Expression::Keccak256Pair { word0, word1 } => {
+                visit(&mut word0.id);
+                visit(&mut word1.id);
+            }
+            Expression::MappingSLoad { key, slot } => {
+                visit(&mut key.id);
+                visit(&mut slot.id);
+            }
+            Expression::Keccak256Single { word0 } => visit(&mut word0.id),
+            Expression::Literal { .. }
+            | Expression::CallValue
+            | Expression::Caller
+            | Expression::Origin
+            | Expression::CallDataSize
+            | Expression::CodeSize
+            | Expression::GasPrice
+            | Expression::ReturnDataSize
+            | Expression::Coinbase
+            | Expression::Timestamp
+            | Expression::Number
+            | Expression::Difficulty
+            | Expression::GasLimit
+            | Expression::ChainId
+            | Expression::SelfBalance
+            | Expression::BaseFee
+            | Expression::BlobBaseFee
+            | Expression::Gas
+            | Expression::MSize
+            | Expression::Address
+            | Expression::DataOffset { .. }
+            | Expression::DataSize { .. }
+            | Expression::LoadImmutable { .. }
+            | Expression::LinkerSymbol { .. } => {}
+        }
+    }
+}
+
+/// Mutating variant of [`for_each_statement`]. Visits every statement in a slice
+/// recursively. `visit` is called on each statement *before* recursion into its
+/// nested regions, so a callback that swaps a statement's variant will not
+/// have its new nested regions re-visited. For our use cases the callback
+/// only mutates inner fields, never changes the variant.
+pub fn for_each_statement_mut(statements: &mut [Statement], visit: &mut dyn FnMut(&mut Statement)) {
+    for statement in statements.iter_mut() {
+        visit(statement);
+        match statement {
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                for_each_statement_mut(&mut then_region.statements, visit);
+                if let Some(region) = else_region {
+                    for_each_statement_mut(&mut region.statements, visit);
+                }
+            }
+            Statement::Switch { cases, default, .. } => {
+                for case in cases {
+                    for_each_statement_mut(&mut case.body.statements, visit);
+                }
+                if let Some(region) = default {
+                    for_each_statement_mut(&mut region.statements, visit);
+                }
+            }
+            Statement::For {
+                condition_statements,
+                body,
+                post,
+                ..
+            } => {
+                for_each_statement_mut(condition_statements, visit);
+                for_each_statement_mut(&mut body.statements, visit);
+                for_each_statement_mut(&mut post.statements, visit);
+            }
+            Statement::Block(region) => for_each_statement_mut(&mut region.statements, visit),
+            _ => {}
+        }
+    }
+}
+
+/// Visits every statement in a slice recursively, calling `visit` on each one.
+/// Handles structural recursion into If/Switch/For/Block regions.
+pub fn for_each_statement(statements: &[Statement], visit: &mut dyn FnMut(&Statement)) {
+    for statement in statements {
+        visit(statement);
+        match statement {
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                for_each_statement(&then_region.statements, visit);
+                if let Some(region) = else_region {
+                    for_each_statement(&region.statements, visit);
+                }
+            }
+            Statement::Switch { cases, default, .. } => {
+                for case in cases {
+                    for_each_statement(&case.body.statements, visit);
+                }
+                if let Some(region) = default {
+                    for_each_statement(&region.statements, visit);
+                }
+            }
+            Statement::For {
+                condition_statements,
+                body,
+                post,
+                ..
+            } => {
+                for_each_statement(condition_statements, visit);
+                for_each_statement(&body.statements, visit);
+                for_each_statement(&post.statements, visit);
+            }
+            Statement::Block(region) => for_each_statement(&region.statements, visit),
+            _ => {}
+        }
+    }
+}
+
+fn count_syscalls_in_block(block: &Block) -> SyscallCounts {
+    let mut counts = SyscallCounts::default();
+    for_each_statement(&block.statements, &mut |statement| {
+        if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
+            match value {
+                Expression::CallValue => counts.callvalue += 1,
+                Expression::CallDataLoad { .. } => counts.calldataload += 1,
+                Expression::Caller => counts.caller += 1,
+                _ => {}
+            }
+        }
+    });
+    counts
+}
+
+fn count_heap_ops_in_block(block: &Block) -> usize {
+    let mut count = 0usize;
+    for_each_statement(&block.statements, &mut |statement| match statement {
+        Statement::MStore { .. } | Statement::MStore8 { .. } | Statement::MCopy { .. } => {
+            count += 1;
+        }
+        Statement::Let {
+            value: Expression::MLoad { .. },
+            ..
+        } => count += 1,
+        _ => {}
+    });
+    count
+}
+
+fn count_keccak_single_in_block(block: &Block) -> usize {
+    let mut count = 0usize;
+    for_each_statement(&block.statements, &mut |statement| {
+        if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
+            if matches!(value, Expression::Keccak256Single { .. }) {
+                count += 1;
+            }
+        }
+    });
+    count
+}
+
+fn count_error_string_reverts_in_block(block: &Block, counts: &mut BTreeMap<usize, usize>) {
+    for_each_statement(&block.statements, &mut |statement| {
+        if let Statement::ErrorStringRevert { data, .. } = statement {
+            *counts.entry(data.len()).or_insert(0) += 1;
+        }
+    });
+}
+
+fn count_custom_error_reverts_in_block(block: &Block, counts: &mut BTreeMap<usize, usize>) {
+    for_each_statement(&block.statements, &mut |statement| {
+        if let Statement::CustomErrorRevert { arguments, .. } = statement {
+            *counts.entry(arguments.len()).or_insert(0) += 1;
+        }
+    });
+}
+
+/// Reports whether the block evaluates `msize()` anywhere.
+///
+/// `For::condition` is the only expression position the IR does not materialize into a preceding
+/// `Let`, so `for_each_statement` never surfaces it as a `value`; it is therefore inspected
+/// explicitly. A bare `for {} msize() {}` keeps `msize` only in the condition. Missing it makes
+/// native stores skip the heap-size watermark update, and `msize` then reads stale.
+fn has_msize_in_block(block: &Block) -> bool {
+    let mut found = false;
+    for_each_statement(&block.statements, &mut |statement| match statement {
+        Statement::Let { value, .. } | Statement::Expression(value) => {
+            if matches!(value, Expression::MSize) {
+                found = true;
+            }
+        }
+        Statement::For { condition, .. } => {
+            if matches!(condition, Expression::MSize) {
+                found = true;
+            }
+        }
+        _ => {}
+    });
+    found
+}

@@ -12,6 +12,9 @@ pub static EXTENSION_ABI: &str = "abi";
 /// The Yul IR file extension.
 pub static EXTENSION_YUL: &str = "yul";
 
+/// The newyork IR debug dump file extension.
+pub static EXTENSION_NEWYORK: &str = "newyork";
+
 /// The EVM file extension.
 pub static EXTENSION_EVM: &str = "evm";
 

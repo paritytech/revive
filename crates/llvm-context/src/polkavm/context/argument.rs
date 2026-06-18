@@ -53,6 +53,11 @@ impl<'ctx> Argument<'ctx> {
         self
     }
 
+    /// Returns true if the argument holds an LLVM register value (not a pointer).
+    pub fn is_register(&self) -> bool {
+        matches!(&self.value, Value::Register(_))
+    }
+
     /// Returns the inner LLVM value.
     ///
     /// Panics if `self` is a pointer argument.

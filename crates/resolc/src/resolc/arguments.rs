@@ -57,10 +57,20 @@ pub struct Arguments {
     #[arg(long = "overwrite")]
     pub overwrite: bool,
 
-    /// Set the optimization parameter -O[0 | 1 | 2 | 3 | s | z].
+    /// Set the LLVM optimization parameter -O[0 | 1 | 2 | 3 | s | z].
     /// Use `3` for best performance and `z` for minimal size.
+    /// Controls the LLVM optimization level only; independent of `--newyork`,
+    /// which selects the IR lowering pipeline.
     #[arg(short = 'O', long = "optimization", default_value = "z")]
     pub optimization: char,
+
+    /// Route Yul lowering through the experimental newyork IR pipeline.
+    ///
+    /// Orthogonal to the input mode: composes with `--yul`, `--standard-json`,
+    /// `--combined-json`, and the default Solidity mode. Equivalent to setting the
+    /// `settings.polkavm.newyork` field in standard JSON input. Off by default.
+    #[arg(long = "newyork")]
+    pub newyork: bool,
 
     /// Disable the `solc` optimizer.
     /// Use it if your project uses the `MSIZE` instruction, or in other cases.
@@ -252,7 +262,10 @@ impl Arguments {
         let acceptable_count = 1 + self.standard_json.is_some() as usize;
         if modes > acceptable_count {
             messages.push(SolcStandardJsonOutputError::new_error(
-            "Only one modes is allowed at the same time: Yul, LLVM IR, PolkaVM assembly, combined JSON, standard JSON.",None,None));
+                "Only one mode is allowed at the same time: Yul, combined JSON, standard JSON, link.",
+                None,
+                None,
+            ));
         }
 
         if self.yul && !self.libraries.is_empty() {

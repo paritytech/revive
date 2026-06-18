@@ -2,7 +2,15 @@
 
 ## Unreleased
 
-Supported `polkadot-sdk` rev: `2603`
+Supported `polkadot-sdk` rev: `2604.2.0`
+
+### Changed
+
+- Updated `polkadot-sdk` to `2604.2.0`
+
+### Added
+
+- Experimental newyork IR optimization pipeline, selectable via the `--newyork` CLI flag or the `settings.polkavm.newyork` standard JSON input field. Off by default. [#519](https://github.com/paritytech/revive/pull/519)
 
 ## v1.2.0
 

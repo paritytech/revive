@@ -111,6 +111,8 @@ fn main_inner(
         initialize_llvm(
             PolkaVMTarget::PVM,
             resolc::DEFAULT_EXECUTABLE_NAME,
+            input.optimizer_settings.level_middle_end_size,
+            input.contract.ir.is_newyork(),
             &input.llvm_arguments,
         );
 
@@ -124,9 +126,15 @@ fn main_inner(
         }
     }
 
+    let mut optimizer_settings = OptimizerSettings::try_from_cli(arguments.optimization)?;
+    optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
+    optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
+
     initialize_llvm(
         PolkaVMTarget::PVM,
         resolc::DEFAULT_EXECUTABLE_NAME,
+        optimizer_settings.level_middle_end_size,
+        arguments.newyork,
         &arguments.llvm_arguments,
     );
 
@@ -167,14 +175,12 @@ fn main_inner(
         None => None,
     };
 
-    let mut optimizer_settings = OptimizerSettings::try_from_cli(arguments.optimization)?;
-    optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
-    optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
-
     let memory_config = SolcStandardJsonInputSettingsPolkaVMMemory::new(
         Some(arguments.heap_size),
         Some(arguments.stack_size),
     );
+
+    let use_newyork = arguments.newyork;
 
     let build = if arguments.yul {
         resolc::yul(
@@ -187,6 +193,7 @@ fn main_inner(
             debug_config,
             &arguments.llvm_arguments,
             memory_config,
+            use_newyork,
         )
     } else if let Some(standard_json) = arguments.standard_json {
         resolc::standard_json(
@@ -199,6 +206,7 @@ fn main_inner(
             arguments.allow_paths,
             debug_config,
             arguments.detect_missing_libraries,
+            use_newyork,
         )?;
         return Ok(());
     } else if let Some(format) = arguments.combined_json {
@@ -222,6 +230,7 @@ fn main_inner(
             arguments.overwrite,
             arguments.llvm_arguments,
             memory_config,
+            use_newyork,
         )?;
         return Ok(());
     } else if arguments.link {
@@ -244,6 +253,7 @@ fn main_inner(
             debug_config,
             arguments.llvm_arguments,
             memory_config,
+            use_newyork,
         )
     }?;
 

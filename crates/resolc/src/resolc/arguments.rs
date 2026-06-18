@@ -66,9 +66,9 @@ pub struct Arguments {
 
     /// Route Yul lowering through the experimental newyork IR pipeline.
     ///
-    /// Orthogonal to the input mode: composes with `--yul`, `--standard-json`,
-    /// `--combined-json`, and the default Solidity mode. Equivalent to setting the
-    /// `settings.polkavm.newyork` field in standard JSON input. Off by default.
+    /// Composes with `--yul`, `--combined-json`, and the default Solidity mode. In
+    /// standard JSON mode this flag is rejected; enable the pipeline via the
+    /// `settings.polkavm.newyork` input field instead. Off by default.
     #[arg(long = "newyork")]
     pub newyork: bool,
 
@@ -406,6 +406,13 @@ impl Arguments {
             if self.emit_source_debug_info {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Debug info must be requested in standard JSON input polkavm settings.",
+                    None,
+                    None,
+                ));
+            }
+            if self.newyork {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "The newyork IR pipeline must be enabled in standard JSON input polkavm settings.",
                     None,
                     None,
                 ));

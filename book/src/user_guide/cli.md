@@ -11,7 +11,7 @@ We aim to keep the `resolc` CLI usage close to `solc`. There are a few things an
 -O, --optimization <OPTIMIZATION>
 ```
 
-`resolc` exposes the optimization level setting for the LLVM backend. The performance and size of compiled contracts varies wiedly between different optimization levels.
+`resolc` exposes the optimization level setting for the LLVM backend. The performance and size of compiled contracts varies widely between different optimization levels. (This is independent of `--newyork` which selects the IR lowering pipeline.)
 
 Valid levels are the following:
 - `0`: No optimizations are applied.
@@ -22,6 +22,13 @@ Valid levels are the following:
 - `z`: Aggressively optimize for code size.
 
 By default, `-Oz` is applied.
+
+### newyork IR pipeline
+```bash
+--newyork
+```
+
+Enables the [newyork optimizer](../developer_guide/newyork_optimizer.md) to reduced compiled contract code size, by routing Yul lowering through the **experimental** newyork IR pipeline instead of the standard Yul-to-LLVM path. Composes with `--yul`, `--combined-json`, and the default Solidity mode. In standard JSON mode this flag is rejected; enable the pipeline via the [`settings.polkavm.newyork`](std_json.md#settingspolkavmnewyork) input field instead. Off by default.
 
 ### Stack size
 ```bash
@@ -69,7 +76,7 @@ Specify the path to the `solc` executable. By default, the one in `${PATH}` is u
 --debug-output-dir <DEBUG_OUTPUT_DIRECTORY>
 ```
 
-Dump all intermediary compiler artifacts to files in the specified directory. This includes the YUL IR, optimized and unoptimized LLVM IR, the ELF object and the PVM assembly. Useful for debugging and development purposes.
+Dump all intermediary compiler artifacts to files in the specified directory. This includes the Yul IR, optimized and unoptimized LLVM IR, the ELF object and the PVM assembly. When the newyork pipeline is active, the [newyork IR is additionally dumped](../developer_guide/newyork_optimizer.md#debug-output) (the final IR, a pre-late-pass snapshot, and heap and memory optimization data). Useful for debugging and development purposes.
 
 ### Debug info
 ```bash
@@ -110,4 +117,3 @@ Example:
 > [!NOTE]
 >
 > Tooling is supposed to take care of this. In the future, we may append explicit linkage data to simplify the deploy time linking feature.
-

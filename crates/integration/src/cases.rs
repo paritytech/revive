@@ -329,6 +329,20 @@ case!(
     const_return_overflow_bug,
 );
 
+sol!(
+    contract LinkerI32BoundaryFoldBug {
+        function test(int256 a0, int256 a2) external pure returns (int256);
+    }
+);
+case!(
+    "LinkerI32BoundaryFoldBug.sol",
+    LinkerI32BoundaryFoldBug,
+    testCall,
+    linker_i32_boundary_fold_bug,
+    a0: I256,
+    a2: I256
+);
+
 // `PanicInterveneBug` has only a `fallback()` — invoked by sending
 // raw calldata that doesn't match any selector. Empty calldata works.
 case!(

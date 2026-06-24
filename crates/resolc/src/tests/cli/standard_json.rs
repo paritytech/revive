@@ -557,6 +557,11 @@ fn invalid_extra_arguments() {
             error_message:
                 "LLVM arguments must be configured in standard JSON input polkavm settings",
         },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--newyork"],
+            error_message:
+                "The newyork IR pipeline must be enabled in standard JSON input polkavm settings",
+        },
     ];
 
     for case in cases {
@@ -607,46 +612,6 @@ fn pvm_codegen_newyork_input_setting() {
         bytecode_object(&enabled_output, "C.sol", "C"),
         bytecode_object(&disabled_output, "C.sol", "C"),
         "settings.polkavm.newyork should select a different pipeline than the default"
-    );
-}
-
-/// The `--newyork` CLI flag selects the newyork pipeline for standard JSON input
-/// and produces the same bytecode as the `settings.polkavm.newyork` input field.
-#[test]
-fn pvm_codegen_newyork_cli_flag() {
-    let stock =
-        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NEWYORK_DISABLED_PATH);
-    assert_command_success(&stock, "the stock standard JSON input should build");
-    let flagged = execute_resolc_with_stdin_input(
-        &[JSON_OPTION, "--newyork"],
-        STANDARD_JSON_NEWYORK_DISABLED_PATH,
-    );
-    assert_command_success(&flagged, "the --newyork flag should build the stock input");
-
-    let stock_output = to_solc_standard_json_output(&stock.stdout);
-    let flagged_output = to_solc_standard_json_output(&flagged.stdout);
-    assert_no_errors(&stock_output);
-    assert_no_errors(&flagged_output);
-
-    let stock_bytecode = bytecode_object(&stock_output, "C.sol", "C");
-    let flagged_bytecode = bytecode_object(&flagged_output, "C.sol", "C");
-    assert_ne!(
-        stock_bytecode, flagged_bytecode,
-        "--newyork should select a different pipeline than the default"
-    );
-
-    let via_field =
-        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NEWYORK_ENABLED_PATH);
-    assert_command_success(
-        &via_field,
-        "the newyork-enabled standard JSON input should build",
-    );
-    let via_field_output = to_solc_standard_json_output(&via_field.stdout);
-    assert_no_errors(&via_field_output);
-    assert_eq!(
-        flagged_bytecode,
-        bytecode_object(&via_field_output, "C.sol", "C"),
-        "--newyork and settings.polkavm.newyork should select the same pipeline"
     );
 }
 

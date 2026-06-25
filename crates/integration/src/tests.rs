@@ -506,7 +506,6 @@ fn const_return_offset_overflow_traps() {
 /// clean compile. solc's EVM backend has no such narrowing (all ops are
 /// 256-bit) so the same source compiles cleanly there.
 #[test]
-#[ignore = "needs the next PVM fix release"]
 fn linker_i32_boundary_constant_fold() {
     let mut actions = instantiate(
         "contracts/LinkerI32BoundaryFoldBug.sol",

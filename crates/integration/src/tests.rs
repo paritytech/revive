@@ -494,6 +494,36 @@ fn const_return_offset_overflow_traps() {
     run_differential(actions);
 }
 
+/// Regression: at `-O3` LLVM proves the low 64 bits of
+/// `(a2 + (a0 << 64)) ^ a2` cancel and narrows the trailing
+/// `| 0x80000000 | 0x80000001` down to native i32 lane operations,
+/// materializing `0x80000000` (`2^31`) via `lui x, 0x80000`. The
+/// polkavm-linker's constant propagation then folds the narrowed 32-bit
+/// op through `OperationKind::apply_const`, whose `op32!` macro converts
+/// `i64 -> i32` with `try_into().expect("operand overflow")`. The tracked
+/// constant `0x80000000` does not fit the signed i32 range, so the fold
+/// panics (`operand overflow: TryFromIntError`) — an ICE instead of a
+/// clean compile. solc's EVM backend has no such narrowing (all ops are
+/// 256-bit) so the same source compiles cleanly there.
+#[test]
+fn linker_i32_boundary_constant_fold() {
+    let mut actions = instantiate(
+        "contracts/LinkerI32BoundaryFoldBug.sol",
+        "LinkerI32BoundaryFoldBug",
+    );
+    let a0 = I256::try_from(0x0123456789abcdef_i64).unwrap();
+    let a2 = I256::try_from(-0x7654321076543210_i64).unwrap();
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::linker_i32_boundary_fold_bug(a0, a2).calldata,
+    });
+    run_differential(actions);
+}
+
 /// Regression: `simplify.rs::find_panic_pattern_backwards` walks the
 /// statement list backwards from `revert(0, 0x24)` and accepts an
 /// `mstore` at offsets ≠ 0 / 4 as "safe filler" — it skips it in the

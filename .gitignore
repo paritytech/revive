@@ -23,4 +23,7 @@ playwright-report
 .cache
 emsdk
 docs-tmp
+# Coverage HTML staged by `make coverage` and its rendered copy under docs/.
+/book/src/coverage/
+/docs/coverage/
 workdir

@@ -14,6 +14,7 @@ pub use self::polkavm::build as polkavm_build;
 pub use self::polkavm::context::address_space::AddressSpace as PolkaVMAddressSpace;
 pub use self::polkavm::context::argument::Argument as PolkaVMArgument;
 pub use self::polkavm::context::attribute::Attribute as PolkaVMAttribute;
+pub use self::polkavm::context::attribute::MemoryEffect as PolkaVMMemoryEffect;
 pub use self::polkavm::context::build::Build as PolkaVMBuild;
 pub use self::polkavm::context::code_type::CodeType as PolkaVMCodeType;
 pub use self::polkavm::context::debug_info::DebugInfo;
@@ -27,7 +28,14 @@ pub use self::polkavm::context::function::runtime::arithmetics::SignedDivision a
 pub use self::polkavm::context::function::runtime::arithmetics::SignedRemainder as PolkaVMSignedRemainderFunction;
 pub use self::polkavm::context::function::runtime::deploy_code::DeployCode as PolkaVMDeployCodeFunction;
 pub use self::polkavm::context::function::runtime::entry::Entry as PolkaVMEntryFunction;
+pub use self::polkavm::context::function::runtime::revive::CallDataLoad as PolkaVMCallDataLoadFunction;
+pub use self::polkavm::context::function::runtime::revive::CallValue as PolkaVMCallValueFunction;
+pub use self::polkavm::context::function::runtime::revive::CallValueNonzero as PolkaVMCallValueNonzeroFunction;
+pub use self::polkavm::context::function::runtime::revive::Caller as PolkaVMCallerFunction;
 pub use self::polkavm::context::function::runtime::revive::Exit as PolkaVMExitFunction;
+pub use self::polkavm::context::function::runtime::revive::Revert as PolkaVMRevertFunction;
+pub use self::polkavm::context::function::runtime::revive::RevertEmpty as PolkaVMRevertEmptyFunction;
+pub use self::polkavm::context::function::runtime::revive::RevertPanic as PolkaVMRevertPanicFunction;
 pub use self::polkavm::context::function::runtime::revive::WordToPointer as PolkaVMWordToPointerFunction;
 pub use self::polkavm::context::function::runtime::runtime_code::RuntimeCode as PolkaVMRuntimeCodeFunction;
 pub use self::polkavm::context::function::runtime::sbrk::Sbrk as PolkaVMSbrkFunction;
@@ -37,8 +45,12 @@ pub use self::polkavm::context::function::runtime::FUNCTION_RUNTIME_CODE as Polk
 pub use self::polkavm::context::function::yul_data::YulData as PolkaVMFunctionYulData;
 pub use self::polkavm::context::function::Function as PolkaVMFunction;
 pub use self::polkavm::context::global::Global as PolkaVMGlobal;
+pub use self::polkavm::context::pointer::heap::Keccak256OneWord as PolkaVMKeccak256OneWordFunction;
+pub use self::polkavm::context::pointer::heap::Keccak256TwoWords as PolkaVMKeccak256TwoWordsFunction;
 pub use self::polkavm::context::pointer::heap::LoadWord as PolkaVMLoadHeapWordFunction;
+pub use self::polkavm::context::pointer::heap::LoadWordNative as PolkaVMLoadHeapWordNativeFunction;
 pub use self::polkavm::context::pointer::heap::StoreWord as PolkaVMStoreHeapWordFunction;
+pub use self::polkavm::context::pointer::heap::StoreWordNative as PolkaVMStoreHeapWordNativeFunction;
 pub use self::polkavm::context::pointer::storage::LoadTransientWord as PolkaVMLoadTransientStorageWordFunction;
 pub use self::polkavm::context::pointer::storage::LoadWord as PolkaVMLoadStorageWordFunction;
 pub use self::polkavm::context::pointer::storage::StoreTransientWord as PolkaVMStoreTransientStorageWordFunction;
@@ -84,19 +96,62 @@ pub(crate) mod target_machine;
 
 static DID_INITIALIZE: OnceLock<()> = OnceLock::new();
 
+/// The global LLVM options applied at [`OptimizerSettingsSizeLevel::Z`] **on the newyork path**.
+///
+/// These trade execution speed for code size: the machine outliner replaces repeated
+/// instruction sequences with calls, disabling LICM avoids i256 register pressure on the
+/// PVM target (rv64e) where hoisting causes excessive stack spills, and `ext-tsp-for-size`
+/// optimizes block layout for size instead of speed. At any other optimization level the
+/// upstream LLVM defaults apply: paying execution gas for smaller code is only acceptable
+/// when the user explicitly asked for `-Oz`.
+///
+/// They are applied only for modules produced by the newyork IR generator. Like the
+/// aggressive code-size pass pipeline in [`crate::optimizer::Optimizer::run`] and the
+/// `+unaligned-scalar-mem` target feature, these knobs are tuned and validated against
+/// newyork's outlined code; the stock Yul path keeps the upstream LLVM defaults it was
+/// validated against (matching `main`).
+const SIZE_LEVEL_Z_ARGUMENTS: &[&str] = &[
+    "--disable-licm-promotion",
+    "--disable-machine-licm",
+    "--enable-machine-outliner",
+    "--machine-outliner-reruns=2",
+    "--disable-early-taildup=true",
+    "--apply-ext-tsp-for-size=true",
+    "--attributor-allow-deep-wrappers=true",
+    "--hoist-common-insts=true",
+];
+
 /// Initializes the LLVM compiler backend.
 ///
 /// This is a no-op if called subsequentially.
 ///
 /// `llvm_arguments` are passed as-is to the LLVM CL options parser.
-pub fn initialize_llvm(target: PolkaVMTarget, name: &str, llvm_arguments: &[String]) {
+///
+/// When `use_newyork` is set and the size level is [`OptimizerSettingsSizeLevel::Z`], the
+/// `SIZE_LEVEL_Z_ARGUMENTS` are prepended. They are gated on the newyork path because they
+/// are validated against its codegen; the stock Yul path must keep the upstream defaults.
+/// LLVM parses command line options once per process, so the first caller wins; production
+/// builds are unaffected because every contract is compiled in its own recursive process
+/// with its own optimizer settings and IR generator.
+pub fn initialize_llvm(
+    target: PolkaVMTarget,
+    name: &str,
+    size_level: OptimizerSettingsSizeLevel,
+    use_newyork: bool,
+    llvm_arguments: &[String],
+) {
     let Ok(_) = DID_INITIALIZE.set(()) else {
         return; // Tests don't go through a recursive process
     };
 
-    let argv = [name.to_string()]
-        .iter()
-        .chain(llvm_arguments)
+    let size_arguments = if use_newyork && size_level == OptimizerSettingsSizeLevel::Z {
+        SIZE_LEVEL_Z_ARGUMENTS
+    } else {
+        &[]
+    };
+    let argv = std::iter::once(name)
+        .chain(size_arguments.iter().copied())
+        .chain(llvm_arguments.iter().map(String::as_str))
         .map(|arg| CString::new(arg.as_bytes()).unwrap())
         .collect::<Vec<_>>();
     let argv: Vec<*const libc::c_char> = argv.iter().map(|arg| arg.as_ptr()).collect();

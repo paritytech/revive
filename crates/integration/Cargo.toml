@@ -1,11 +1,14 @@
 [package]
 name = "revive-integration"
-version = "1.2.0"
+version = "1.3.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
 authors.workspace = true
 description = "revive compiler integration test cases"
+
+[features]
+newyork = ["resolc/newyork"]
 
 [dependencies]
 alloy-primitives = { workspace = true }

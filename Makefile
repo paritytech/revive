@@ -71,6 +71,7 @@ test: format clippy machete test-workspace install-revive-runner doc test-book
 
 test-integration: install-bin
 	cargo test --package revive-integration
+	cargo test --package revive-integration --features newyork
 
 test-resolc: install
 	cargo test --package resolc --all-targets
@@ -80,6 +81,7 @@ test-yul:
 
 test-workspace: install
 	cargo test --workspace --all-targets --exclude revive-llvm-builder
+	cargo test --package revive-integration --features newyork
 
 test-wasm: install-wasm
 	npm run test:wasm

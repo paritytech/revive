@@ -2,7 +2,20 @@
 
 ## Unreleased
 
-Supported `polkadot-sdk` rev: `2603`
+Supported `polkadot-sdk` rev: `2604.2.0`
+
+## v1.3.0
+
+Supported `polkadot-sdk` rev: `2604.2.0`
+
+### Added
+
+- The newyork IR code size optimization pipeline, selectable via the `--newyork` CLI flag or the `settings.polkavm.newyork` standard JSON input field.
+  This can reduce code size by up to 50%. Considered a new and experimental feature, switched off by default. [#519](https://github.com/paritytech/revive/pull/519)
+
+### Changed
+
+- The latest supported `polkadot-sdk` version is now `2604.2.0`
 
 ## v1.2.0
 

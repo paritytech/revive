@@ -27,6 +27,7 @@ use crate::build::Build;
 use crate::missing_libraries::MissingLibraries;
 use crate::process::input::Input as ProcessInput;
 use crate::process::Process;
+use crate::project::contract::ir::newyork::NewYork;
 use crate::project::contract::ir::yul::Yul;
 use crate::project::contract::ir::IR;
 use crate::project::contract::Contract;
@@ -142,11 +143,16 @@ impl Project {
     }
 
     /// Parses the Yul source code file and returns the source data.
+    ///
+    /// When `use_newyork` is `true`, each source is parsed into the `IR::NewYork`
+    /// variant; otherwise into `IR::Yul`. The downstream compile pipeline dispatches
+    /// on the IR variant.
     pub fn try_from_yul_paths(
         paths: &[PathBuf],
         solc_output: Option<&mut SolcStandardJsonOutput>,
         libraries: SolcStandardJsonInputSettingsLibraries,
         debug_config: &DebugConfig,
+        use_newyork: bool,
     ) -> anyhow::Result<Self> {
         let sources = paths
             .iter()
@@ -155,15 +161,18 @@ impl Project {
                 (path.to_string_lossy().to_string(), source)
             })
             .collect::<BTreeMap<String, SolcStandardJsonInputSource>>();
-        Self::try_from_yul_sources(sources, libraries, solc_output, debug_config)
+        Self::try_from_yul_sources(sources, libraries, solc_output, debug_config, use_newyork)
     }
 
     /// Parses the test Yul source code string and returns the source data.
+    ///
+    /// See [`Self::try_from_yul_paths`] for the meaning of `use_newyork`.
     pub fn try_from_yul_sources(
         sources: BTreeMap<String, SolcStandardJsonInputSource>,
         libraries: SolcStandardJsonInputSettingsLibraries,
         mut solc_output: Option<&mut SolcStandardJsonOutput>,
         debug_config: &DebugConfig,
+        use_newyork: bool,
     ) -> anyhow::Result<Self> {
         #[cfg(feature = "parallel")]
         let iter = sources.into_par_iter();
@@ -176,11 +185,11 @@ impl Project {
                     Ok(()) => source.take_content().expect("Always exists"),
                     Err(error) => return Some((path, Err(error))),
                 };
-                let ir = match Yul::try_from_source(&source_code) {
-                    Ok(ir) => ir?,
+                let (ir, object_identifier) = match parse_ir(&source_code, use_newyork) {
+                    Ok(Some(parsed)) => parsed,
+                    Ok(None) => return None,
                     Err(error) => return Some((path, Err(error))),
                 };
-                let object_identifier = ir.object.identifier.clone();
                 let name = ContractIdentifier::new(path.clone(), Some(object_identifier));
                 let full_path = name.full_path.clone();
                 if let Err(error) = debug_config.dump_yul(&name.full_path, &source_code) {
@@ -189,7 +198,7 @@ impl Project {
                 let source_metadata = serde_json::json!({
                     "source_hash": Keccak256::from_slice(source_code.as_bytes()).to_string()
                 });
-                let contract = Contract::new(name, ir.into(), source_metadata);
+                let contract = Contract::new(name, ir, source_metadata);
                 Some((full_path, Ok(contract)))
             })
             .collect::<BTreeMap<String, anyhow::Result<Contract>>>();
@@ -210,11 +219,15 @@ impl Project {
     }
 
     /// Converts the `solc` JSON output into a convenient project.
+    ///
+    /// When `use_newyork` is `true`, each contract's optimized Yul IR is routed through
+    /// the newyork IR pipeline; otherwise through the direct Yul-to-LLVM path.
     pub fn try_from_standard_json_output(
         solc_output: &mut SolcStandardJsonOutput,
         libraries: SolcStandardJsonInputSettingsLibraries,
         solc_version: &SolcVersion,
         debug_config: &DebugConfig,
+        use_newyork: bool,
     ) -> anyhow::Result<Self> {
         let mut input_contracts = Vec::with_capacity(solc_output.contracts.len());
         for (path, file) in solc_output.contracts.iter() {
@@ -231,10 +244,9 @@ impl Project {
 
         let results = iter
             .filter_map(|(name, contract)| {
-                let ir = match Yul::try_from_source(&contract.ir_optimized)
-                    .map(|yul| yul.map(IR::from))
-                {
-                    Ok(ir) => ir?,
+                let ir = match parse_ir(&contract.ir_optimized, use_newyork) {
+                    Ok(Some((ir, _))) => ir,
+                    Ok(None) => return None,
                     Err(error) => return Some((name.full_path, Err(error))),
                 };
                 if let Err(error) = debug_config.dump_yul(&name.full_path, &contract.ir_optimized) {
@@ -259,5 +271,26 @@ impl Project {
             contracts,
             libraries,
         ))
+    }
+}
+
+/// Parses a Yul source string into either the `IR::Yul` or `IR::NewYork` variant,
+/// depending on `use_newyork`. Returns `Ok(None)` for empty sources.
+///
+/// Yields the parsed IR together with the Yul object identifier (used for the
+/// `ContractIdentifier`).
+fn parse_ir(source_code: &str, use_newyork: bool) -> anyhow::Result<Option<(IR, String)>> {
+    if use_newyork {
+        let Some(ir) = NewYork::try_from_source(source_code)? else {
+            return Ok(None);
+        };
+        let identifier = ir.yul_object.identifier.clone();
+        Ok(Some((IR::from(ir), identifier)))
+    } else {
+        let Some(ir) = Yul::try_from_source(source_code)? else {
+            return Ok(None);
+        };
+        let identifier = ir.object.identifier.clone();
+        Ok(Some((IR::from(ir), identifier)))
     }
 }

@@ -1,7 +1,8 @@
 //! The debug IR type.
 
 use revive_common::{
-    EXTENSION_LLVM_SOURCE, EXTENSION_OBJECT, EXTENSION_POLKAVM_ASSEMBLY, EXTENSION_YUL,
+    EXTENSION_LLVM_SOURCE, EXTENSION_NEWYORK, EXTENSION_OBJECT, EXTENSION_POLKAVM_ASSEMBLY,
+    EXTENSION_YUL,
 };
 
 /// The debug IR type.
@@ -16,6 +17,8 @@ pub enum IRType {
     Assembly,
     /// Whether to dump the ELF shared object
     Object,
+    /// Whether to dump the newyork IR.
+    NewYork,
 }
 
 impl IRType {
@@ -26,6 +29,7 @@ impl IRType {
             Self::LLVM => EXTENSION_LLVM_SOURCE,
             Self::Assembly => EXTENSION_POLKAVM_ASSEMBLY,
             Self::Object => EXTENSION_OBJECT,
+            Self::NewYork => EXTENSION_NEWYORK,
         }
     }
 }

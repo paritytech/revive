@@ -28,6 +28,7 @@ jobs:
       # Use `reusable-build` and not `${{ github.workflow }}` here so that callers share the same concurrency group.
       group: reusable-build-x86_64-unknown-linux-musl-${{ github.sha }}
       cancel-in-progress: false
+      queue: max
     steps:
       - name: Checkout revive
         uses: actions/checkout@v6

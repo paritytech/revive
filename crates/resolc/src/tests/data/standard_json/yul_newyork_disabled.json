@@ -1,0 +1,12 @@
+{
+    "language": "Yul",
+    "sources": {
+        "Test": {
+            "content": "object \"Test\" { code { let s := datasize(\"Test_deployed\") codecopy(0, dataoffset(\"Test_deployed\"), s) return(0, s) } object \"Test_deployed\" { code { let x := calldataload(0) let r := 0 for { let i := 0 } lt(i, 5) { i := add(i, 1) } { r := add(r, mul(x, i)) } mstore(0, r) return(0, 32) } } }"
+        }
+    },
+    "settings": {
+        "optimizer": { "enabled": true },
+        "outputSelection": { "*": { "*": ["evm.bytecode"] } }
+    }
+}

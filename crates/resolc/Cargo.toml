@@ -1,6 +1,6 @@
 [package]
 name = "resolc"
-version = "1.2.0"
+version = "1.3.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -33,6 +33,7 @@ normpath = { workspace = true }
 
 revive-common = { workspace = true }
 revive-llvm-context = { workspace = true }
+revive-newyork = { workspace = true }
 revive-solc-json-interface = { workspace = true, features = ["resolc"] }
 revive-yul = { workspace = true }
 
@@ -53,6 +54,7 @@ tempfile = { workspace = true }
 [features]
 parallel = ["rayon", "revive-solc-json-interface/parallel"]
 default = ["parallel"]
+newyork = []
 
 [[bench]]
 name = "compile"

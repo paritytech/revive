@@ -8,9 +8,11 @@ use revive_solc_json_interface::{
 use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
+    STANDARD_JSON_NEWYORK_DISABLED_PATH, STANDARD_JSON_NEWYORK_ENABLED_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
     STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
     STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH,
+    STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH, STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH,
     STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
 };
 
@@ -187,7 +189,23 @@ fn assert_standard_json_errors_contain(output: &SolcStandardJsonOutput, error_me
 
 /// Asserts that the standard JSON output has no errors with severity `error`.
 fn assert_no_errors(output: &SolcStandardJsonOutput) {
-    assert!(!output.errors.iter().any(|error| error.is_error()));
+    let mut has_errors = false;
+    for error in output.errors.iter().filter(|error| error.is_error()) {
+        eprintln!(
+            "ERROR in {}: {}",
+            error
+                .source_location
+                .as_ref()
+                .map(|l| l.file.as_str())
+                .unwrap_or("unknown"),
+            error.message,
+        );
+        has_errors = true;
+    }
+    assert!(
+        !has_errors,
+        "the standard JSON output should not contain errors"
+    );
 }
 
 /// Converts valid JSON text to `SolcStandardJsonOutput`.
@@ -539,6 +557,11 @@ fn invalid_extra_arguments() {
             error_message:
                 "LLVM arguments must be configured in standard JSON input polkavm settings",
         },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--newyork"],
+            error_message:
+                "The newyork IR pipeline must be enabled in standard JSON input polkavm settings",
+        },
     ];
 
     for case in cases {
@@ -546,4 +569,74 @@ fn invalid_extra_arguments() {
         let output = to_solc_standard_json_output(&result.stdout);
         assert_standard_json_errors_contain(&output, case.error_message);
     }
+}
+
+/// Extracts the hex PVM bytecode object of `path`/`name` from a standard JSON output.
+fn bytecode_object(output: &SolcStandardJsonOutput, path: &str, name: &str) -> String {
+    let contract = output
+        .contracts
+        .get(path)
+        .and_then(|file| file.get(name))
+        .unwrap_or_else(|| panic!("the contract `{name}` in `{path}` should exist"));
+    serde_json::to_value(contract)
+        .unwrap()
+        .get("evm")
+        .and_then(|evm| evm.get("bytecode"))
+        .and_then(|bytecode| bytecode.get("object"))
+        .and_then(|object| object.as_str())
+        .expect("the bytecode object should be present")
+        .to_owned()
+}
+
+/// The `settings.polkavm.newyork` standard JSON input field selects the newyork
+/// pipeline: for the same source it yields different bytecode than the stock
+/// pipeline, and the field is off by default (the disabled fixture omits it).
+#[test]
+fn pvm_codegen_newyork_input_setting() {
+    let enabled =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NEWYORK_ENABLED_PATH);
+    assert_command_success(
+        &enabled,
+        "the newyork-enabled standard JSON input should build",
+    );
+    let disabled =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NEWYORK_DISABLED_PATH);
+    assert_command_success(&disabled, "the stock standard JSON input should build");
+
+    let enabled_output = to_solc_standard_json_output(&enabled.stdout);
+    let disabled_output = to_solc_standard_json_output(&disabled.stdout);
+    assert_no_errors(&enabled_output);
+    assert_no_errors(&disabled_output);
+
+    assert_ne!(
+        bytecode_object(&enabled_output, "C.sol", "C"),
+        bytecode_object(&disabled_output, "C.sol", "C"),
+        "settings.polkavm.newyork should select a different pipeline than the default"
+    );
+}
+
+/// `settings.polkavm.newyork` also selects the newyork pipeline for `"language": "Yul"`
+/// standard JSON input: the same Yul source yields different bytecode than the stock pipeline.
+#[test]
+fn pvm_codegen_newyork_yul_input() {
+    let enabled =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH);
+    assert_command_success(
+        &enabled,
+        "the newyork-enabled Yul standard JSON input should build",
+    );
+    let disabled =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH);
+    assert_command_success(&disabled, "the stock Yul standard JSON input should build");
+
+    let enabled_output = to_solc_standard_json_output(&enabled.stdout);
+    let disabled_output = to_solc_standard_json_output(&disabled.stdout);
+    assert_no_errors(&enabled_output);
+    assert_no_errors(&disabled_output);
+
+    assert_ne!(
+        bytecode_object(&enabled_output, "Test", "Test"),
+        bytecode_object(&disabled_output, "Test", "Test"),
+        "settings.polkavm.newyork should select a different pipeline for Yul input"
+    );
 }

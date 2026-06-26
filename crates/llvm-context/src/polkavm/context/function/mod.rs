@@ -97,6 +97,12 @@ impl<'ctx> Function<'ctx> {
     }
 
     /// Sets the memory writer function attributes.
+    ///
+    /// `Attribute::Memory` is **not** valid here — it carries a payload that
+    /// this enum-only API cannot express. Use the `MEMORY_EFFECT` associated
+    /// constant on the `RuntimeFunction` trait (or
+    /// `inkwell::attributes::Context::create_enum_attribute` directly when
+    /// not declaring through the trait) instead.
     pub fn set_attributes(
         llvm: &'ctx inkwell::context::Context,
         declaration: Declaration<'ctx>,
@@ -104,8 +110,13 @@ impl<'ctx> Function<'ctx> {
         force: bool,
     ) {
         for attribute_kind in attributes {
+            assert_ne!(
+                *attribute_kind,
+                Attribute::Memory,
+                "Attribute::Memory cannot be set through set_attributes; \
+                 use RuntimeFunction::MEMORY_EFFECT to express the encoding",
+            );
             match attribute_kind {
-                Attribute::Memory => unimplemented!("`memory` attributes are not implemented"),
                 attribute_kind @ Attribute::AlwaysInline if force => {
                     declaration.value.remove_enum_attribute(
                         inkwell::attributes::AttributeLoc::Function,
@@ -172,16 +183,19 @@ impl<'ctx> Function<'ctx> {
             );
         }
 
-        if !optimizer.settings().is_middle_end_enabled() {
-            Self::set_attributes(
-                llvm,
-                declaration,
-                &[Attribute::NoInline, Attribute::OptimizeNone],
-                true,
-            );
-        }
-
-        Self::set_attributes(llvm, declaration, &[Attribute::NoFree], false);
+        // `NoFree` and `NoUnwind` are facts about the PVM target, not optimization heuristics:
+        //   * PVM has no `free` (the heap is bump-allocated via `sbrk`), so no Solidity-emitted
+        //     function can ever release memory.
+        //   * PVM has no stack unwinding: Solidity errors leave a frame via `revert`
+        //     (`seal_return(1, ..)` + `unreachable`), never via an unwind edge. Marking every
+        //     function `nounwind` lets LLVM elide CFI directives, lower `invoke` to `call`, and
+        //     skip exception frame setup.
+        Self::set_attributes(
+            llvm,
+            declaration,
+            &[Attribute::NoFree, Attribute::NoUnwind],
+            false,
+        );
     }
 
     /// Sets the front-end runtime attributes.

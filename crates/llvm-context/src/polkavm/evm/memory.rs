@@ -1,9 +1,13 @@
 //! Translates the heap memory operations.
 
 use inkwell::values::BasicValue;
+use inkwell::values::BasicValueEnum;
 use revive_common::BYTE_LENGTH_BYTE;
 
 use crate::polkavm::context::address_space::AddressSpace;
+use crate::polkavm::context::pointer::heap::{
+    build_efficient_load_swap, build_efficient_store_swap,
+};
 use crate::polkavm::context::pointer::Pointer;
 use crate::polkavm::context::Context;
 
@@ -81,6 +85,74 @@ pub fn store_byte<'ctx>(
         .builder()
         .build_store(pointer, value)?
         .set_alignment(BYTE_LENGTH_BYTE as u32)
-        .expect("Alignment is valid");
+        .expect("ICE: alignment is valid");
+    Ok(())
+}
+
+/// Builds an efficient 256-bit store with byte-swap at a pointer obtained via unchecked GEP
+/// (no sbrk bounds check). For use by the newyork InlineByteSwap mode on constant offsets
+/// within the static heap.
+pub fn store_bswap_unchecked<'ctx>(
+    context: &Context<'ctx>,
+    offset: inkwell::values::IntValue<'ctx>,
+    value: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<()> {
+    let pointer = context.build_heap_gep_unchecked(offset)?;
+    build_efficient_store_swap(context, pointer.value, value)
+}
+
+/// Builds an efficient 256-bit load with byte-swap at a pointer obtained via unchecked GEP
+/// (no sbrk bounds check). For use by the newyork InlineByteSwap mode on constant offsets
+/// within the static heap.
+pub fn load_bswap_unchecked<'ctx>(
+    context: &Context<'ctx>,
+    offset: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<BasicValueEnum<'ctx>> {
+    let pointer = context.build_heap_gep_unchecked(offset)?;
+    build_efficient_load_swap(context, pointer.value)
+}
+
+/// Translates the `mload` instruction without byte-swapping, inlined.
+/// This version inlines the load directly without a function call,
+/// saving both call overhead and function body size when not all
+/// memory accesses need native mode.
+pub fn load_native_inline<'ctx>(
+    context: &mut Context<'ctx>,
+    offset: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    let length = context
+        .xlen_type()
+        .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+    let pointer = context.build_heap_gep(offset, length)?;
+    let value = context
+        .builder()
+        .build_load(context.word_type(), pointer.value, "native_load")?;
+    context
+        .basic_block()
+        .get_last_instruction()
+        .expect("ICE: load instruction always exists")
+        .set_alignment(BYTE_LENGTH_BYTE as u32)
+        .expect("ICE: alignment is valid");
+    Ok(value)
+}
+
+/// Translates the `mstore` instruction without byte-swapping, inlined.
+/// This version inlines the store directly without a function call,
+/// saving both call overhead and function body size when not all
+/// memory accesses need native mode.
+pub fn store_native_inline<'ctx>(
+    context: &mut Context<'ctx>,
+    offset: inkwell::values::IntValue<'ctx>,
+    value: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<()> {
+    let length = context
+        .xlen_type()
+        .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+    let pointer = context.build_heap_gep(offset, length)?;
+    context
+        .builder()
+        .build_store(pointer.value, value)?
+        .set_alignment(BYTE_LENGTH_BYTE as u32)
+        .expect("ICE: alignment is valid");
     Ok(())
 }

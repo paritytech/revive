@@ -6,9 +6,10 @@ on:
 env:
   IS_PUSH_TO_MAIN: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
   # The exact compiler modes to use for compiling and comparing hashes by retester.
-  COMPILE_MODES: "Y M0 S+, Y M3 S+, Y Mz S+, NY Mz S+"
+  COMPILE_MODES: "NY M0 S+, NY M3 S+, NY Mz S+, NY M0 S-, NY M3 S-, NY Mz S-"
   # The compiler modes allowed to run during e2e test execution by retester.
-  E2E_ALLOWED_MODES: "Y, NY Mz S+, NY Mz S-"
+  # E.g. this can be updated to allow only `"Y, NY Mz S+"` (all Yul modes + newyork with -Oz and solc optimizer enabled).
+  E2E_ALLOWED_MODES: "Y, NY"
   SOLC_VERSION: "0.8.35"
 
 jobs:

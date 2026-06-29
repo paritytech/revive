@@ -5,8 +5,10 @@ on:
 
 env:
   IS_PUSH_TO_MAIN: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-  # The compiler modes to use for compilation by retester.
-  MODES: "Y M0 S+, Y M3 S+, Y Mz S+"
+  # The exact compiler modes to use for compiling and comparing hashes by retester.
+  COMPILE_MODES: "Y M0 S+, Y M3 S+, Y Mz S+, NY Mz S+"
+  # The compiler modes allowed to run during e2e test execution by retester.
+  E2E_ALLOWED_MODES: "Y, NY Mz S+, NY Mz S-"
   SOLC_VERSION: "0.8.35"
 
 jobs:
@@ -97,7 +99,7 @@ jobs:
           revive-differential-tests-path: revive/revive-differential-tests
           resolc-path: resolc-bin/resolc-${{ matrix.target }}${{ runner.os == 'Windows' && '.exe' || '' }}
           solc-version: ${{ env.SOLC_VERSION }}
-          modes: ${{ env.MODES }}
+          modes: ${{ env.COMPILE_MODES }}
           upload-artifact-name: compilation-report-${{ matrix.platform }}
 
       - name: Export Bytecode Hashes
@@ -128,7 +130,7 @@ jobs:
             hashes-macos-arm64,
             ${{ env.IS_PUSH_TO_MAIN == 'true' && 'hashes-macos-x86_64,' || '' }}
             hashes-windows-x86_64
-          modes: ${{ env.MODES }}
+          modes: ${{ env.COMPILE_MODES }}
           upload-artifact-name: hash-comparison-result
 
   run-e2e-tests:
@@ -200,6 +202,7 @@ jobs:
           platform: revive-dev-node-polkavm-resolc
           resolc-path: ./resolc-bin/resolc-x86_64-unknown-linux-musl
           solc-version: ${{ env.SOLC_VERSION }}
+          allowed-modes: ${{ env.E2E_ALLOWED_MODES }}
           expectations-file-path: ./revive/.github/assets/revive-dev-node-polkavm-resolc.json
           # Use a sane value which is fast enough to make the tests run fast but not too
           # fast that it overwhelms the node.

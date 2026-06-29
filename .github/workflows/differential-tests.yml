@@ -6,7 +6,7 @@ on:
 env:
   IS_PUSH_TO_MAIN: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
   # The exact compiler modes to use for compiling and comparing hashes by retester.
-  COMPILE_MODES: "NY M0 S+, NY M3 S+, NY Mz S+, NY M0 S-, NY M3 S-, NY Mz S-"
+  COMPILE_MODES: "Y M0 S+, Y M3 S+, Y Mz S+, NY M3 S+, NY Mz S+"
   # The compiler modes allowed to run during e2e test execution by retester.
   # E.g. this can be updated to allow only `"Y, NY Mz S+"` (all Yul modes + newyork with -Oz and solc optimizer enabled).
   E2E_ALLOWED_MODES: "Y, NY"
@@ -204,6 +204,7 @@ jobs:
           resolc-path: ./resolc-bin/resolc-x86_64-unknown-linux-musl
           solc-version: ${{ env.SOLC_VERSION }}
           allowed-modes: ${{ env.E2E_ALLOWED_MODES }}
+          use-compilation-caches: false
           expectations-file-path: ./revive/.github/assets/revive-dev-node-polkavm-resolc.json
           # Use a sane value which is fast enough to make the tests run fast but not too
           # fast that it overwhelms the node.

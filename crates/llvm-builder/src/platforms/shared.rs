@@ -8,8 +8,9 @@ use std::path::Path;
 use std::process::Command;
 
 /// The build options shared by all platforms.
-pub const SHARED_BUILD_OPTS: [&str; 21] = [
+pub const SHARED_BUILD_OPTS: [&str; 22] = [
     "-DPACKAGE_VENDOR='Parity Technologies'",
+    "-DCMAKE_CXX_FLAGS='-include cstdint -include stdint.h'",
     "-DCMAKE_BUILD_WITH_INSTALL_RPATH=1",
     "-DLLVM_BUILD_DOCS='Off'",
     "-DLLVM_INCLUDE_DOCS='Off'",

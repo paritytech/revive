@@ -1,11 +1,12 @@
 //! The tests for running resolc with combined JSON option.
 
-use revive_solc_json_interface::CombinedJsonInvalidSelectorMessage;
+use revive_solc_json_interface::{combined_json::CombinedJson, CombinedJsonInvalidSelectorMessage};
 
 use crate::cli_utils::{
-    assert_command_failure, assert_equal_exit_codes, execute_resolc, execute_solc,
-    SOLIDITY_CONTRACT_PATH, YUL_CONTRACT_PATH,
+    assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
+    execute_solc, SOLIDITY_CONTRACT_PATH, YUL_CONTRACT_PATH,
 };
+use crate::ResolcVersion;
 
 const JSON_OPTION: &str = "--combined-json";
 const JSON_ARGUMENTS: &[&str] = &[
@@ -117,4 +118,23 @@ fn fails_with_yul_input_file() {
         let solc_result = execute_solc(arguments);
         assert_equal_exit_codes(&solc_result, &resolc_result);
     }
+}
+
+#[test]
+fn populates_output_metadata_fields() {
+    let arguments = &[SOLIDITY_CONTRACT_PATH, JSON_OPTION, JSON_ARGUMENTS[0]];
+    let result = execute_resolc(arguments);
+    assert_command_success(&result, "Compiling with combined JSON");
+
+    let combined_json: CombinedJson =
+        serde_json::from_str(&result.stdout).expect("Combined JSON output should deserialize");
+    assert_eq!(
+        combined_json.resolc_version.as_deref(),
+        Some(ResolcVersion::default().long.as_str()),
+        "Combined JSON output should populate `resolc_version`"
+    );
+    assert!(
+        !combined_json.version.is_empty(),
+        "Combined JSON output should populate `version`"
+    );
 }

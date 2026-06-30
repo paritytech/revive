@@ -248,6 +248,7 @@ pub fn standard_json<T: Compiler>(
         include_paths,
         allow_paths,
     )?;
+    solc_output.revive_version = Some(ResolcVersion::default().long);
     solc_output.resolc_pipeline = Some(pipeline_name(use_newyork).to_owned());
 
     if language == SolcStandardJsonInputLanguage::Yul {
@@ -352,6 +353,7 @@ pub fn combined_json<T: Compiler>(
     }
 
     let mut combined_json = solc.combined_json(paths, selectors)?;
+    combined_json.resolc_version = Some(ResolcVersion::default().long);
     standard_output(
         solc,
         paths,

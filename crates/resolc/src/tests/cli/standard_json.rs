@@ -15,6 +15,7 @@ use crate::cli_utils::{
     STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH, STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH,
     STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
 };
+use crate::{pipeline_name, ResolcVersion};
 
 const JSON_OPTION: &str = "--standard-json";
 
@@ -639,4 +640,38 @@ fn pvm_codegen_newyork_yul_input() {
         bytecode_object(&disabled_output, "Test", "Test"),
         "settings.polkavm.newyork should select a different pipeline for Yul input"
     );
+}
+
+#[test]
+fn populates_output_metadata_fields() {
+    for (path, use_newyork) in [
+        (STANDARD_JSON_CONTRACTS_PATH, false),
+        (STANDARD_JSON_NEWYORK_ENABLED_PATH, true),
+        (STANDARD_JSON_NEWYORK_DISABLED_PATH, false),
+    ] {
+        let result = execute_resolc_with_stdin_input(&[JSON_OPTION], path);
+        assert_command_success(&result, "Compiling with standard JSON");
+
+        let output = to_solc_standard_json_output(&result.stdout);
+        assert_no_errors(&output);
+
+        assert_eq!(
+            output.revive_version.as_deref(),
+            Some(ResolcVersion::default().long.as_str()),
+            "Standard JSON output for `{path}` should populate `revive_version`"
+        );
+        assert_eq!(
+            output.resolc_pipeline.as_deref(),
+            Some(pipeline_name(use_newyork)),
+            "Standard JSON output for `{path}` should report the correct `resolc_pipeline`"
+        );
+        assert!(
+            output.version.is_some(),
+            "Standard JSON output for `{path}` should populate `version`"
+        );
+        assert!(
+            output.long_version.is_some(),
+            "Standard JSON output for `{path}` should populate `long_version`"
+        );
+    }
 }

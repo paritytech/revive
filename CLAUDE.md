@@ -14,7 +14,7 @@ Revive is a Solidity compiler targeting RISC-V on PolkaVM. It uses `solc` (Ether
 
 ## Build Commands
 
-**Prerequisites:** Requires `LLVM_SYS_221_PREFIX` environment variable pointing to a compatible LLVM 18.1.8 build. Download from releases or build with `make install-llvm`.
+**Prerequisites:** Requires `LLVM_SYS_221_PREFIX` environment variable pointing to a compatible LLVM build. Download from paritytech/revive LLVM releases or build with `make install-llvm`.
 
 ```bash
 # Install resolc binary
@@ -51,19 +51,8 @@ between code changes. Never use this exception for validation.
 
 ## Crate Architecture
 
-All crates live in `crates/`. Key crates:
+revive compiler library crates live in `crates/` (revive Rust workspace). Tooling is not necessarily part of the workspace.
 
-- **resolc** - Compiler driver binary and library; orchestrates the full pipeline
-- **revive-yul** - Yul lexer, parser, and LLVM IR lowering; implements visitor pattern for AST traversal
-- **revive-llvm-context** - LLVM code generation logic (decoupled from parser)
-- **revive-linker** - Links RISC-V ELF to PolkaVM blob via LLD and polkavm-linker
-- **revive-runner** - Executes contracts in simulated pallet-revive runtime; provides declarative test spec format
-- **revive-integration** - Integration test cases using revive-runner
-- **revive-differential** - Differential testing utilities against EVM
-- **revive-runtime-api** - Low-level runtime API bindings to pallet-revive
-- **revive-stdlib** - Compiler standard library components
-- **revive-common** - Shared constants and utilities
-- **lld-sys** - FFI bindings to LLVM's LLD linker
 
 ## Testing Strategy
 

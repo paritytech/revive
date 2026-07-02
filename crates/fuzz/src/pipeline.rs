@@ -3,7 +3,7 @@
 //! we [`catch_unwind`] and convert to `Err`.
 //!
 //! Uncached on purpose — `resolc::test_utils::{compile_blob, ...}`
-//! memoises by `(name, source)`, which never repeats under fresh
+//! memoizes by `(name, source)`, which never repeats under fresh
 //! per-case suffixes.
 
 use std::any::Any;

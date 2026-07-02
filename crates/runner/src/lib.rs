@@ -277,6 +277,16 @@ pub enum Code {
         #[serde(default)]
         libraries: SolcStandardJsonInputSettingsLibraries,
     },
+    /// Compile a raw Yul source file and use the blob of `contract`.
+    ///
+    /// The PVM blob is produced via revive's Yul-to-LLVM path (bypassing solc's
+    /// Yul optimizer), and the EVM bytecode is produced via `solc --strict-assembly`
+    /// without `--optimize` so literal operands reach both runtimes intact.
+    #[cfg(feature = "resolc")]
+    Yul {
+        path: std::path::PathBuf,
+        contract: String,
+    },
     /// Read the contract blob from disk
     Path(std::path::PathBuf),
     /// A contract blob
@@ -313,6 +323,16 @@ impl From<Code> for pallet_revive::Code {
                     solc_optimizer.unwrap_or(true),
                     revive_llvm_context::OptimizerSettings::cycles(),
                     libraries,
+                ))
+            }
+            #[cfg(feature = "solidity")]
+            Code::Yul { path, contract } => {
+                let Ok(source_code) = std::fs::read_to_string(&path) else {
+                    panic!("Failed to read Yul source from {}", path.display());
+                };
+                pallet_revive::Code::Upload(resolc::test_utils::compile_yul_blob(
+                    &contract,
+                    &source_code,
                 ))
             }
             Code::Path(path) => pallet_revive::Code::Upload(std::fs::read(path).unwrap()),

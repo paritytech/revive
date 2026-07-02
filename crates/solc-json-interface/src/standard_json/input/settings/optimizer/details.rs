@@ -64,6 +64,7 @@ impl Details {
         }
     }
 
+    /// Creates disabled optimizer details.
     pub fn disabled(version: &semver::Version) -> Self {
         let inliner = if version >= &semver::Version::new(0, 8, 5) {
             Some(false)

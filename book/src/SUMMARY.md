@@ -13,6 +13,8 @@
 - [Developer Guide](./developer_guide.md)
   - [Contributor guide](./developer_guide/contributing.md)
   - [Compiler architecture](./developer_guide/architecture.md)
+  - [The newyork optimizer](./developer_guide/newyork_optimizer.md)
+    - [IR reference](./developer_guide/newyork_ir.md)
   - [PVM and the pallet-revive runtime target](./developer_guide/target.md)
   - [Testing strategy](./developer_guide/testing.md)
   - [Differential fuzzing](./developer_guide/fuzzing.md)

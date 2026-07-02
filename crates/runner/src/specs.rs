@@ -326,15 +326,6 @@ impl Specs {
                     salt,
                     ..
                 } => {
-                    let Code::Solidity {
-                        path: Some(path),
-                        solc_optimizer,
-                        contract,
-                        libraries,
-                    } = code
-                    else {
-                        panic!("the differential runner requires Code::Solidity source");
-                    };
                     assert!(
                         salt.0.is_none(),
                         "salt is not supported in differential mode"
@@ -345,17 +336,37 @@ impl Specs {
                         "configuring the origin is not supported in differential mode"
                     );
 
-                    let deploy_code = match std::fs::read_to_string(&path) {
-                        Ok(solidity_source) => hex::encode(compile_evm_deploy_code(
-                            &contract,
-                            &solidity_source,
-                            solc_optimizer.unwrap_or(true),
+                    let deploy_code = match code {
+                        Code::Solidity {
+                            path: Some(path),
+                            solc_optimizer,
+                            contract,
                             libraries,
-                        )),
-                        Err(err) => panic!(
-                            "failed to read solidity source\n .  path: '{}'\n .   error: {:?}",
-                            path.display(),
-                            err
+                        } => match std::fs::read_to_string(&path) {
+                            Ok(solidity_source) => hex::encode(compile_evm_deploy_code(
+                                &contract,
+                                &solidity_source,
+                                solc_optimizer.unwrap_or(true),
+                                libraries,
+                            )),
+                            Err(err) => panic!(
+                                "failed to read solidity source\n .  path: '{}'\n .   error: {:?}",
+                                path.display(),
+                                err
+                            ),
+                        },
+                        Code::Yul { path, contract } => match std::fs::read_to_string(&path) {
+                            Ok(yul_source) => {
+                                hex::encode(compile_yul_evm_deploy_code(&contract, &yul_source))
+                            }
+                            Err(err) => panic!(
+                                "failed to read Yul source\n .  path: '{}'\n .   error: {:?}",
+                                path.display(),
+                                err
+                            ),
+                        },
+                        _ => panic!(
+                            "the differential runner requires Code::Solidity or Code::Yul source"
                         ),
                     };
                     let mut vm = evm

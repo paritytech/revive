@@ -1,0 +1,75 @@
+# Tests compilation and E2E integration with foundry-polkadot, including basic
+# runtime behavior, but not differential runtime correctness.
+
+name: Foundry Integration
+
+on:
+  workflow_call:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Workflow-internal foundry envs are prefixed with `CI_` to not conflict with the
+  # `FOUNDRY_*` namespace, which foundry itself will interpret for its configuration.
+  CI_FOUNDRY_PROJECT_ROOT: tooling-projects/foundry/erc20
+  CI_FOUNDRY_POLKADOT_VERSION: v1.5.1
+  # Coincides with the forge-std revision pinned in foundry-polkadot/testdata/forge-std-rev.
+  FORGE_STD_VERSION: v1.16.1
+  OZ_CONTRACTS_VERSION: v5.3.0
+
+jobs:
+  build:
+    uses: ./.github/workflows/reusable-build-linux.yml
+    with:
+      retention_days: 1
+
+  use-foundry:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v6
+
+      - name: Download resolc Binary
+        uses: actions/download-artifact@v7
+        with:
+          name: resolc-x86_64-unknown-linux-musl
+          path: resolc-bin
+
+      - name: Export resolc Path
+        run: |
+          chmod +x resolc-bin/resolc-x86_64-unknown-linux-musl
+          echo "RESOLC_PATH=$(pwd)/resolc-bin/resolc-x86_64-unknown-linux-musl" >> $GITHUB_ENV
+
+      - name: Install foundryup-polkadot and the Foundry Toolchain
+        run: |
+          # Pin install path with `FOUNDRY_DIR` to prevent the pre-existing `XDG_CONFIG_HOME` from being used.
+          export FOUNDRY_DIR="$HOME/.foundry"
+          curl -fsSL https://raw.githubusercontent.com/paritytech/foundry-polkadot/refs/heads/master/foundryup/install | bash
+          "$FOUNDRY_DIR/bin/foundryup-polkadot" --install "$CI_FOUNDRY_POLKADOT_VERSION"
+
+      - name: Add Foundry to PATH
+        run: echo "$HOME/.foundry/bin" >> "$GITHUB_PATH"
+
+      - name: Check Tool Versions
+        run: |
+          foundryup-polkadot --version
+          forge --version
+
+      - name: Fetch Project Dependencies
+        working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
+        run: |
+          mkdir -p lib
+          git clone --depth 1 --branch "$FORGE_STD_VERSION" https://github.com/foundry-rs/forge-std.git lib/forge-std
+          git clone --depth 1 --branch "$OZ_CONTRACTS_VERSION" https://github.com/OpenZeppelin/openzeppelin-contracts.git lib/openzeppelin-contracts
+
+      - name: Compile Project
+        working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
+        run: forge build --use-resolc "$RESOLC_PATH" --optimize -Oz
+
+      - name: Verify Output
+        working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
+        run: bash verify-compiler-output.sh "$RESOLC_PATH"
+
+      - name: Test Project
+        working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
+        run: forge test --polkadot=pvm --use-resolc "$RESOLC_PATH" --optimize -Oz -vvvv

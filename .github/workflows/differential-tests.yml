@@ -4,35 +4,75 @@ on:
   workflow_call:
 
 env:
-  # The compiler modes to use for compilation by retester.
-  MODES: "Y M0 S+, Y M3 S+, Y Mz S+"
+  IS_PUSH_TO_MAIN: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+  # The exact compiler modes to use for compiling and comparing hashes by retester.
+  # Runs triggered by pushes to main exercise more modes.
+  COMPILE_MODES: >-
+    ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    && 'Y M0 S+, Y M3 S+, Y Mz S+, NY M0 S+, NY M3 S+, NY Mz S+'
+    || 'Y M0 S+, Y M3 S+, Y Mz S+, NY Mz S+' }}
+  # The compiler modes allowed to run during e2e test execution by retester.
+  # E.g. this can be updated to allow only `"Y, NY Mz S+"` (all Yul modes + newyork with -Oz and solc optimizer enabled).
+  E2E_ALLOWED_MODES: "Y, NY"
   SOLC_VERSION: "0.8.35"
 
 jobs:
-  build:
-    uses: ./.github/workflows/reusable-build.yml
+  build-linux:
+    uses: ./.github/workflows/reusable-build-linux.yml
     with:
-      is_release: false
       retention_days: 1
 
+  build-macos:
+    uses: ./.github/workflows/reusable-build-macos.yml
+    with:
+      retention_days: 1
+
+  build-windows:
+    uses: ./.github/workflows/reusable-build-windows.yml
+    with:
+      retention_days: 1
+
+  build-matrix:
+    runs-on: ubuntu-24.04
+    outputs:
+      entries: ${{ steps.matrix.outputs.entries }}
+    steps:
+      - name: Build Matrix
+        id: matrix
+        run: |
+          entries='[
+            {
+              "platform": "linux-x86_64",
+              "target": "x86_64-unknown-linux-musl",
+              "runner": "ubuntu-24.04"
+            },
+            {
+              "platform": "macos-arm64",
+              "target": "universal-apple-darwin",
+              "runner": "macos-15"
+            },
+            ${{ env.IS_PUSH_TO_MAIN == 'true' && '{
+              "platform": "macos-x86_64",
+              "target": "universal-apple-darwin",
+              "runner": "macos-15-intel"
+            },' || '' }}
+            {
+              "platform": "windows-x86_64",
+              "target": "x86_64-pc-windows-msvc",
+              "runner": "windows-2022"
+            }
+          ]'
+
+          echo "Matrix:"
+          jq . <<< "$entries"
+          echo "entries=$(jq -c . <<< "$entries")" >> "$GITHUB_OUTPUT"
+
   compile-and-export-hashes-native:
-    needs: build
+    needs: [build-matrix, build-linux, build-macos, build-windows]
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: linux-x86_64
-            target: x86_64-unknown-linux-musl
-            runner: ubuntu-24.04
-          - platform: macos-arm64
-            target: universal-apple-darwin
-            runner: macos-15
-          - platform: macos-x86_64
-            target: universal-apple-darwin
-            runner: macos-15-intel
-          - platform: windows-x86_64
-            target: x86_64-pc-windows-msvc
-            runner: windows-2022
+        include: ${{ fromJSON(needs.build-matrix.outputs.entries) }}
     runs-on: ${{ matrix.runner }}
     steps:
       # For some deeply nested contracts in `resolc-compiler-tests`, Windows
@@ -42,13 +82,13 @@ jobs:
         run: git config --system core.longpaths true
 
       - name: Checkout revive
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: revive
           submodules: recursive
 
       - name: Download Binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: resolc-${{ matrix.target }}
           path: resolc-bin
@@ -64,7 +104,7 @@ jobs:
           revive-differential-tests-path: revive/revive-differential-tests
           resolc-path: resolc-bin/resolc-${{ matrix.target }}${{ runner.os == 'Windows' && '.exe' || '' }}
           solc-version: ${{ env.SOLC_VERSION }}
-          modes: ${{ env.MODES }}
+          modes: ${{ env.COMPILE_MODES }}
           upload-artifact-name: compilation-report-${{ matrix.platform }}
 
       - name: Export Bytecode Hashes
@@ -81,7 +121,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout revive
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: revive
           submodules: true
@@ -90,30 +130,34 @@ jobs:
         uses: ./revive/revive-differential-tests/.github/actions/compare-bytecode-hashes
         with:
           revive-differential-tests-path: revive/revive-differential-tests
-          hash-artifact-names: "hashes-linux-x86_64, hashes-macos-arm64, hashes-macos-x86_64, hashes-windows-x86_64"
-          modes: ${{ env.MODES }}
+          hash-artifact-names: >-
+            hashes-linux-x86_64,
+            hashes-macos-arm64,
+            ${{ env.IS_PUSH_TO_MAIN == 'true' && 'hashes-macos-x86_64,' || '' }}
+            hashes-windows-x86_64
+          modes: ${{ env.COMPILE_MODES }}
           upload-artifact-name: hash-comparison-result
 
   run-e2e-tests:
-    needs: build
+    needs: build-linux
     runs-on: parity-large
-    timeout-minutes: 75
+    timeout-minutes: 60
     env:
       # Commit SHA that produced the polkadot-sdk crate pinned in Cargo.toml,
       # obtained from the crate's .cargo_vcs_info.json via:
-      # curl -sL https://crates.io/api/v1/crates/polkadot-sdk/<VERSION>/download | tar xzO '*/.cargo_vcs_info.json'
-      # Current version: 2603.0.0
-      POLKADOT_SDK_REF: "c56b086a3cfcb3a48b75fd1ef9c77ad9b7408b95"
+      # curl -sL -A "user-agent" https://crates.io/api/v1/crates/polkadot-sdk/<VERSION>/download | tar xzO polkadot-sdk-<VERSION>/.cargo_vcs_info.json
+      # Current version: 2604.2.0
+      POLKADOT_SDK_REF: "54095b130013902aaaa33a69dbbf980144764afb"
       RUSTFLAGS: "-Awarnings"
     steps:
       - name: Checkout revive
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: revive
           submodules: recursive
 
       - name: Download Binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: resolc-x86_64-unknown-linux-musl
           path: ./resolc-bin
@@ -123,7 +167,7 @@ jobs:
         run: chmod +x ./resolc-bin/resolc-x86_64-unknown-linux-musl
 
       - name: Checkout Polkadot SDK
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: paritytech/polkadot-sdk
           ref: ${{ env.POLKADOT_SDK_REF }}
@@ -149,7 +193,7 @@ jobs:
       - name: Set Up Rust Toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
-          toolchain: "1.90.0"
+          toolchain: "1.91.0"
           target: "wasm32-unknown-unknown"
           components: "rust-src"
           rustflags: ""
@@ -163,10 +207,12 @@ jobs:
           platform: revive-dev-node-polkavm-resolc
           resolc-path: ./resolc-bin/resolc-x86_64-unknown-linux-musl
           solc-version: ${{ env.SOLC_VERSION }}
+          allowed-modes: ${{ env.E2E_ALLOWED_MODES }}
+          use-compilation-caches: false
           expectations-file-path: ./revive/.github/assets/revive-dev-node-polkavm-resolc.json
-          # Using a higher concurrency, such as 100, currently overloads the dev node's RPC
-          # bridge, causing intermittent `eth_getTransactionReceipt` timeouts during code upload.
-          concurrency-number-of-concurrent-tasks: 50
+          # Use a sane value which is fast enough to make the tests run fast but not too
+          # fast that it overwhelms the node.
+          concurrency-number-of-concurrent-tasks: 1000
 
   # Sentinel job that depends on the jobs we want to allow completing (instead of
   # being canceled once the other job chains complete). Thus, run-e2e-tests
@@ -176,4 +222,5 @@ jobs:
     needs: [compare-hashes, run-e2e-tests]
     runs-on: ubuntu-24.04
     steps:
-      - run: echo "All jobs finished"
+      - name: Finish
+        run: echo "All jobs finished"

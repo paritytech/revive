@@ -14,7 +14,7 @@ Revive is a Solidity compiler targeting RISC-V on PolkaVM. It uses `solc` (Ether
 
 ## Build Commands
 
-**Prerequisites:** Requires `LLVM_SYS_221_PREFIX` environment variable pointing to a compatible LLVM 18.1.8 build. Download from releases or build with `make install-llvm`.
+**Prerequisites:** Requires `LLVM_SYS_221_PREFIX` environment variable pointing to a compatible LLVM build. Download from paritytech/revive LLVM releases or build with `make install-llvm`.
 
 ```bash
 # Install resolc binary
@@ -33,26 +33,26 @@ make test-yul            # Yul parser tests
 make format              # Check formatting (cargo fmt --all --check)
 make clippy              # Run clippy with --deny warnings
 
-# Run single test
-cargo test --package <crate-name> <test_name>
-cargo test --package revive-integration <test_name>
 ```
+
+**For verifying work, claiming a task done, or pre-commit checks: only ever run
+`make test*` targets — never raw `cargo test`.** Integration and resolc tests
+invoke the installed `resolc` binary as a subprocess. Each `make test*` target
+already declares `install-bin` (or `install`) as a dependency, so it always
+rebuilds and installs a fresh binary before running tests. Raw `cargo test`
+does not — it builds the test binary but leaves system `resolc` stale, so it
+passes against code the test isn't actually exercising. That mismatch is
+exactly why raw `cargo test` is an anti-pattern for validation.
+
+The one legitimate exception is **actively debugging a single test** for fast
+iteration: run `make install-bin` first to refresh the binary, then iterate with
+`cargo test --package <crate> <test_name>`, re-running `make install-bin`
+between code changes. Never use this exception for validation.
 
 ## Crate Architecture
 
-All crates live in `crates/`. Key crates:
+revive compiler library crates live in `crates/` (revive Rust workspace). Tooling is not necessarily part of the workspace.
 
-- **resolc** - Compiler driver binary and library; orchestrates the full pipeline
-- **revive-yul** - Yul lexer, parser, and LLVM IR lowering; implements visitor pattern for AST traversal
-- **revive-llvm-context** - LLVM code generation logic (decoupled from parser)
-- **revive-linker** - Links RISC-V ELF to PolkaVM blob via LLD and polkavm-linker
-- **revive-runner** - Executes contracts in simulated pallet-revive runtime; provides declarative test spec format
-- **revive-integration** - Integration test cases using revive-runner
-- **revive-differential** - Differential testing utilities against EVM
-- **revive-runtime-api** - Low-level runtime API bindings to pallet-revive
-- **revive-stdlib** - Compiler standard library components
-- **revive-common** - Shared constants and utilities
-- **lld-sys** - FFI bindings to LLVM's LLD linker
 
 ## Testing Strategy
 
@@ -88,7 +88,3 @@ When `differential: true`, actions run on both EVM and PVM, asserting identical 
 - Avoid pinning when possible
 - Always include `Cargo.lock` in PRs
 - Don't run `cargo update` with other changes (separate PR)
-
-## Rust Version
-
-Minimum supported: 1.85.0 (specified in workspace)

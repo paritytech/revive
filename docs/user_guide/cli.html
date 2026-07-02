@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-d0606fc2.js";
+            window.path_to_searchindex_js = "../searchindex-7761a3ba.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-cd068218.js"></script>
+        <script src="../toc-763212e8.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,7 +183,7 @@
 <h3 id="llvm-optimization-levels"><a class="header" href="#llvm-optimization-levels">LLVM optimization levels</a></h3>
 <pre><code class="language-bash">-O, --optimization &lt;OPTIMIZATION&gt;
 </code></pre>
-<p><code>resolc</code> exposes the optimization level setting for the LLVM backend. The performance and size of compiled contracts varies wiedly between different optimization levels.</p>
+<p><code>resolc</code> exposes the optimization level setting for the LLVM backend. The performance and size of compiled contracts varies widely between different optimization levels. (This is independent of <code>--newyork</code> which selects the IR lowering pipeline.)</p>
 <p>Valid levels are the following:</p>
 <ul>
 <li><code>0</code>: No optimizations are applied.</li>
@@ -194,6 +194,10 @@
 <li><code>z</code>: Aggressively optimize for code size.</li>
 </ul>
 <p>By default, <code>-Oz</code> is applied.</p>
+<h3 id="newyork-ir-pipeline"><a class="header" href="#newyork-ir-pipeline">newyork IR pipeline</a></h3>
+<pre><code class="language-bash">--newyork
+</code></pre>
+<p>Enables the <a href="../developer_guide/newyork_optimizer.html">newyork optimizer</a> to reduced compiled contract code size, by routing Yul lowering through the <strong>experimental</strong> newyork IR pipeline instead of the standard Yul-to-LLVM path. Composes with <code>--yul</code>, <code>--combined-json</code>, and the default Solidity mode. In standard JSON mode this flag is rejected; enable the pipeline via the <a href="std_json.html#settingspolkavmnewyork"><code>settings.polkavm.newyork</code></a> input field instead. Off by default.</p>
 <h3 id="stack-size"><a class="header" href="#stack-size">Stack size</a></h3>
 <pre><code class="language-bash">--stack-size &lt;STACK_SIZE&gt;
 </code></pre>
@@ -227,7 +231,7 @@
 <h3 id="debug-artifacts"><a class="header" href="#debug-artifacts">Debug artifacts</a></h3>
 <pre><code class="language-bash">--debug-output-dir &lt;DEBUG_OUTPUT_DIRECTORY&gt;
 </code></pre>
-<p>Dump all intermediary compiler artifacts to files in the specified directory. This includes the YUL IR, optimized and unoptimized LLVM IR, the ELF object and the PVM assembly. Useful for debugging and development purposes.</p>
+<p>Dump all intermediary compiler artifacts to files in the specified directory. This includes the Yul IR, optimized and unoptimized LLVM IR, the ELF object and the PVM assembly. When the newyork pipeline is active, the <a href="../developer_guide/newyork_optimizer.html#debug-output">newyork IR is additionally dumped</a> (the final IR, a pre-late-pass snapshot, and heap and memory optimization data). Useful for debugging and development purposes.</p>
 <h3 id="debug-info"><a class="header" href="#debug-info">Debug info</a></h3>
 <pre><code class="language-bash">-g
 </code></pre>

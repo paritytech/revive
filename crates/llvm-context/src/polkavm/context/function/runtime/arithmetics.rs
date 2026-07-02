@@ -3,15 +3,32 @@
 use inkwell::values::BasicValue;
 use revive_common::BIT_LENGTH_WORD;
 
+use crate::polkavm::context::attribute::Attribute;
+use crate::polkavm::context::attribute::MemoryEffect;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::WriteLLVM;
+
+/// Standard attribute set for the pure arithmetic helpers. Each helper pairs
+/// this list with [`PURE_MEMORY_EFFECT`] so that LLVM GVN/CSE can merge
+/// repeated calls and hoist invariant divisions out of loops.
+const PURE_ATTRIBUTES: &[Attribute] = &[
+    Attribute::NoFree,
+    Attribute::NoRecurse,
+    Attribute::WillReturn,
+];
+
+/// The arithmetic helpers are pure (only depend on their integer arguments).
+const PURE_MEMORY_EFFECT: MemoryEffect = MemoryEffect::None;
 
 /// Implements the division operator according to the EVM specification.
 pub struct Division;
 
 impl RuntimeFunction for Division {
     const NAME: &'static str = "__revive_division";
+
+    const ATTRIBUTES: &'static [Attribute] = PURE_ATTRIBUTES;
+    const MEMORY_EFFECT: MemoryEffect = PURE_MEMORY_EFFECT;
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
@@ -51,6 +68,9 @@ pub struct SignedDivision;
 
 impl RuntimeFunction for SignedDivision {
     const NAME: &'static str = "__revive_signed_division";
+
+    const ATTRIBUTES: &'static [Attribute] = PURE_ATTRIBUTES;
+    const MEMORY_EFFECT: MemoryEffect = PURE_MEMORY_EFFECT;
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
@@ -126,6 +146,9 @@ pub struct Remainder;
 impl RuntimeFunction for Remainder {
     const NAME: &'static str = "__revive_remainder";
 
+    const ATTRIBUTES: &'static [Attribute] = PURE_ATTRIBUTES;
+    const MEMORY_EFFECT: MemoryEffect = PURE_MEMORY_EFFECT;
+
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
             &[context.word_type().into(), context.word_type().into()],
@@ -160,10 +183,22 @@ impl WriteLLVM for Remainder {
 }
 
 /// Implements the signed remainder operator according to the EVM specification.
+///
+/// `srem(INT_MIN, -1)` is signed-overflow UB in LLVM even though the
+/// mathematical remainder is `0`, and EVM `SMOD` defines this case as `0`.
+/// Before performing the srem we therefore swap a `-1` divisor for `1`:
+/// `srem(x, 1) == 0 == SMOD(x, -1)` for all x, so the substitution preserves
+/// EVM semantics while never feeding the UB pair to LLVM's srem. Unlike a
+/// branch-based guard this leaves the srem unconditionally well-defined at
+/// the IR level, so constant propagation cannot fold its way into poison
+/// regardless of pass ordering. See paritytech/revive#524.
 pub struct SignedRemainder;
 
 impl RuntimeFunction for SignedRemainder {
     const NAME: &'static str = "__revive_signed_remainder";
+
+    const ATTRIBUTES: &'static [Attribute] = PURE_ATTRIBUTES;
+    const MEMORY_EFFECT: MemoryEffect = PURE_MEMORY_EFFECT;
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context.word_type().fn_type(
@@ -180,9 +215,24 @@ impl RuntimeFunction for SignedRemainder {
         let operand_2 = Self::paramater(context, 1).into_int_value();
 
         wrapped_division(context, operand_2, || {
+            let is_neg_one = context.builder().build_int_compare(
+                inkwell::IntPredicate::EQ,
+                operand_2,
+                context.word_type().const_all_ones(),
+                "smod_divisor_is_neg_one",
+            )?;
+            let safe_divisor = context
+                .builder()
+                .build_select(
+                    is_neg_one,
+                    context.word_const(1),
+                    operand_2,
+                    "smod_safe_divisor",
+                )?
+                .into_int_value();
             Ok(context
                 .builder()
-                .build_int_signed_rem(operand_1, operand_2, "SMOD")?)
+                .build_int_signed_rem(operand_1, safe_divisor, "SMOD")?)
         })
         .map(Into::into)
     }

@@ -2,6 +2,7 @@
 
 use inkwell::values::BasicValueEnum;
 
+use crate::polkavm::context::attribute::MemoryEffect;
 use crate::polkavm::context::runtime::RuntimeFunction;
 use crate::polkavm::context::Context;
 use crate::polkavm::WriteLLVM;
@@ -11,6 +12,13 @@ pub struct LoadWord;
 
 impl RuntimeFunction for LoadWord {
     const NAME: &'static str = "__revive_load_storage_word";
+
+    /// The helper dereferences its key pointer (a read through `argmem`) and
+    /// reads storage (pallet-revive runtime state, invisible to LLVM). Heap
+    /// is not touched. Intervening `__revive_store_storage_word` carries the
+    /// default attributes and still acts as a barrier, so this lets GVN
+    /// dedupe `__revive_load_storage_word` calls across heap mstores.
+    const MEMORY_EFFECT: MemoryEffect = MemoryEffect::ReadArgAndInaccessible;
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context
@@ -45,6 +53,11 @@ pub struct LoadTransientWord;
 
 impl RuntimeFunction for LoadTransientWord {
     const NAME: &'static str = "__revive_load_transient_storage_word";
+
+    /// Same shape as [`LoadWord`]: argmem read (key pointer) plus a read of
+    /// pallet-revive runtime state. Transient-store wrappers retain unknown
+    /// memory effects and act as a barrier preventing incorrect CSE.
+    const MEMORY_EFFECT: MemoryEffect = MemoryEffect::ReadArgAndInaccessible;
 
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx> {
         context

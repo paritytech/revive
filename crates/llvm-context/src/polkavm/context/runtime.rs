@@ -4,6 +4,7 @@
 //! This benefits contract code size.
 
 use crate::optimizer::settings::size_level::SizeLevel;
+use crate::polkavm::context::attribute::MemoryEffect;
 use crate::polkavm::context::function::declaration::Declaration;
 use crate::polkavm::context::function::Function;
 use crate::polkavm::context::Attribute;
@@ -21,10 +22,19 @@ pub trait RuntimeFunction {
         Attribute::WillReturn,
     ];
 
+    /// The `memory(...)` effect to attach to the function declaration.
+    ///
+    /// Helpers that interact only with their own allocas or with pallet-revive
+    /// runtime state (via host syscalls) can advertise a tighter effect than
+    /// the conservative LLVM default. The trait wires the encoding through
+    /// [`Self::declare`] so concrete impls don't have to call the raw inkwell
+    /// API. Default: do not attach the attribute.
+    const MEMORY_EFFECT: MemoryEffect = MemoryEffect::Unrestricted;
+
     /// The function type.
     fn r#type<'ctx>(context: &Context<'ctx>) -> inkwell::types::FunctionType<'ctx>;
 
-    /// Declare the function.
+    /// Declare the function with standard attributes.
     fn declare(&self, context: &mut Context) -> anyhow::Result<()> {
         let function = context.add_function(
             Self::NAME,
@@ -46,6 +56,14 @@ pub trait RuntimeFunction {
             &attributes,
             true,
         );
+        if let Some(encoding) = Self::MEMORY_EFFECT.encoding() {
+            function.borrow().declaration().value.add_attribute(
+                inkwell::attributes::AttributeLoc::Function,
+                context
+                    .llvm()
+                    .create_enum_attribute(Attribute::Memory as u32, encoding),
+            );
+        }
         let function = function.borrow().declaration().function_value();
         let comdat = context
             .module()

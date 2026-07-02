@@ -8696,8 +8696,6 @@ dependencies = [
 [[package]]
 name = "polkavm"
 version = "0.35.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e169701bf52ffe9abafea76f0519d526c736a4deea7e2cd70fc51b3bbf1ba81"
 dependencies = [
  "libc",
  "log",
@@ -8719,8 +8717,6 @@ dependencies = [
 [[package]]
 name = "polkavm-assembler"
 version = "0.35.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6dddb5cf523ca1c8de5a1a265438aa0e96fbf812e9f90a2f300a4c550bd8a9e9"
 dependencies = [
  "log",
 ]
@@ -8749,8 +8745,6 @@ dependencies = [
 [[package]]
 name = "polkavm-common"
 version = "0.35.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b20e5a47dd9ad7bb43013676a18074fca2573dd8270774a7d2ad286b57bc710f"
 dependencies = [
  "log",
  "picosimd",
@@ -8822,8 +8816,6 @@ dependencies = [
 [[package]]
 name = "polkavm-disassembler"
 version = "0.35.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5baf1b6eceba9f08810d9d17e54b82000e848f0877c3a339c75bb60b4db5dfc"
 dependencies = [
  "clap",
  "iced-x86",
@@ -8851,8 +8843,6 @@ dependencies = [
 [[package]]
 name = "polkavm-linker"
 version = "0.35.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96b5c8083bf6c33ff0d9254bbe500872c18a82f2801c5879693f10c16816275e"
 dependencies = [
  "dirs",
  "gimli 0.31.1",
@@ -8873,8 +8863,6 @@ checksum = "42063d4a1c52e569f7794df27dab3e19c9fa8946184023257bdbb43eb4a94be5"
 [[package]]
 name = "polkavm-linux-raw"
 version = "0.35.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7689d791c6ab52782217ae904d0f5eb7b7cc125a90eb085069d38c15f5d5a53c"
 
 [[package]]
 name = "poly1305"

@@ -96,6 +96,10 @@ fn main_inner(
         return Ok(());
     }
 
+    if let Some(blob_path) = arguments.verify_metadata_hash.as_ref() {
+        return resolc::verify_metadata_hash(blob_path, arguments.expected_hash.as_deref());
+    }
+
     #[cfg(feature = "parallel")]
     rayon::ThreadPoolBuilder::new()
         .stack_size(resolc::RAYON_WORKER_STACK_SIZE)

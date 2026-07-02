@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-339ac392.js";
+            window.path_to_searchindex_js = "searchindex-54939e09.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-1290cc30.js"></script>
@@ -325,6 +325,23 @@ Please find our <a href="https://paritytech.github.io/resolc-bin/">binary releas
 <p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
 <p>Tooling is supposed to take care of this. In the future, we may append explicit linkage data to simplify the deploy time linking feature.</p>
 </blockquote>
+<h3 id="metadata-hash"><a class="header" href="#metadata-hash">Metadata hash</a></h3>
+<pre><code class="language-bash">--metadata-hash &lt;none|keccak256&gt;
+</code></pre>
+<p><code>resolc</code> computes a hash over the contract metadata, which captures everything that influences the compilation output (for example the precise <code>solc</code> and <code>resolc</code> versions), and embeds it into the compiled PVM blob as an optional section. Because the hash is part of the blob, the on-chain code hash commits to it. This is the building block for verifiable contracts: it lets a third party check that a deployed blob was produced from a claimed source and compiler configuration.</p>
+<p>The default is <code>keccak256</code>. Pass <code>none</code> to omit the hash. Unlike appended metadata on the EVM, the hash lives in a dedicated blob section that older tooling skips, so it does not affect execution.</p>
+<h3 id="metadata-hash-verification"><a class="header" href="#metadata-hash-verification">Metadata hash verification</a></h3>
+<pre><code class="language-bash">--verify-metadata-hash &lt;BLOB&gt; [--expected-hash &lt;HEX&gt;]
+</code></pre>
+<p>Reads the metadata hash embedded in an already compiled PVM <code>&lt;BLOB&gt;</code> and prints it, then exits. This mode ignores all compilation options and requires neither <code>solc</code> nor a source file.</p>
+<p>With <code>--expected-hash</code>, the embedded hash is compared against the given value; <code>resolc</code> exits with a non-zero status on a mismatch. The blob failing to contain a metadata hash is also an error.</p>
+<p>Example:</p>
+<pre><code class="language-bash"># Print the embedded hash.
+resolc --verify-metadata-hash Contract.pvm
+
+# Verify it against a known value (fails if it differs).
+resolc --verify-metadata-hash Contract.pvm --expected-hash 0x8c62d980195fcf86225a7f0e0d9555e5dcf8fbdb4bd4317fa52aa9db204fe594
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="js-npm-package"><a class="header" href="#js-npm-package">JS NPM package</a></h1>
 <p>The <code>resolc</code> compiler driver is published as an NPM package under <a href="https://www.npmjs.com/package/@parity/resolc">@parity/resolc</a>.</p>

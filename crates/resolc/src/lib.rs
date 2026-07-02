@@ -424,3 +424,32 @@ pub fn link(paths: Vec<String>, libraries: Vec<String>) -> anyhow::Result<()> {
 
     std::process::exit(EXIT_CODE_SUCCESS);
 }
+
+/// Verifies the metadata hash embedded in a compiled PolkaVM blob.
+///
+/// Prints the embedded hash and, when `expected` is given, fails unless it matches.
+pub fn verify_metadata_hash(
+    blob_path: &std::path::Path,
+    expected: Option<&str>,
+) -> anyhow::Result<()> {
+    let bytecode = std::fs::read(blob_path).map_err(|error| {
+        anyhow::anyhow!("failed to read blob `{}`: {error}", blob_path.display())
+    })?;
+    let Some(hash) = revive_llvm_context::polkavm_metadata_hash(&bytecode)? else {
+        anyhow::bail!("the blob does not contain a metadata hash section");
+    };
+    println!("0x{}", hex::encode(&hash));
+
+    if let Some(expected) = expected {
+        let expected = hex::decode(expected.trim_start_matches("0x"))
+            .map_err(|error| anyhow::anyhow!("the expected hash is not valid hex: {error}"))?;
+        anyhow::ensure!(
+            expected == hash,
+            "metadata hash mismatch: expected 0x{}",
+            hex::encode(&expected)
+        );
+        println!("OK: metadata hash matches");
+    }
+
+    Ok(())
+}

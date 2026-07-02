@@ -126,6 +126,15 @@ pub struct Arguments {
     #[arg(long)]
     pub link: bool,
 
+    /// Verify the metadata hash embedded in a compiled PolkaVM blob and exit.
+    /// Prints the embedded hash; combine with `--expected-hash` to check it against a known value.
+    #[arg(long = "verify-metadata-hash", value_name = "BLOB")]
+    pub verify_metadata_hash: Option<PathBuf>,
+
+    /// The expected metadata hash (hex) to check against `--verify-metadata-hash`.
+    #[arg(long = "expected-hash", value_name = "HEX")]
+    pub expected_hash: Option<String>,
+
     /// Set the metadata hash type.
     /// Available types: `none`, `ipfs`, `keccak256`.
     #[arg(long, default_value_t = MetadataHash::Keccak256)]
@@ -255,6 +264,7 @@ impl Arguments {
             self.combined_json.is_some(),
             self.standard_json.is_some(),
             self.link,
+            self.verify_metadata_hash.is_some(),
         ]
         .iter()
         .filter(|&&x| x)
@@ -262,7 +272,7 @@ impl Arguments {
         let acceptable_count = 1 + self.standard_json.is_some() as usize;
         if modes > acceptable_count {
             messages.push(SolcStandardJsonOutputError::new_error(
-                "Only one mode is allowed at the same time: Yul, combined JSON, standard JSON, link.",
+                "Only one mode is allowed at the same time: Yul, combined JSON, standard JSON, link, verify.",
                 None,
                 None,
             ));

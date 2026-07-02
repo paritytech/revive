@@ -4,6 +4,7 @@ mod factory_dependency;
 mod ir_artifacts;
 mod libraries;
 mod messages;
+mod metadata_hash;
 mod optimizer;
 mod remappings;
 mod runtime_code;

@@ -117,3 +117,33 @@ Example:
 > [!NOTE]
 >
 > Tooling is supposed to take care of this. In the future, we may append explicit linkage data to simplify the deploy time linking feature.
+
+### Metadata hash
+
+```bash
+--metadata-hash <none|keccak256>
+```
+
+`resolc` computes a hash over the contract metadata, which captures everything that influences the compilation output (for example the precise `solc` and `resolc` versions), and embeds it into the compiled PVM blob as an optional section. Because the hash is part of the blob, the on-chain code hash commits to it. This is the building block for verifiable contracts: it lets a third party check that a deployed blob was produced from a claimed source and compiler configuration.
+
+The default is `keccak256`. Pass `none` to omit the hash. Unlike appended metadata on the EVM, the hash lives in a dedicated blob section that older tooling skips, so it does not affect execution.
+
+### Metadata hash verification
+
+```bash
+--verify-metadata-hash <BLOB> [--expected-hash <HEX>]
+```
+
+Reads the metadata hash embedded in an already compiled PVM `<BLOB>` and prints it, then exits. This mode ignores all compilation options and requires neither `solc` nor a source file.
+
+With `--expected-hash`, the embedded hash is compared against the given value; `resolc` exits with a non-zero status on a mismatch. The blob failing to contain a metadata hash is also an error.
+
+Example:
+
+```bash
+# Print the embedded hash.
+resolc --verify-metadata-hash Contract.pvm
+
+# Verify it against a known value (fails if it differs).
+resolc --verify-metadata-hash Contract.pvm --expected-hash 0x8c62d980195fcf86225a7f0e0d9555e5dcf8fbdb4bd4317fa52aa9db204fe594
+```

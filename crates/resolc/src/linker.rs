@@ -67,6 +67,7 @@ impl Output {
                     &linker_symbols,
                     &factory_dependencies,
                     true,
+                    None,
                 )?;
                 match object_format {
                     ObjectFormat::ELF => remaining_objects.push((path, linked_bytecode)),

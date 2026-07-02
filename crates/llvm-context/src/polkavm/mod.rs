@@ -70,19 +70,28 @@ pub fn hash(bytecode_buffer: &[u8]) -> [u8; BYTE_LENGTH_WORD] {
         .expect("the bytecode hash should be word sized")
 }
 
+/// Extracts the metadata hash embedded in a linked PVM blob, if present.
+pub fn metadata_hash(bytecode: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
+    let blob = ProgramBlob::parse(bytecode.into())
+        .map_err(|error| anyhow::anyhow!("failed to parse PolkaVM blob: {error}"))?;
+    let embedded = blob.metadata_hash();
+    Ok((!embedded.is_empty()).then(|| embedded.to_vec()))
+}
+
 /// Links the `bytecode` with `linker_symbols` and `factory_dependencies`.
 pub fn link(
     bytecode: &[u8],
     linker_symbols: &BTreeMap<String, [u8; BYTE_LENGTH_ETH_ADDRESS]>,
     factory_dependencies: &BTreeMap<String, [u8; BYTE_LENGTH_WORD]>,
     strip_binary: bool,
+    metadata_hash: Option<Vec<u8>>,
 ) -> anyhow::Result<(Vec<u8>, ObjectFormat)> {
     Ok(match ObjectFormat::try_from(bytecode) {
         Ok(format @ ObjectFormat::PVM) => (bytecode.to_vec(), format),
         Ok(ObjectFormat::ELF) => {
             let symbols = build_symbols(linker_symbols, factory_dependencies)?;
             let bytecode_linked = ElfLinker::setup()?.link(bytecode, &symbols)?;
-            polkavm_linker(&bytecode_linked, strip_binary)
+            polkavm_linker(&bytecode_linked, strip_binary, metadata_hash)
                 .map(|pvm| (pvm, ObjectFormat::PVM))
                 .unwrap_or_else(|error| {
                     if !error

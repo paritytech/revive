@@ -84,6 +84,7 @@ impl Build {
                         })
                         .collect(),
                     !debug_config.emit_debug_info,
+                    contract.build.metadata_hash.map(|hash| hash.to_vec()),
                 ) {
                     Ok((memory_buffer_linked, ObjectFormat::PVM)) => {
                         let bytecode_hash = polkavm_hash(&memory_buffer_linked);

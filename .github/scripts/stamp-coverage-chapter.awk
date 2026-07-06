@@ -8,6 +8,7 @@
     print ""
     print "[Open the report](" link ")"
     in_block = 1
+    stamped = 1
     next
 }
 
@@ -18,3 +19,12 @@
 }
 
 !in_block { print }
+
+# A lone BEGIN marker would silently swallow the rest of the chapter, and a
+# chapter without markers would pass through unstamped; fail loudly instead.
+END {
+    if (in_block || !stamped) {
+        print "error: COVERAGE_STATUS_BEGIN/END marker pair not found" > "/dev/stderr"
+        exit 1
+    }
+}

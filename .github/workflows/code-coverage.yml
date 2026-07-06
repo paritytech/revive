@@ -1,7 +1,16 @@
 # Label-gated coverage workflow (`measure code coverage`). Uses
-# `pull_request_target` for write-token access — the label is the trust
-# gate. Drop the label if a labeled PR's author pushes commits you do not
-# trust; new pushes otherwise re-fire the workflow on the existing trust.
+# `pull_request_target` so the run holds a write token for publishing to
+# gh-pages — which means it must never leak that token to the PR code it
+# builds and tests. Two rules enforce that:
+#
+# 1. The only trigger type is `labeled`: applying the label approves
+#    exactly the head commit present at that moment. Later pushes do NOT
+#    re-fire the workflow; a maintainer must re-apply the label to measure
+#    a new head, re-establishing trust each time.
+# 2. The checkout uses `persist-credentials: false` and no build/test step
+#    references `secrets`/`github.token`, so the untrusted code under test
+#    finds no credentials in its environment or in `.git/config`.
+#
 # One-time setup: create the label and point Settings → Pages at the
 # `gh-pages` branch after the first successful run.
 
@@ -10,7 +19,7 @@ name: Code coverage
 on:
   pull_request_target:
     branches: [main]
-    types: [labeled, synchronize, reopened]
+    types: [labeled]
 
 concurrency:
   group: code-coverage-${{ github.event.pull_request.number }}
@@ -26,15 +35,16 @@ env:
 jobs:
   coverage:
     name: Measure and publish coverage
-    if: contains(github.event.pull_request.labels.*.name, 'measure code coverage')
+    if: github.event.label.name == 'measure code coverage'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - name: Checkout PR head
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           submodules: recursive
+          persist-credentials: false
 
       - name: Set up Rust toolchain
         uses: actions-rust-lang/setup-rust-toolchain@v1
@@ -44,6 +54,12 @@ jobs:
 
       - name: Install solc
         uses: ./.github/actions/get-solc
+
+      - name: Install Geth
+        run: |
+          sudo add-apt-repository -y ppa:ethereum/ethereum
+          sudo apt update
+          sudo apt install -y ethereum
 
       - name: Download LLVM
         uses: ./.github/actions/get-llvm
@@ -61,10 +77,13 @@ jobs:
 
       - name: Generate HTML coverage report
         # Mirrors `make coverage`. `--ignore-run-fail` keeps partial
-        # coverage on test-binary non-zero exit.
+        # coverage on test-binary non-zero exit. Tests spawn `resolc` as a
+        # subprocess; resolving it from the instrumented target directory
+        # makes those invocations contribute coverage.
         run: |
           cargo llvm-cov clean --workspace
           rm -rf target/llvm-cov
+          export PATH="$PWD/target/llvm-cov-target/debug:$PATH"
           cargo llvm-cov --workspace \
             --exclude revive-llvm-builder \
             --all-targets \

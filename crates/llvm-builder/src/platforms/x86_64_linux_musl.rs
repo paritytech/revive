@@ -70,6 +70,7 @@ pub fn build(
         musl_target.as_path(),
         llvm_target_crt.as_path(),
         ccache_variant,
+        enable_coverage,
     )?;
     build_target(
         build_type,
@@ -166,10 +167,11 @@ fn build_host(
     musl_target_directory: &Path,
     crt_target_directory: &Path,
     ccache_variant: Option<CcacheVariant>,
+    enable_coverage: bool,
 ) -> anyhow::Result<()> {
-    crate::utils::command(
-        Command::new("cmake")
-            .args([
+    let mut cmake_command = Command::new("cmake");
+    cmake_command
+        .args([
                 "-S",
                 source_directory.to_string_lossy().as_ref(),
                 "-B",
@@ -217,22 +219,25 @@ fn build_host(
                 "-DCOMPILER_RT_BUILD_XRAY='Off'",
                 "-DCOMPILER_RT_BUILD_LIBFUZZER='Off'",
                 "-DCOMPILER_RT_BUILD_PROFILE='On'",
-                "-DCOMPILER_RT_BUILD_CTX_PROFILE='Off'",
                 "-DCOMPILER_RT_BUILD_MEMPROF='Off'",
                 "-DCOMPILER_RT_BUILD_ORC='Off'",
                 "-DCOMPILER_RT_DEFAULT_TARGET_ARCH='x86_64'",
-                // Skip the link-based target probe; libc++ isn't built yet so
-                // the probe fails and silently disables `libclang_rt.profile.a`.
-                "-DCOMPILER_RT_DEFAULT_TARGET_ONLY='On'",
                 "-DLIBCLANG_BUILD_STATIC='On'",
                 "-DBUILD_SHARED_LIBS='Off'",
             ])
-            .args(crate::platforms::shared::SHARED_BUILD_OPTS)
-            .args(crate::platforms::shared::shared_build_opts_ccache(
-                ccache_variant,
-            )),
-        "LLVM host building cmake",
-    )?;
+        .args(crate::platforms::shared::SHARED_BUILD_OPTS)
+        .args(crate::platforms::shared::shared_build_opts_ccache(
+            ccache_variant,
+        ));
+    if enable_coverage {
+        cmake_command.args([
+            "-DCOMPILER_RT_BUILD_CTX_PROFILE='Off'",
+            // Skip the link-based target probe; libc++ isn't built yet so
+            // the probe fails and silently disables `libclang_rt.profile.a`.
+            "-DCOMPILER_RT_DEFAULT_TARGET_ONLY='On'",
+        ]);
+    }
+    crate::utils::command(&mut cmake_command, "LLVM host building cmake")?;
 
     let mut crt_lib_directory = crt_target_directory.to_path_buf();
     crt_lib_directory.push("lib/");

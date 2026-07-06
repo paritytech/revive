@@ -114,6 +114,7 @@ coverage: install install-cargo-llvm-cov
 	cargo install mdbook --version 0.5.1 --locked
 	cargo llvm-cov clean --workspace
 	rm -rf target/coverage
+	PATH="$(CURDIR)/target/llvm-cov-target/debug:$$PATH" \
 	cargo llvm-cov --workspace \
 		--exclude revive-llvm-builder \
 		--all-targets \
@@ -128,7 +129,7 @@ coverage: install install-cargo-llvm-cov
 	mv target/coverage/summary.txt book/src/coverage/summary.txt
 	@COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) ; \
 	 TIMESTAMP=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") ; \
-	 COVERED=$$(awk '/^TOTAL/ { print $$10; exit }' target/coverage/summary.txt) ; \
+	 COVERED=$$(awk '/^TOTAL/ { print $$10; exit }' book/src/coverage/summary.txt) ; \
 	 [ -n "$$COVERED" ] || COVERED=N/A ; \
 	 awk -v commit="$$COMMIT" -v ts="$$TIMESTAMP" -v covered="$$COVERED" \
 	     -v link="../coverage/html/index.html" \

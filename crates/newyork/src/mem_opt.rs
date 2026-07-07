@@ -1462,6 +1462,9 @@ mod tests {
 
     /// A store whose memory expansion an intervening `msize()` observes must not
     /// be eliminated as dead by a later store to the same offset.
+    ///
+    /// Builds `mstore(288, 1); let r := msize(); mstore(288, 2)`: the `msize()`
+    /// observes the first store's expansion, so that store is not dead.
     #[test]
     fn msize_prevents_dead_store_elimination() {
         use crate::ir::{MemoryRegion, Object};
@@ -1482,8 +1485,6 @@ mod tests {
             }
         }
 
-        // mstore(288, 1); let r := msize(); mstore(288, 2)
-        // msize() observes the first store's expansion, so it is not dead.
         let statements = vec![
             literal(1, 288),
             literal(2, 1),

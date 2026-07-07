@@ -4722,6 +4722,28 @@ fn array_bounds_probe() {
     }
 }
 
+/// Regression (newyork dead-store elimination vs `msize`): a store whose memory
+/// expansion an intervening `msize()` observes must not be eliminated as dead.
+/// `mstore(288, 1); let r := msize(); mstore(288, 2)` — the dead-store pass
+/// dropped the first store as overwritten by the second, moving the memory
+/// expansion to after the `msize()`, so `r` read the smaller value `0` instead of
+/// `0x140`. The fix clears the dead-store candidate set at an `msize()`, which
+/// observes the cumulative expansion of all prior stores. Compared newyork-PVM
+/// vs solc-EVM.
+#[test]
+fn msize_observes_dead_store_expansion() {
+    let mut actions = instantiate_yul("contracts/MsizeDseBug.yul", "MsizeDseBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: vec![],
+    });
+    run_differential(actions);
+}
+
 /// Regression test for the FMP range-proof gap (PR #7 review finding): a copy
 /// with a static destination inside the free-memory-pointer word [0x40, 0x60)
 /// but a DYNAMIC length clobbers 0x40 with arbitrary bytes. `mload(0x40)` must

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-07c17d47.js";
+            window.path_to_searchindex_js = "../searchindex-58a4728c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f74aae8e.js"></script>
@@ -195,14 +195,15 @@ the PR. Label requires maintainer privileges.</li>
 <li>Builds and tests the workspace under cargo-llvm-cov with
 <code>--ignore-run-fail</code> so partial coverage lands even when test binaries
 exit non-zero.</li>
-<li>Writes HTML to <code>target/coverage/html/</code> and a summary to
-<code>target/coverage/summary.txt</code>.</li>
-<li>Stages the HTML under <code>book/src/coverage/</code>; mdbook copies it to
-<code>docs/coverage/</code> during build.</li>
-<li>Rewrites the <strong>Status</strong> block below in place with the short commit hash,
-ISO-8601 UTC timestamp, and total line coverage, then runs
-<code>mdbook build</code>.</li>
+<li>Writes HTML to <code>book/src/coverage/html/</code> and a summary to
+<code>book/src/coverage/summary.txt</code>.</li>
+<li>Runs <code>mdbook build</code>, which copies the report to <code>docs/coverage/</code>.</li>
 </ol>
+<p>Everything it writes lives under <code>book/src/coverage/</code> and <code>docs/coverage/</code>,
+both of which are gitignored, so a coverage run never touches tracked files —
+there is nothing to revert before committing.</p>
+<p>Open the report at <code>docs/coverage/html/index.html</code>, or run <code>make book</code> to
+browse it in the rendered book.</p>
 <p>Prerequisites:</p>
 <ul>
 <li><code>LLVM_SYS_221_PREFIX</code> exported and pointing at a compatible LLVM build
@@ -210,17 +211,6 @@ ISO-8601 UTC timestamp, and total line coverage, then runs
 <li><code>llvm-tools-preview</code> rustup component, <code>cargo-llvm-cov</code>, and the pinned
 <code>mdbook</code> version — all installed on demand by the target.</li>
 </ul>
-<h3 id="reverting-local-changes"><a class="header" href="#reverting-local-changes">Reverting local changes</a></h3>
-<p><code>make coverage</code> modifies <code>book/src/developer_guide/coverage.md</code> in place and
-stages files under <code>book/src/coverage/</code>. To restore the committed state
-before pushing:</p>
-<pre><code class="language-bash">make coverage-reset
-</code></pre>
-<h2 id="status"><a class="header" href="#status">Status</a></h2>
-<!-- COVERAGE_STATUS_BEGIN -->
-<p><strong>Last collected:</strong> 2026-07-06T18:46:06Z for commit <code>0db01dcb</code> — <strong>62.79% line coverage</strong>.</p>
-<p><a href="../coverage/html/index.html">Open the report</a></p>
-<!-- COVERAGE_STATUS_END -->
 
                     </main>
 

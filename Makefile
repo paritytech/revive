@@ -22,7 +22,6 @@
 	test-llvm-builder \
 	test-book \
 	coverage \
-	coverage-reset \
 	bench \
 	bench-pvm \
 	bench-evm \
@@ -107,9 +106,9 @@ test-book:
 	cargo install mdbook --version 0.5.1 --locked
 	mdbook test book
 
-# Coverage over `test-workspace` (excludes revive-llvm-builder).
-# Stages HTML under book/src/coverage/ and stamps the chapter in place;
-# revert with `make coverage-reset`.
+# Coverage over `test-workspace` (excludes revive-llvm-builder). Everything
+# it writes lands under the gitignored book/src/coverage/ and docs/coverage/
+# trees, so a coverage run never dirties tracked files.
 coverage: install install-cargo-llvm-cov
 	cargo install mdbook --version 0.5.1 --locked
 	cargo llvm-cov clean --workspace
@@ -127,28 +126,10 @@ coverage: install install-cargo-llvm-cov
 	mkdir -p book/src/coverage
 	mv target/coverage/html book/src/coverage/html
 	mv target/coverage/summary.txt book/src/coverage/summary.txt
-	@COMMIT=$$(git rev-parse --short HEAD 2>/dev/null || echo unknown) ; \
-	 TIMESTAMP=$$(date -u +"%Y-%m-%dT%H:%M:%SZ") ; \
-	 COVERED=$$(awk '/^TOTAL/ { print $$10; exit }' book/src/coverage/summary.txt) ; \
-	 [ -n "$$COVERED" ] || COVERED=N/A ; \
-	 awk -v commit="$$COMMIT" -v ts="$$TIMESTAMP" -v covered="$$COVERED" \
-	     -v link="../coverage/html/index.html" \
-	     -f .github/scripts/stamp-coverage-chapter.awk \
-	     book/src/developer_guide/coverage.md \
-	     > book/src/developer_guide/coverage.md.new
-	mv book/src/developer_guide/coverage.md.new book/src/developer_guide/coverage.md
 	mdbook build book
 	@echo
-	@echo "Coverage collected. Run 'make book' to view."
-	@echo "Run 'make coverage-reset' before committing."
-
-# Restore the committed chapter and drop the staged HTML.
-coverage-reset:
-	cargo install mdbook --version 0.5.1 --locked
-	git checkout -- book/src/developer_guide/coverage.md
-	rm -rf book/src/coverage
-	mdbook build book
-	@echo "Coverage chapter restored."
+	@echo "Coverage collected under book/src/coverage/ (gitignored)."
+	@echo "Open docs/coverage/html/index.html, or run 'make book' to browse it."
 
 bench: install-bin
 	cargo criterion --all --all-features --message-format=json \

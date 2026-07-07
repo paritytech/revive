@@ -24,13 +24,16 @@ The target:
 1. Builds and tests the workspace under cargo-llvm-cov with
    `--ignore-run-fail` so partial coverage lands even when test binaries
    exit non-zero.
-2. Writes HTML to `target/coverage/html/` and a summary to
-   `target/coverage/summary.txt`.
-3. Stages the HTML under `book/src/coverage/`; mdbook copies it to
-   `docs/coverage/` during build.
-4. Rewrites the **Status** block below in place with the short commit hash,
-   ISO-8601 UTC timestamp, and total line coverage, then runs
-   `mdbook build`.
+2. Writes HTML to `book/src/coverage/html/` and a summary to
+   `book/src/coverage/summary.txt`.
+3. Runs `mdbook build`, which copies the report to `docs/coverage/`.
+
+Everything it writes lives under `book/src/coverage/` and `docs/coverage/`,
+both of which are gitignored, so a coverage run never touches tracked files —
+there is nothing to revert before committing.
+
+Open the report at `docs/coverage/html/index.html`, or run `make book` to
+browse it in the rendered book.
 
 Prerequisites:
 
@@ -38,21 +41,3 @@ Prerequisites:
   (same as `make test-workspace`).
 * `llvm-tools-preview` rustup component, `cargo-llvm-cov`, and the pinned
   `mdbook` version — all installed on demand by the target.
-
-### Reverting local changes
-
-`make coverage` modifies `book/src/developer_guide/coverage.md` in place and
-stages files under `book/src/coverage/`. To restore the committed state
-before pushing:
-
-```bash
-make coverage-reset
-```
-
-## Status
-
-<!-- COVERAGE_STATUS_BEGIN -->
-**Last collected:** 2026-07-06T18:46:06Z for commit `0db01dcb` — **62.79% line coverage**.
-
-[Open the report](../coverage/html/index.html)
-<!-- COVERAGE_STATUS_END -->

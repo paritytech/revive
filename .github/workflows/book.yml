@@ -28,16 +28,6 @@ jobs:
       - name: Install and test the mdBook
         run: make test-book
 
-      - name: Verify coverage chapter is in default state
-        # Absence of the awk-generated stamp marker. Decouples CI from the
-        # exact default-block wording so the latter can be reworded freely.
-        run: |
-          if grep -q "^\*\*Last collected:\*\*" \
-            book/src/developer_guide/coverage.md; then
-            echo "::error::book/src/developer_guide/coverage.md is stamped with local coverage; revert it before committing."
-            exit 1
-          fi
-
       - name: Build book
         run: mdbook build book
 

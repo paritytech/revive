@@ -1475,6 +1475,9 @@ mod tests {
 
     /// A store read back by an intervening unaligned *overlapping* load must not
     /// be eliminated as dead by a later same-offset store.
+    ///
+    /// Builds `mstore(1, v); r := mload(8); mstore(1, v)`: the `mload(8)` reads
+    /// `[8, 40)`, overlapping the first store's `[1, 33)`, so that store is not dead.
     #[test]
     fn overlapping_load_prevents_dead_store_elimination() {
         use crate::ir::{MemoryRegion, Object};
@@ -1495,8 +1498,6 @@ mod tests {
             }
         }
 
-        // mstore(1, v); r := mload(8); mstore(1, v)
-        // mload(8) reads [8, 40), overlapping the first store's [1, 33): not dead.
         let statements = vec![
             literal(1, 1),
             literal(2, 0xdead),

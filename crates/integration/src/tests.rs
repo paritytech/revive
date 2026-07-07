@@ -2867,6 +2867,30 @@ fn switch_callvalue_cse_dangling() {
     run_differential(actions);
 }
 
+/// The one-armed `if` lowering must materialize its fall-through `inputs`
+/// before the conditional branch terminates the entry block: a narrow (i1) input needs a `zext` to
+/// reach the join phi, and emitting it after the branch leaves the block without a trailing
+/// terminator ("Basic Block ... does not have terminator! label %for_join"). Compiling at all
+/// exercises the fix; `run(s)` never assigns its return value, so every call returns 0. See
+/// FoldedGuardZext.yul (paritytech/revive#560).
+#[test]
+fn folded_guard_narrow_if_input_zext() {
+    let mut actions = instantiate_yul("contracts/FoldedGuardZext.yul", "FoldedGuardZext");
+    for s in [U256::ZERO, U256::from(7u64), U256::MAX] {
+        let mut data = vec![0xa4, 0x44, 0xf5, 0xe9];
+        data.extend_from_slice(&s.to_be_bytes::<32>());
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data,
+        });
+    }
+    run_differential(actions);
+}
+
 /// The panic-pattern outliner must not collapse a window that contains a
 /// side-effecting call. `inner()` reverts with 0xdeadbeef before the panic revert; dropping it and
 /// emitting PanicRevert would revert with the wrong payload. EVM reverts with 0xdeadbeef; the bug

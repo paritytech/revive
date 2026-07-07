@@ -4782,6 +4782,59 @@ fn fmp_overlap_store_observed_traps() {
     .run();
 }
 
+/// Regression (newyork FMP constant forwarding): the conditional-branch variant of
+/// [`fmp_overlap_store_observed_traps`]. The corruption-observation flag handles a
+/// branch via path union, but `FmpPropagation`'s region-level invalidation
+/// (`region_modifies_fmp`) recognized only `FreePointerSlot`-tagged stores — the
+/// overlap store `mstore(56, not(0))` is tagged `Scratch` — so the stale constant
+/// `0x80` was forwarded to the `mload(0x40)` after the branch, and the store
+/// through the corrupted pointer silently succeeded where EVM runs out of gas.
+/// The predicate now resolves static store offsets and treats overlap stores (and
+/// byte stores into the FMP word) as FMP modifications. First call takes the
+/// benign path (word 0 zero, both stacks succeed); second call corrupts (word 0
+/// non-zero, both stacks must run out of gas). Compared newyork-PVM vs solc-EVM.
+#[test]
+fn fmp_overlap_store_in_branch_traps() {
+    let mut actions = instantiate_yul(
+        "contracts/FmpBranchOverlapOogBug.yul",
+        "FmpBranchOverlapOogBug",
+    );
+    let mut corrupting_word = [0u8; 32];
+    corrupting_word[31] = 1;
+    actions.append(&mut vec![
+        Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: vec![0u8; 32],
+        },
+        VerifyCall(VerifyCallExpectation {
+            success: true,
+            ..Default::default()
+        }),
+        Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: corrupting_word.to_vec(),
+        },
+        VerifyCall(VerifyCallExpectation {
+            success: false,
+            ..Default::default()
+        }),
+    ]);
+    Specs {
+        actions,
+        differential: true,
+        ..Default::default()
+    }
+    .run();
+}
+
 /// Regression test for the FMP range-proof gap (PR #7 review finding): a copy
 /// with a static destination inside the free-memory-pointer word [0x40, 0x60)
 /// but a DYNAMIC length clobbers 0x40 with arbitrary bytes. `mload(0x40)` must

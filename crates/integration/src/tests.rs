@@ -4722,6 +4722,28 @@ fn array_bounds_probe() {
     }
 }
 
+/// Regression (newyork dead-store elimination): a store read back by an
+/// intervening unaligned *overlapping* load must not be eliminated as dead.
+/// `mem_opt` marked a pending store read only on an exact-offset load, so
+/// `mstore(1, PAT); r := mload(8); mstore(1, PAT)` left the first store a
+/// dead-store candidate — `mload(8)` reads `[8, 40)`, overlapping the store's
+/// `[1, 33)` at a different offset — and the second store eliminated it, so `r`
+/// read zeroed memory. The fix marks every pending store whose 32-byte range a
+/// load overlaps as read. Compared newyork-PVM vs solc-EVM.
+#[test]
+fn dead_store_read_by_overlapping_load() {
+    let mut actions = instantiate_yul("contracts/DeadStoreOverlapBug.yul", "DeadStoreOverlapBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: vec![],
+    });
+    run_differential(actions);
+}
+
 /// Regression test for the FMP range-proof gap (PR #7 review finding): a copy
 /// with a static destination inside the free-memory-pointer word [0x40, 0x60)
 /// but a DYNAMIC length clobbers 0x40 with arbitrary bytes. `mload(0x40)` must

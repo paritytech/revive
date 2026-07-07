@@ -4722,6 +4722,36 @@ fn array_bounds_probe() {
     }
 }
 
+/// Regression (newyork FMP range proof): a `calldatacopy` whose *dynamic*
+/// destination can land on the free-memory-pointer word `[0x40, 0x60)` corrupts
+/// the FMP, but only *static* copy destinations flagged `fmp_could_be_unbounded`.
+/// `calldatacopy(and(b, 0xFF), 0, 23)` (with `b`'s low byte `0x40`) overwrites the
+/// FMP; the subsequent `mload(0x40)` was truncated to `0` by the surviving range
+/// proof instead of returning the copied bytes (23 × 0x11 then 9 × 0x00). The fix
+/// flags a dynamic copy destination unless it is provably free-pointer-relative
+/// (`add(mload(0x40), k)`, `>= 0x80`). Compared newyork-PVM vs solc-EVM.
+#[test]
+fn calldatacopy_dynamic_dest_fmp_corruption() {
+    let mut actions = instantiate_yul(
+        "contracts/CalldatacopyFmpDynBug.yul",
+        "CalldatacopyFmpDynBug",
+    );
+    // word0: source bytes (0x11); word1: `b` with low byte 0x40 (the copy destination).
+    let mut data = vec![0x11u8; 32];
+    let mut b = [0u8; 32];
+    b[31] = 0x40;
+    data.extend_from_slice(&b);
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Regression test for the FMP range-proof gap (PR #7 review finding): a copy
 /// with a static destination inside the free-memory-pointer word [0x40, 0x60)
 /// but a DYNAMIC length clobbers 0x40 with arbitrary bytes. `mload(0x40)` must

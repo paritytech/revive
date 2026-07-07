@@ -268,10 +268,10 @@ impl HeapAnalysis {
                 } else {
                     self.has_dynamic_accesses = true;
                 }
-                if *region == MemoryRegion::Unknown && !pattern.is_aligned() {
+                if !pattern.is_aligned() {
                     if let Some(address) = static_offset {
                         if address % BYTE_LENGTH_WORD as u64 != 0 {
-                            self.tainted_regions.insert(word_align(address));
+                            self.taint_unaligned_access(address);
                         }
                     }
                 }
@@ -585,6 +585,21 @@ impl HeapAnalysis {
         }
     }
 
+    /// Taints every word a static, non-word-aligned full-word access (`mload`/`mstore`) covers.
+    ///
+    /// EVM memory is big-endian; the native-mode optimization keeps a word's bytes little-endian
+    /// (skipping the byte-swap) only when *every* access to that word is word-aligned. An unaligned
+    /// full-word access at `address` reads or writes the raw bytes of `[address, address + 32)`,
+    /// spanning the two words `word_align(address)` and `word_align(address) + 32`. If either word
+    /// were left a native candidate, an aligned native (little-endian) access to it and this
+    /// unaligned (big-endian) access would disagree on byte order for the overlapping bytes,
+    /// byte-swapping the result. Tainting both covered words forces them big-endian so all accesses
+    /// agree. `mstore(0x20, w); r := mload(0x08)` is the canonical trigger: the aligned store is
+    /// native but the unaligned load reads word `0x20` in the wrong order without this taint.
+    fn taint_unaligned_access(&mut self, address: u64) {
+        self.taint_range(Some(address), Some(BYTE_LENGTH_WORD as u64));
+    }
+
     /// Taints all word-aligned memory regions in a range.
     /// If the range is too large, treats it as a dynamic access instead.
     fn taint_range(&mut self, start: Option<u64>, len: Option<u64>) {
@@ -783,8 +798,12 @@ impl HeapAnalysis {
             Expression::MLoad { offset, .. } => {
                 let _ = self.classify_access(offset);
                 self.track_variable_access(offset);
-                if self.extract_static_offset(offset).is_none() {
-                    self.has_dynamic_accesses = true;
+                match self.extract_static_offset(offset) {
+                    None => self.has_dynamic_accesses = true,
+                    Some(address) if address % BYTE_LENGTH_WORD as u64 != 0 => {
+                        self.taint_unaligned_access(address);
+                    }
+                    Some(_) => {}
                 }
             }
             Expression::Keccak256 { offset, length } => {

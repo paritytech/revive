@@ -4722,6 +4722,42 @@ fn array_bounds_probe() {
     }
 }
 
+/// Regression (newyork FMP range proof): an unaligned `mstore(56, not(0))`
+/// covers `[0x38, 0x58)`, overwriting the free-memory-pointer word
+/// `[0x40, 0x60)` with `0xff...`. A subsequent `mload(0x40)` reads the corrupted
+/// (huge) pointer and `mstore(mload(0x40), 0x42)` expands memory unboundedly, so
+/// EVM (and the stock pipeline) run out of gas. newyork kept its `FMP < heap_size`
+/// range proof — `fmp_could_be_unbounded` was not set for a misaligned overlap
+/// store — and truncated the corrupted pointer into range, silently succeeding.
+/// A control-flow-aware pass now sets the flag when such an overlap store is
+/// *observed* by a later `mload(0x40)` (revert/return-encoding overlap stores,
+/// which discard the FMP unobserved, stay optimized). Compared newyork-PVM vs
+/// solc-EVM; both must run out of gas.
+#[test]
+fn fmp_overlap_store_observed_traps() {
+    let mut actions = instantiate_yul("contracts/FmpOverlapOogBug.yul", "FmpOverlapOogBug");
+    actions.append(&mut vec![
+        Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: vec![],
+        },
+        VerifyCall(VerifyCallExpectation {
+            success: false,
+            ..Default::default()
+        }),
+    ]);
+    Specs {
+        actions,
+        differential: true,
+        ..Default::default()
+    }
+    .run();
+}
+
 /// Regression test for the FMP range-proof gap (PR #7 review finding): a copy
 /// with a static destination inside the free-memory-pointer word [0x40, 0x60)
 /// but a DYNAMIC length clobbers 0x40 with arbitrary bytes. `mload(0x40)` must

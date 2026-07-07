@@ -221,6 +221,14 @@ impl HeapAnalysis {
             self.analyze_block(&function.body, true, is_root);
         }
 
+        // Offset resolution (`offset_values`) for this object is now populated, so a
+        // control-flow-aware pass can decide whether any unaligned store that corrupts the
+        // free-memory-pointer word is actually *observed* (see `detect_observed_fmp_corruption`).
+        self.detect_observed_fmp_corruption(&object.code.statements, false);
+        for function in object.functions.values() {
+            self.detect_observed_fmp_corruption(&function.body.statements, false);
+        }
+
         for subobject in &object.subobjects {
             self.offset_values.clear();
             self.value_expressions.clear();
@@ -614,6 +622,189 @@ impl HeapAnalysis {
             (None, _) => {
                 self.has_dynamic_accesses = true;
             }
+        }
+    }
+
+    /// Sets `fmp_could_be_unbounded` when an unaligned store that corrupts the free-memory-pointer
+    /// word `[0x40, 0x60)` is *observed* — i.e. an `mload(0x40)` (the range-proof consumer) is
+    /// reachable after it before the frame terminates.
+    ///
+    /// An unaligned full-word store at `o ∈ [0x21, 0x5f] \ {0x40}` overwrites part of the FMP with
+    /// arbitrary bytes ([`crate::ir::word_store_overlaps_free_pointer_slot`]). If a later
+    /// `mload(0x40)` reads the corrupted pointer, codegen's `FMP < heap_size` range proof (gated on
+    /// `fmp_could_be_unbounded`, see the field docs) would truncate the arbitrary value into range,
+    /// so a store through it silently succeeds where EVM runs out of gas.
+    ///
+    /// Flagging *every* such store would disable the FMP optimization for almost every contract:
+    /// solc's `Error`/`Panic`/custom-error and multi-value return ABI encoders write `mstore(0x24,
+    /// _)` / `mstore(0x44, _)` into scratch and then immediately `revert`/`return`, discarding the
+    /// FMP unobserved (~+5% / +17 KB on the OZ corpus). This control-flow-aware pass distinguishes
+    /// the two: it walks the structured statement tree tracking whether the FMP word may currently
+    /// hold arbitrary bytes (`corrupt`), and flags only when an FMP read is reachable while
+    /// `corrupt` holds. A frame terminator (`revert`/`return`/`stop`/`invalid`/`leave`/panic/error)
+    /// ends the path, so corruption built purely to feed a terminator is never flagged; an aligned
+    /// `mstore(0x40, _)` overwrites the whole word and re-establishes a defined pointer.
+    fn detect_observed_fmp_corruption(&mut self, statements: &[Statement], corrupt_in: bool) {
+        let _ = self.scan_fmp_corruption(statements, corrupt_in);
+    }
+
+    /// Walks `statements` in program order for [`Self::detect_observed_fmp_corruption`].
+    ///
+    /// Returns `(corrupt_out, terminates)`: whether the FMP word may hold arbitrary bytes at the
+    /// sequence's fall-through exit, and whether every path terminated the frame (so control never
+    /// falls through to a following statement). Sets `fmp_could_be_unbounded` on an observed read.
+    fn scan_fmp_corruption(&mut self, statements: &[Statement], corrupt_in: bool) -> (bool, bool) {
+        let mut corrupt = corrupt_in;
+        for statement in statements {
+            match statement {
+                Statement::Let { value, .. } => {
+                    if corrupt && self.expression_observes_fmp(value) {
+                        self.fmp_could_be_unbounded = true;
+                    }
+                }
+                Statement::Expression(expression) => {
+                    if corrupt && self.expression_observes_fmp(expression) {
+                        self.fmp_could_be_unbounded = true;
+                    }
+                }
+                Statement::MStore { offset, region, .. } => {
+                    let static_offset = self.extract_static_offset(offset);
+                    if region.is_free_pointer_slot(static_offset) {
+                        corrupt = false;
+                    } else if crate::ir::word_store_overlaps_free_pointer_slot(static_offset) {
+                        corrupt = true;
+                    }
+                }
+                Statement::MStore8 { offset, .. } => {
+                    if let Some(address) = self.extract_static_offset(offset) {
+                        if (0x40..0x60).contains(&address) {
+                            corrupt = true;
+                        }
+                    }
+                }
+                Statement::If {
+                    then_region,
+                    else_region,
+                    ..
+                } => {
+                    let (then_corrupt, then_terminates) =
+                        self.scan_fmp_corruption(&then_region.statements, corrupt);
+                    let (else_corrupt, else_terminates) = match else_region {
+                        Some(region) => self.scan_fmp_corruption(&region.statements, corrupt),
+                        None => (corrupt, false),
+                    };
+                    corrupt =
+                        (!then_terminates && then_corrupt) || (!else_terminates && else_corrupt);
+                    if then_terminates && else_terminates {
+                        return (corrupt, true);
+                    }
+                }
+                Statement::Switch { cases, default, .. } => {
+                    let mut fallthrough_corrupt = false;
+                    let mut all_terminate = default.is_some();
+                    for case in cases {
+                        let (case_corrupt, case_terminates) =
+                            self.scan_fmp_corruption(&case.body.statements, corrupt);
+                        fallthrough_corrupt |= !case_terminates && case_corrupt;
+                        all_terminate &= case_terminates;
+                    }
+                    match default {
+                        Some(region) => {
+                            let (default_corrupt, default_terminates) =
+                                self.scan_fmp_corruption(&region.statements, corrupt);
+                            fallthrough_corrupt |= !default_terminates && default_corrupt;
+                            all_terminate &= default_terminates;
+                        }
+                        None => fallthrough_corrupt |= corrupt,
+                    }
+                    corrupt = fallthrough_corrupt;
+                    if all_terminate {
+                        return (corrupt, true);
+                    }
+                }
+                Statement::For {
+                    condition_statements,
+                    body,
+                    post,
+                    ..
+                } => {
+                    corrupt = self.scan_loop_fmp_corruption(
+                        condition_statements,
+                        &body.statements,
+                        &post.statements,
+                        corrupt,
+                    );
+                }
+                Statement::Block(block) => {
+                    let (block_corrupt, block_terminates) =
+                        self.scan_fmp_corruption(&block.statements, corrupt);
+                    corrupt = block_corrupt;
+                    if block_terminates {
+                        return (corrupt, true);
+                    }
+                }
+                Statement::ErrorStringRevert { .. } => {
+                    // The outlined `Error(string)` helper reads `mload(0x40)` for its buffer.
+                    if corrupt {
+                        self.fmp_could_be_unbounded = true;
+                    }
+                    return (corrupt, true);
+                }
+                Statement::Revert { .. }
+                | Statement::Return { .. }
+                | Statement::Stop
+                | Statement::Invalid
+                | Statement::SelfDestruct { .. }
+                | Statement::PanicRevert { .. }
+                | Statement::CustomErrorRevert { .. }
+                | Statement::Leave { .. }
+                | Statement::Break { .. }
+                | Statement::Continue { .. } => return (corrupt, true),
+                _ => {}
+            }
+        }
+        (corrupt, false)
+    }
+
+    /// Conservatively scans a `for` loop's per-iteration sequence to a fixed point.
+    ///
+    /// A store in one iteration can be observed by a read in a later iteration, so the sequence
+    /// (`condition_statements`, body, `post`) is scanned starting from a corruption state that also
+    /// includes any corruption the sequence itself produces. Corruption is a two-point lattice, so
+    /// one re-scan reaches the fixed point. Returns the (conservative) corruption state on exit.
+    fn scan_loop_fmp_corruption(
+        &mut self,
+        condition_statements: &[Statement],
+        body: &[Statement],
+        post: &[Statement],
+        corrupt_in: bool,
+    ) -> bool {
+        let produced = {
+            let (c1, _) = self.scan_fmp_corruption(condition_statements, corrupt_in);
+            let (c2, _) = self.scan_fmp_corruption(body, c1);
+            let (c3, _) = self.scan_fmp_corruption(post, c2);
+            c3
+        };
+        if produced && !corrupt_in {
+            let (c1, _) = self.scan_fmp_corruption(condition_statements, true);
+            let (c2, _) = self.scan_fmp_corruption(body, c1);
+            let (c3, _) = self.scan_fmp_corruption(post, c2);
+            return c3;
+        }
+        produced
+    }
+
+    /// Whether evaluating `expression` reads the free-memory pointer in a way the `FMP < heap_size`
+    /// range proof would mis-handle if the pointer is corrupted: a direct `mload(0x40)`, or a user
+    /// function call whose body could read `mload(0x40)`.
+    fn expression_observes_fmp(&self, expression: &Expression) -> bool {
+        match expression {
+            Expression::MLoad { offset, region } => {
+                *region == MemoryRegion::FreePointerSlot
+                    || self.extract_static_offset(offset) == Some(0x40)
+            }
+            Expression::Call { .. } => true,
+            _ => false,
         }
     }
 
@@ -1217,6 +1408,102 @@ mod tests {
         assert_eq!(gcd(12, 18), 6);
         assert_eq!(gcd(17, 13), 1);
         assert_eq!(gcd(0, 5), 5);
+    }
+
+    /// Builds an object whose runtime code establishes the FMP, does an unaligned
+    /// `mstore(0x38, huge)` overlapping the FMP word, then runs `tail`.
+    fn object_with_overlap_store(tail: Vec<Statement>) -> Object {
+        use crate::ir::{Block, Type, ValueId};
+        fn lit(value: u64) -> Expression {
+            Expression::Literal {
+                value: BigUint::from(value),
+                value_type: Type::default(),
+            }
+        }
+        let mut statements = vec![
+            // Establish the FMP with a trusted literal (no direct unboundedness flag).
+            Statement::Let {
+                bindings: vec![ValueId(0)],
+                value: lit(0x80),
+            },
+            Statement::Let {
+                bindings: vec![ValueId(1)],
+                value: lit(0x40),
+            },
+            Statement::MStore {
+                offset: Value::int(ValueId(1)),
+                value: Value::int(ValueId(0)),
+                region: MemoryRegion::from_address(&BigUint::from(0x40u64)),
+            },
+            // Unaligned store overlapping the FMP word [0x40, 0x60).
+            Statement::Let {
+                bindings: vec![ValueId(2)],
+                value: lit(0xffff_ffff_ffff_ffff),
+            },
+            Statement::Let {
+                bindings: vec![ValueId(3)],
+                value: lit(0x38),
+            },
+            Statement::MStore {
+                offset: Value::int(ValueId(3)),
+                value: Value::int(ValueId(2)),
+                region: MemoryRegion::from_address(&BigUint::from(0x38u64)),
+            },
+        ];
+        statements.extend(tail);
+        Object {
+            name: "T".to_string(),
+            code: Block { statements },
+            functions: std::collections::BTreeMap::new(),
+            subobjects: vec![],
+            data: std::collections::BTreeMap::new(),
+        }
+    }
+
+    /// An overlap store observed by a later `mload(0x40)` must flag the FMP as
+    /// possibly unbounded so codegen skips the `FMP < heap_size` range proof.
+    #[test]
+    fn overlap_store_observed_by_fmp_load_flags_unbounded() {
+        use crate::ir::{Type, ValueId};
+        let tail = vec![
+            Statement::Let {
+                bindings: vec![ValueId(4)],
+                value: Expression::Literal {
+                    value: BigUint::from(0x40u64),
+                    value_type: Type::default(),
+                },
+            },
+            Statement::Let {
+                bindings: vec![ValueId(5)],
+                value: Expression::MLoad {
+                    offset: Value::int(ValueId(4)),
+                    region: MemoryRegion::FreePointerSlot,
+                },
+            },
+        ];
+        let results = object_with_overlap_store(tail).analyze_heap();
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "an mstore overlapping 0x40 read back via mload(0x40) is observed corruption"
+        );
+    }
+
+    /// An overlap store whose only successor is a frame terminator (the solc
+    /// revert/return ABI-encoding pattern) discards the corrupted FMP unobserved,
+    /// so it must NOT flag unboundedness — otherwise the FMP optimization is lost
+    /// for nearly every contract with a `require`-with-message.
+    #[test]
+    fn overlap_store_then_revert_stays_bounded() {
+        use crate::ir::ValueId;
+        let tail = vec![Statement::Revert {
+            offset: Value::int(ValueId(1)),
+            length: Value::int(ValueId(0)),
+        }];
+        let results = object_with_overlap_store(tail).analyze_heap();
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "an mstore overlapping 0x40 followed only by a revert is unobserved corruption"
+        );
     }
 
     #[test]

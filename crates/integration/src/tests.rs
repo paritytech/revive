@@ -469,6 +469,29 @@ fn unaligned_mstore_forwarding() {
     run_differential(actions);
 }
 
+/// Regression (newyork heap optimization): a full-word `mload` at a
+/// non-word-aligned offset that overlaps a word classified native
+/// (little-endian, byte-swap elided) returned byte-swapped garbage. In the
+/// PoC `mstore(0x20, PAT)` is word-aligned and stays native, but `mload(0x08)`
+/// reads `[0x08, 0x28)` — overlapping the native word `0x20` — and lowers to a
+/// big-endian read, so the two accesses disagree on byte order for the shared
+/// bytes. The heap analysis now taints every word an unaligned full-word
+/// access covers, forcing them big-endian so all accesses agree. Compared
+/// newyork-PVM vs solc-EVM.
+#[test]
+fn unaligned_mload_native_byte_order() {
+    let mut actions = instantiate("contracts/UnalignedMloadNativeBug.sol", "UnalignedMload");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::unaligned_mload_native_bug().calldata,
+    });
+    run_differential(actions);
+}
+
 /// Regression: `to_llvm.rs::get_or_create_return_block` (and revert / Stop
 /// siblings) build the constant offset/length via
 /// `context.xlen_type().const_int(const_offset, false)`, which silently

@@ -8,6 +8,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 
 - Restored the top-level `revive_version` field in `--standard-json` output and the `resolc_version` field in `--combined-json` output, both of which stopped being populated in `v0.4.0`. [#557](https://github.com/paritytech/revive/pull/557)
 - ICE triggered by `--disable-solc-optimizer --newyork where inlined loops could emit an unterminated basic block in the inlined entrypoint. [#561](https://github.com/paritytech/revive/pull/561)
+- `--newyork`: a `calldatacopy`/`codecopy`/`returndatacopy` to a dynamic destination that could overwrite the free-memory-pointer word truncated a subsequent `mload(0x40)` to `0`.
 
 ## v1.3.0
 

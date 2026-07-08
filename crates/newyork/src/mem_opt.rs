@@ -592,6 +592,24 @@ impl MemoryOptimizer {
         }
     }
 
+    /// Marks every pending store that an `mload(load_offset)` reads as read, dropping it from the
+    /// dead-store candidate set.
+    ///
+    /// An `mload(load_offset)` reads the 32 bytes `[load_offset, load_offset + 32)`. A pending store
+    /// at `p` wrote `[p, p + 32)`; if those ranges overlap, the load observes at least one of the
+    /// store's bytes, so the store is *not* dead and must not be eliminated by a later overwrite.
+    /// Removing only the exact-offset entry (`load_offset == p`) missed an *unaligned* overlapping
+    /// load: `mstore(1, v); r := mload(8); mstore(1, v)` reads `[8, 40)` — overlapping the first
+    /// store's `[1, 33)` — yet the exact-offset check left it pending, so the second store to `1`
+    /// eliminated it as dead and `r` read zeroed memory.
+    fn mark_stores_read_by_load(&mut self, load_offset: u64) {
+        let load_end = load_offset.saturating_add(BYTE_LENGTH_WORD as u64);
+        self.pending_stores.retain(|&pending_offset, _| {
+            let pending_end = pending_offset.saturating_add(BYTE_LENGTH_WORD as u64);
+            pending_end <= load_offset || pending_offset >= load_end
+        });
+    }
+
     /// Tracks memory reads for dead store elimination and load-after-store forwarding.
     ///
     /// When a load follows a store to the same static offset, the stored value is
@@ -604,7 +622,7 @@ impl MemoryOptimizer {
                 if let Some(static_offset) = self.try_get_static_offset(&offset) {
                     let word_offset = word_align(static_offset);
 
-                    self.pending_stores.remove(&static_offset);
+                    self.mark_stores_read_by_load(static_offset);
 
                     if let Some(tracked) = self.memory_state.get_mut(&word_offset) {
                         if tracked.offset == static_offset {
@@ -647,6 +665,11 @@ impl MemoryOptimizer {
             Expression::MappingSLoad { key, slot } => {
                 self.pending_stores.clear();
                 Expression::MappingSLoad { key, slot }
+            }
+
+            Expression::MSize => {
+                self.pending_stores.clear();
+                Expression::MSize
             }
 
             other => other,
@@ -1511,6 +1534,129 @@ mod tests {
         } else {
             panic!("Expected Let statement");
         }
+    }
+
+    /// A store whose memory expansion an intervening `msize()` observes must not
+    /// be eliminated as dead by a later store to the same offset.
+    ///
+    /// Builds `mstore(288, 1); let r := msize(); mstore(288, 2)`: the `msize()`
+    /// observes the first store's expansion, so that store is not dead.
+    #[test]
+    fn msize_prevents_dead_store_elimination() {
+        use crate::ir::{MemoryRegion, Object};
+
+        fn literal(id: u32, value: u64) -> Statement {
+            Statement::Let {
+                bindings: vec![ValueId(id)],
+                value: Expression::Literal {
+                    value: BigUint::from(value),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            }
+        }
+        fn int(id: u32) -> Value {
+            Value {
+                id: ValueId(id),
+                value_type: Type::Int(BitWidth::I256),
+            }
+        }
+
+        let statements = vec![
+            literal(1, 288),
+            literal(2, 1),
+            Statement::MStore {
+                offset: int(1),
+                value: int(2),
+                region: MemoryRegion::Unknown,
+            },
+            Statement::Let {
+                bindings: vec![ValueId(3)],
+                value: Expression::MSize,
+            },
+            literal(4, 2),
+            Statement::MStore {
+                offset: int(1),
+                value: int(4),
+                region: MemoryRegion::Unknown,
+            },
+        ];
+
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements },
+            functions: BTreeMap::new(),
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        };
+
+        let statistics = MemoryOptimizer::new().optimize_object(&mut object);
+        assert_eq!(
+            statistics.stores_eliminated, 0,
+            "the first store's expansion is observed by the intervening msize()"
+        );
+    }
+
+    /// A store read back by an intervening unaligned *overlapping* load must not
+    /// be eliminated as dead by a later same-offset store.
+    ///
+    /// Builds `mstore(1, v); r := mload(8); mstore(1, v)`: the `mload(8)` reads
+    /// `[8, 40)`, overlapping the first store's `[1, 33)`, so that store is not dead.
+    #[test]
+    fn overlapping_load_prevents_dead_store_elimination() {
+        use crate::ir::{MemoryRegion, Object};
+
+        fn literal(id: u32, value: u64) -> Statement {
+            Statement::Let {
+                bindings: vec![ValueId(id)],
+                value: Expression::Literal {
+                    value: BigUint::from(value),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            }
+        }
+        fn int(id: u32) -> Value {
+            Value {
+                id: ValueId(id),
+                value_type: Type::Int(BitWidth::I256),
+            }
+        }
+
+        let statements = vec![
+            literal(1, 1),
+            literal(2, 0xdead),
+            Statement::MStore {
+                offset: int(1),
+                value: int(2),
+                region: MemoryRegion::Scratch,
+            },
+            literal(3, 8),
+            Statement::Let {
+                bindings: vec![ValueId(4)],
+                value: Expression::MLoad {
+                    offset: int(3),
+                    region: MemoryRegion::Scratch,
+                },
+            },
+            Statement::MStore {
+                offset: int(1),
+                value: int(2),
+                region: MemoryRegion::Scratch,
+            },
+        ];
+
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements },
+            functions: BTreeMap::new(),
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        };
+
+        let statistics = MemoryOptimizer::new().optimize_object(&mut object);
+        assert_eq!(
+            statistics.stores_eliminated, 0,
+            "the first store is read by the overlapping mload(8) and must survive"
+        );
     }
 
     #[test]

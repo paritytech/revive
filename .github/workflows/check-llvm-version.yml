@@ -1,0 +1,57 @@
+# Guards the checked-in .llvm-version file, which CI reads (via the get-llvm
+# action) to select the prebuilt LLVM release to build against. Whenever the
+# llvm submodule pin or the file changes, this derives the version from the
+# pinned commit and fails if the file was not updated to match.
+
+name: Check LLVM Version
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "llvm"
+      - ".llvm-version"
+      - ".gitmodules"
+      - ".github/workflows/check-llvm-version.yml"
+      - ".github/actions/get-llvm/action.yml"
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - "llvm"
+      - ".llvm-version"
+      - ".gitmodules"
+      - ".github/workflows/check-llvm-version.yml"
+      - ".github/actions/get-llvm/action.yml"
+
+jobs:
+  check-llvm-version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout revive
+        uses: actions/checkout@v6
+
+      - name: Verify .llvm-version Matches the Submodule Pin
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          LLVM_SHA=$(git ls-tree HEAD llvm | awk '{print $3}')
+          LLVM_URL=$(git config -f .gitmodules submodule.llvm.url)
+
+          # Do a treeless clone to avoid unnecessarily fetching source files.
+          git clone --filter=tree:0 --no-checkout \
+            "https://x-access-token:${GH_TOKEN}@${LLVM_URL#https://}" llvm-tmp
+
+          # Try to get the most recent tag (e.g., "llvmorg-18.1.8").
+          DETECTED_LLVM_TAG=$(git -C llvm-tmp describe --tags --abbrev=0 "$LLVM_SHA")
+
+          # Convert "llvmorg-x.y.z" to "llvm-x.y.z".
+          DETECTED_LLVM_VERSION=$(echo "$DETECTED_LLVM_TAG" | sed 's/^llvmorg-/llvm-/')
+          RECORDED_LLVM_VERSION=$(cat .llvm-version)
+
+          if [ "$DETECTED_LLVM_VERSION" != "$RECORDED_LLVM_VERSION" ]; then
+            echo "::error file=.llvm-version::.llvm-version contains '$RECORDED_LLVM_VERSION' but the submodule pin describes to '$DETECTED_LLVM_VERSION'."
+            exit 1
+          fi
+          echo "OK: .llvm-version ($RECORDED_LLVM_VERSION) matches the submodule pin."

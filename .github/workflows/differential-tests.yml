@@ -7,7 +7,6 @@ env:
   IS_PUSH_TO_MAIN: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
   # The exact compiler modes to use for compiling and comparing hashes by retester.
   # Runs triggered by pushes to main exercise more modes.
-  # TODO: Temporarily testing some specific modes with LLVM release containing a patch, revert this.
   COMPILE_MODES: >-
     ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main')
     && 'Y M0 S+, Y M3 S+, Y Mz S+, NY M0 S+, NY M3 S+, NY Mz S+'

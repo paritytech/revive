@@ -1051,6 +1051,7 @@ impl TypeInference {
             }
             Statement::For {
                 condition_statements,
+                condition,
                 body,
                 post,
                 ..
@@ -1058,6 +1059,7 @@ impl TypeInference {
                 let saved = self.in_unconditional_context;
                 self.in_unconditional_context = false;
                 self.collect_uses_statements(condition_statements);
+                self.collect_uses_expression(condition);
                 self.collect_uses_statements(&body.statements);
                 self.collect_uses_statements(&post.statements);
                 self.in_unconditional_context = saved;

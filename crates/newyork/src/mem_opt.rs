@@ -667,6 +667,11 @@ impl MemoryOptimizer {
                 Expression::MappingSLoad { key, slot }
             }
 
+            Expression::MSize => {
+                self.pending_stores.clear();
+                Expression::MSize
+            }
+
             other => other,
         }
     }
@@ -1471,6 +1476,66 @@ mod tests {
         } else {
             panic!("Expected Let statement");
         }
+    }
+
+    /// A store whose memory expansion an intervening `msize()` observes must not
+    /// be eliminated as dead by a later store to the same offset.
+    ///
+    /// Builds `mstore(288, 1); let r := msize(); mstore(288, 2)`: the `msize()`
+    /// observes the first store's expansion, so that store is not dead.
+    #[test]
+    fn msize_prevents_dead_store_elimination() {
+        use crate::ir::{MemoryRegion, Object};
+
+        fn literal(id: u32, value: u64) -> Statement {
+            Statement::Let {
+                bindings: vec![ValueId(id)],
+                value: Expression::Literal {
+                    value: BigUint::from(value),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            }
+        }
+        fn int(id: u32) -> Value {
+            Value {
+                id: ValueId(id),
+                value_type: Type::Int(BitWidth::I256),
+            }
+        }
+
+        let statements = vec![
+            literal(1, 288),
+            literal(2, 1),
+            Statement::MStore {
+                offset: int(1),
+                value: int(2),
+                region: MemoryRegion::Unknown,
+            },
+            Statement::Let {
+                bindings: vec![ValueId(3)],
+                value: Expression::MSize,
+            },
+            literal(4, 2),
+            Statement::MStore {
+                offset: int(1),
+                value: int(4),
+                region: MemoryRegion::Unknown,
+            },
+        ];
+
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements },
+            functions: BTreeMap::new(),
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        };
+
+        let statistics = MemoryOptimizer::new().optimize_object(&mut object);
+        assert_eq!(
+            statistics.stores_eliminated, 0,
+            "the first store's expansion is observed by the intervening msize()"
+        );
     }
 
     /// A store read back by an intervening unaligned *overlapping* load must not

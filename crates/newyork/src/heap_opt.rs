@@ -268,10 +268,10 @@ impl HeapAnalysis {
                 } else {
                     self.has_dynamic_accesses = true;
                 }
-                if *region == MemoryRegion::Unknown && !pattern.is_aligned() {
+                if !pattern.is_aligned() {
                     if let Some(address) = static_offset {
                         if address % BYTE_LENGTH_WORD as u64 != 0 {
-                            self.tainted_regions.insert(word_align(address));
+                            self.taint_unaligned_access(address);
                         }
                     }
                 }
@@ -566,7 +566,7 @@ impl HeapAnalysis {
                 size > 0 && address < 0x60 && address.saturating_add(size) > 0x40
             }
             (Some(address), None) => (0x40..0x60).contains(&address),
-            _ => false,
+            (None, _) => !self.is_free_pointer_relative(destination.id.0),
         };
         if covers_fmp {
             self.fmp_could_be_unbounded = true;
@@ -583,6 +583,62 @@ impl HeapAnalysis {
             }
             (None, _) => self.has_dynamic_accesses = true,
         }
+    }
+
+    /// Whether a dynamic memory destination is a free-memory-pointer-relative address, and so
+    /// provably cannot land on the FMP word `[0x40, 0x60)`.
+    ///
+    /// A copy to a dynamic destination (`calldatacopy(dst, _, _)` etc.) corrupts the FMP when `dst`
+    /// can equal an offset in `[0x40, 0x60)`. solc only ever copies to an FMP-relative address
+    /// (`add(mload(0x40), k)`), which is `>= 0x80` because the bounded FMP is `>= 0x80` — so it
+    /// cannot hit the slot. A destination that is *not* recognizably FMP-relative (e.g.
+    /// `and(calldataload(p), 0xff)`, which ranges over `[0, 0xff]`) can, and must flag
+    /// `fmp_could_be_unbounded` so the corrupted `mload(0x40)` skips the `FMP < heap_size` range
+    /// proof. Recognized as at-or-above the free pointer: `mload(0x40)`, a literal base `>= 0x60`
+    /// that fits in 64 bits (`mem_opt` constant-forwards `mload(0x40)` to its `0x80` literal), an
+    /// `add` with such an operand, and `Var` forwarding chains. (The adversarial `add(mload(0x40),
+    /// k)` / `add(0x80, k)` that wraps mod 2^256 back to `0x40` is the same solc-unreachable residual
+    /// as the dynamic full-word `MStore` gap; see the `fmp_could_be_unbounded` field docs.)
+    fn is_free_pointer_relative(&self, value_id: u32) -> bool {
+        const MAX_DEPTH: u32 = 32;
+        let mut current = value_id;
+        for _ in 0..MAX_DEPTH {
+            match self.value_expressions.get(&current) {
+                Some(Expression::MLoad { offset, .. }) => {
+                    return self.extract_static_offset(offset) == Some(0x40);
+                }
+                Some(Expression::Literal { value, .. }) => {
+                    let digits = value.to_u64_digits();
+                    return digits.len() <= 1 && digits.first().copied().unwrap_or(0) >= 0x60;
+                }
+                Some(Expression::Var(inner)) => current = inner.0,
+                Some(Expression::Binary {
+                    operation: crate::ir::BinaryOperation::Add,
+                    lhs,
+                    rhs,
+                }) => {
+                    return self.is_free_pointer_relative(lhs.id.0)
+                        || self.is_free_pointer_relative(rhs.id.0);
+                }
+                _ => return false,
+            }
+        }
+        false
+    }
+
+    /// Taints every word a static, non-word-aligned full-word access (`mload`/`mstore`) covers.
+    ///
+    /// EVM memory is big-endian; the native-mode optimization keeps a word's bytes little-endian
+    /// (skipping the byte-swap) only when *every* access to that word is word-aligned. An unaligned
+    /// full-word access at `address` reads or writes the raw bytes of `[address, address + 32)`,
+    /// spanning the two words `word_align(address)` and `word_align(address) + 32`. If either word
+    /// were left a native candidate, an aligned native (little-endian) access to it and this
+    /// unaligned (big-endian) access would disagree on byte order for the overlapping bytes,
+    /// byte-swapping the result. Tainting both covered words forces them big-endian so all accesses
+    /// agree. `mstore(0x20, w); r := mload(0x08)` is the canonical trigger: the aligned store is
+    /// native but the unaligned load reads word `0x20` in the wrong order without this taint.
+    fn taint_unaligned_access(&mut self, address: u64) {
+        self.taint_range(Some(address), Some(BYTE_LENGTH_WORD as u64));
     }
 
     /// Taints all word-aligned memory regions in a range.
@@ -783,8 +839,12 @@ impl HeapAnalysis {
             Expression::MLoad { offset, .. } => {
                 let _ = self.classify_access(offset);
                 self.track_variable_access(offset);
-                if self.extract_static_offset(offset).is_none() {
-                    self.has_dynamic_accesses = true;
+                match self.extract_static_offset(offset) {
+                    None => self.has_dynamic_accesses = true,
+                    Some(address) if address % BYTE_LENGTH_WORD as u64 != 0 => {
+                        self.taint_unaligned_access(address);
+                    }
+                    Some(_) => {}
                 }
             }
             Expression::Keccak256 { offset, length } => {
@@ -1186,6 +1246,18 @@ mod tests {
     use super::*;
     use num::BigUint;
 
+    /// Builds a `Statement::Let` binding `id` to the literal `value`.
+    fn literal(id: u32, value: u64) -> Statement {
+        use crate::ir::{Type, ValueId};
+        Statement::Let {
+            bindings: vec![ValueId(id)],
+            value: Expression::Literal {
+                value: BigUint::from(value),
+                value_type: Type::default(),
+            },
+        }
+    }
+
     #[test]
     fn test_alignment_computation() {
         assert_eq!(compute_alignment(0), 32);
@@ -1217,6 +1289,89 @@ mod tests {
         assert_eq!(gcd(12, 18), 6);
         assert_eq!(gcd(17, 13), 1);
         assert_eq!(gcd(0, 5), 5);
+    }
+
+    /// Builds an object whose runtime code binds `dest` (id 10) and copies 23
+    /// bytes of calldata to it, then reads `mload(0x40)`.
+    fn object_with_dynamic_copy(dest_setup: Vec<Statement>) -> Object {
+        use crate::ir::{Block, ValueId};
+        let mut statements = dest_setup;
+        statements.push(literal(20, 0));
+        statements.push(literal(21, 23));
+        statements.push(Statement::CallDataCopy {
+            destination: Value::int(ValueId(10)),
+            offset: Value::int(ValueId(20)),
+            length: Value::int(ValueId(21)),
+        });
+        Object {
+            name: "T".to_string(),
+            code: Block { statements },
+            functions: std::collections::BTreeMap::new(),
+            subobjects: vec![],
+            data: std::collections::BTreeMap::new(),
+        }
+    }
+
+    /// A dynamic copy destination that is not provably free-pointer-relative
+    /// (`and(calldataload(p), 0xff)`, range `[0, 0xff]`) can land on the FMP word,
+    /// so it must flag the FMP as possibly unbounded.
+    #[test]
+    fn dynamic_copy_non_fmp_dest_flags_unbounded() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let dest_setup = vec![
+            Statement::Let {
+                bindings: vec![ValueId(1)],
+                value: Expression::CallDataLoad {
+                    offset: Value::int(ValueId(0)),
+                },
+            },
+            literal(2, 0xff),
+            Statement::Let {
+                bindings: vec![ValueId(10)],
+                value: Expression::Binary {
+                    operation: BinaryOperation::And,
+                    lhs: Value::int(ValueId(1)),
+                    rhs: Value::int(ValueId(2)),
+                },
+            },
+        ];
+        let results = object_with_dynamic_copy(dest_setup).analyze_heap();
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "a masked calldata destination can hit the FMP word"
+        );
+    }
+
+    /// A dynamic copy destination that is free-pointer-relative
+    /// (`add(mload(0x40), 0x20)`, `>= 0x80`) cannot hit the FMP word, so it must
+    /// not disable the FMP optimization.
+    #[test]
+    fn dynamic_copy_fmp_relative_dest_stays_bounded() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let dest_setup = vec![
+            literal(0, 0x40),
+            Statement::Let {
+                bindings: vec![ValueId(1)],
+                value: Expression::MLoad {
+                    offset: Value::int(ValueId(0)),
+                    region: MemoryRegion::FreePointerSlot,
+                },
+            },
+            literal(2, 0x20),
+            Statement::Let {
+                bindings: vec![ValueId(10)],
+                value: Expression::Binary {
+                    operation: BinaryOperation::Add,
+                    lhs: Value::int(ValueId(1)),
+                    rhs: Value::int(ValueId(2)),
+                },
+            },
+        ];
+        let results = object_with_dynamic_copy(dest_setup).analyze_heap();
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "an add(mload(0x40), k) destination is >= 0x80 and cannot hit the FMP word"
+        );
     }
 
     #[test]

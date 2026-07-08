@@ -268,10 +268,10 @@ impl HeapAnalysis {
                 } else {
                     self.has_dynamic_accesses = true;
                 }
-                if *region == MemoryRegion::Unknown && !pattern.is_aligned() {
+                if !pattern.is_aligned() {
                     if let Some(address) = static_offset {
                         if address % BYTE_LENGTH_WORD as u64 != 0 {
-                            self.tainted_regions.insert(word_align(address));
+                            self.taint_unaligned_access(address);
                         }
                     }
                 }
@@ -626,6 +626,21 @@ impl HeapAnalysis {
         false
     }
 
+    /// Taints every word a static, non-word-aligned full-word access (`mload`/`mstore`) covers.
+    ///
+    /// EVM memory is big-endian; the native-mode optimization keeps a word's bytes little-endian
+    /// (skipping the byte-swap) only when *every* access to that word is word-aligned. An unaligned
+    /// full-word access at `address` reads or writes the raw bytes of `[address, address + 32)`,
+    /// spanning the two words `word_align(address)` and `word_align(address) + 32`. If either word
+    /// were left a native candidate, an aligned native (little-endian) access to it and this
+    /// unaligned (big-endian) access would disagree on byte order for the overlapping bytes,
+    /// byte-swapping the result. Tainting both covered words forces them big-endian so all accesses
+    /// agree. `mstore(0x20, w); r := mload(0x08)` is the canonical trigger: the aligned store is
+    /// native but the unaligned load reads word `0x20` in the wrong order without this taint.
+    fn taint_unaligned_access(&mut self, address: u64) {
+        self.taint_range(Some(address), Some(BYTE_LENGTH_WORD as u64));
+    }
+
     /// Taints all word-aligned memory regions in a range.
     /// If the range is too large, treats it as a dynamic access instead.
     fn taint_range(&mut self, start: Option<u64>, len: Option<u64>) {
@@ -824,8 +839,12 @@ impl HeapAnalysis {
             Expression::MLoad { offset, .. } => {
                 let _ = self.classify_access(offset);
                 self.track_variable_access(offset);
-                if self.extract_static_offset(offset).is_none() {
-                    self.has_dynamic_accesses = true;
+                match self.extract_static_offset(offset) {
+                    None => self.has_dynamic_accesses = true,
+                    Some(address) if address % BYTE_LENGTH_WORD as u64 != 0 => {
+                        self.taint_unaligned_access(address);
+                    }
+                    Some(_) => {}
                 }
             }
             Expression::Keccak256 { offset, length } => {
@@ -1227,6 +1246,18 @@ mod tests {
     use super::*;
     use num::BigUint;
 
+    /// Builds a `Statement::Let` binding `id` to the literal `value`.
+    fn literal(id: u32, value: u64) -> Statement {
+        use crate::ir::{Type, ValueId};
+        Statement::Let {
+            bindings: vec![ValueId(id)],
+            value: Expression::Literal {
+                value: BigUint::from(value),
+                value_type: Type::default(),
+            },
+        }
+    }
+
     #[test]
     fn test_alignment_computation() {
         assert_eq!(compute_alignment(0), 32);
@@ -1263,19 +1294,10 @@ mod tests {
     /// Builds an object whose runtime code binds `dest` (id 10) and copies 23
     /// bytes of calldata to it, then reads `mload(0x40)`.
     fn object_with_dynamic_copy(dest_setup: Vec<Statement>) -> Object {
-        use crate::ir::{Block, Type, ValueId};
-        fn lit(id: u32, value: u64) -> Statement {
-            Statement::Let {
-                bindings: vec![ValueId(id)],
-                value: Expression::Literal {
-                    value: BigUint::from(value),
-                    value_type: Type::default(),
-                },
-            }
-        }
+        use crate::ir::{Block, ValueId};
         let mut statements = dest_setup;
-        statements.push(lit(20, 0));
-        statements.push(lit(21, 23));
+        statements.push(literal(20, 0));
+        statements.push(literal(21, 23));
         statements.push(Statement::CallDataCopy {
             destination: Value::int(ValueId(10)),
             offset: Value::int(ValueId(20)),
@@ -1295,7 +1317,7 @@ mod tests {
     /// so it must flag the FMP as possibly unbounded.
     #[test]
     fn dynamic_copy_non_fmp_dest_flags_unbounded() {
-        use crate::ir::{BinaryOperation, Type, ValueId};
+        use crate::ir::{BinaryOperation, ValueId};
         let dest_setup = vec![
             Statement::Let {
                 bindings: vec![ValueId(1)],
@@ -1303,13 +1325,7 @@ mod tests {
                     offset: Value::int(ValueId(0)),
                 },
             },
-            Statement::Let {
-                bindings: vec![ValueId(2)],
-                value: Expression::Literal {
-                    value: BigUint::from(0xffu64),
-                    value_type: Type::default(),
-                },
-            },
+            literal(2, 0xff),
             Statement::Let {
                 bindings: vec![ValueId(10)],
                 value: Expression::Binary {
@@ -1331,15 +1347,9 @@ mod tests {
     /// not disable the FMP optimization.
     #[test]
     fn dynamic_copy_fmp_relative_dest_stays_bounded() {
-        use crate::ir::{BinaryOperation, Type, ValueId};
+        use crate::ir::{BinaryOperation, ValueId};
         let dest_setup = vec![
-            Statement::Let {
-                bindings: vec![ValueId(0)],
-                value: Expression::Literal {
-                    value: BigUint::from(0x40u64),
-                    value_type: Type::default(),
-                },
-            },
+            literal(0, 0x40),
             Statement::Let {
                 bindings: vec![ValueId(1)],
                 value: Expression::MLoad {
@@ -1347,13 +1357,7 @@ mod tests {
                     region: MemoryRegion::FreePointerSlot,
                 },
             },
-            Statement::Let {
-                bindings: vec![ValueId(2)],
-                value: Expression::Literal {
-                    value: BigUint::from(0x20u64),
-                    value_type: Type::default(),
-                },
-            },
+            literal(2, 0x20),
             Statement::Let {
                 bindings: vec![ValueId(10)],
                 value: Expression::Binary {

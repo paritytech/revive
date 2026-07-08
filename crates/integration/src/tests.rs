@@ -4769,6 +4769,34 @@ fn array_bounds_probe() {
     }
 }
 
+/// Regression (newyork type inference): a value stored to the free-memory-pointer
+/// slot `0x40` was narrowed to i64 (treated as a bounded pointer) even when the
+/// same value is observable at full width elsewhere. `f0`'s parameter `p0` is
+/// stored to the FMP slot *and* full-width at offset 8 (read by `mload(24)`); the
+/// i64 narrowing of the parameter inserts a call-boundary guard that traps
+/// (consumes all gas) for an argument `>= 2^64`. The first call passes `b`
+/// (`calldataload(32)`, a full 256-bit word), so newyork ran out of gas where EVM
+/// executes successfully. The fix records the FMP-stored value as an ordinary
+/// full-width memory value. Compared newyork-PVM vs solc-EVM.
+#[test]
+fn fn_native_fmp_store_no_spurious_trap() {
+    let mut actions = instantiate_yul("contracts/FnNativeFmpBug.yul", "FnNativeFmpBug");
+    // Four lane-distinct words; word1 (`b`) is >= 2^64 to exercise the guard.
+    let mut data = Vec::new();
+    for byte in [0x11u8, 0x22, 0x33, 0x44] {
+        data.extend_from_slice(&[byte; 32]);
+    }
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Regression (newyork dead-store elimination vs `msize`): a store whose memory
 /// expansion an intervening `msize()` observes must not be eliminated as dead.
 /// `mstore(288, 1); let r := msize(); mstore(288, 2)` — the dead-store pass

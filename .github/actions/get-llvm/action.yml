@@ -21,6 +21,7 @@ runs:
         # To test a draft LLVM release across every CI workflow, set this to the full
         # draft name (e.g. "llvm-21.1.8-revive.0f80912") and revert to "" before merging.
         OVERRIDE_VERSION: ""
+        GH_TOKEN: ${{ github.token }}
       run: |
         set -euo pipefail
 
@@ -40,7 +41,10 @@ runs:
         fi
 
         # Do a treeless clone to avoid unnecessarily fetching source files.
-        git clone --filter=tree:0 --no-checkout "$LLVM_URL" llvm-tmp
+        # Authenticate the clone since anonymous clones from shared runner IPs are rate-limited by GitHub.
+        git clone --filter=tree:0 --no-checkout \
+          "https://x-access-token:${GH_TOKEN}@${LLVM_URL#https://}" llvm-tmp
+
         # Try to get the most recent tag (e.g., "llvmorg-18.1.8").
         LLVM_TAG=$(git -C llvm-tmp describe --tags --abbrev=0 "$LLVM_SHA")
         rm -rf llvm-tmp

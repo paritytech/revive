@@ -20,7 +20,8 @@ runs:
       env:
         # To test a draft LLVM release across every CI workflow, set this to the full
         # draft name (e.g. "llvm-21.1.8-revive.0f80912") and revert to "" before merging.
-        OVERRIDE_VERSION: ""
+        # TODO: Temporarily testing draft release, revert this:
+        OVERRIDE_VERSION: "llvm-22.1.4-revive.f2843a0"
       run: echo "version=${OVERRIDE_VERSION}" | tee -a "$GITHUB_OUTPUT"
 
     - name: resolve llvm version

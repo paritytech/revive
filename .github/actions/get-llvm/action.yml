@@ -14,52 +14,79 @@ inputs:
 runs:
   using: "composite"
   steps:
-    - name: detect llvm version from submodule
-      id: detect-version
+    - name: check override version
+      id: override
       shell: bash
       env:
         # To test a draft LLVM release across every CI workflow, set this to the full
         # draft name (e.g. "llvm-21.1.8-revive.0f80912") and revert to "" before merging.
         OVERRIDE_VERSION: ""
-        GH_TOKEN: ${{ github.token }}
+      run: echo "version=${OVERRIDE_VERSION}" | tee -a "$GITHUB_OUTPUT"
+
+    - name: resolve llvm sha
+      id: llvm-sha
+      if: ${{ steps.override.outputs.version == '' }}
+      shell: bash
       run: |
         set -euo pipefail
 
-        if [ -n "${OVERRIDE_VERSION}" ]; then
-          echo "Using override version: ${OVERRIDE_VERSION}"
-          echo "version_prefix=${OVERRIDE_VERSION}" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-
         LLVM_SHA=$(git ls-tree HEAD llvm | awk '{print $3}')
-        echo "LLVM_SHA: $LLVM_SHA"
-        LLVM_URL=$(git config -f .gitmodules submodule.llvm.url)
-        echo "LLVM_URL: $LLVM_URL"
-        if [ -z "$LLVM_SHA" ] || [ -z "$LLVM_URL" ]; then
-          echo "::error::Could not resolve LLVM submodule SHA or URL from this repo." >&2
+        if [ -z "$LLVM_SHA" ]; then
+          echo "::error::Could not resolve the LLVM submodule SHA from this repo." >&2
           exit 1
         fi
+        echo "sha=$LLVM_SHA" | tee -a "$GITHUB_OUTPUT"
 
-        # Do a treeless clone to avoid unnecessarily fetching source files.
-        # Authenticate the clone since anonymous clones from shared runner IPs are rate-limited by GitHub.
-        git clone --filter=tree:0 --no-checkout \
-          "https://x-access-token:${GH_TOKEN}@${LLVM_URL#https://}" llvm-tmp
+    # The detected version depends only on the submodule SHA, so every
+    # target and operating system shares a single cache entry.
+    - name: cache llvm version
+      if: ${{ steps.override.outputs.version == '' }}
+      uses: actions/cache@v5
+      with:
+        path: .llvm-version
+        key: llvm-version-${{ steps.llvm-sha.outputs.sha }}
+        enableCrossOsArchive: true
 
-        # Try to get the most recent tag (e.g., "llvmorg-18.1.8").
-        LLVM_TAG=$(git -C llvm-tmp describe --tags --abbrev=0 "$LLVM_SHA")
-        rm -rf llvm-tmp
+    - name: detect llvm version from submodule
+      id: detect-version
+      if: ${{ steps.override.outputs.version == '' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        LLVM_SHA: ${{ steps.llvm-sha.outputs.sha }}
+      run: |
+        set -euo pipefail
 
-        # Convert "llvmorg-x.y.z" to "llvm-x.y.z".
-        LLVM_VERSION=$(echo "$LLVM_TAG" | sed 's/^llvmorg-/llvm-/')
-        echo "Detected LLVM version from submodule pin: $LLVM_VERSION"
-        echo "version_prefix=$LLVM_VERSION" >> "$GITHUB_OUTPUT"
+        if [ ! -f .llvm-version ]; then
+          LLVM_URL=$(git config -f .gitmodules submodule.llvm.url)
+          echo "LLVM_URL: $LLVM_URL"
+          if [ -z "$LLVM_URL" ]; then
+            echo "::error::Could not resolve the LLVM submodule URL from this repo." >&2
+            exit 1
+          fi
+
+          # Do a treeless clone to avoid unnecessarily fetching source files.
+          # Authenticate the clone since anonymous clones from shared runner IPs are rate-limited by GitHub.
+          git clone --filter=tree:0 --no-checkout \
+            "https://x-access-token:${GH_TOKEN}@${LLVM_URL#https://}" llvm-tmp
+
+          # Try to get the most recent tag (e.g., "llvmorg-18.1.8").
+          LLVM_TAG=$(git -C llvm-tmp describe --tags --abbrev=0 "$LLVM_SHA")
+          rm -rf llvm-tmp
+
+          # Convert "llvmorg-x.y.z" to "llvm-x.y.z".
+          echo "$LLVM_TAG" | sed 's/^llvmorg-/llvm-/' | tee .llvm-version
+        fi
+
+        echo "Detected LLVM version from submodule pin: $(cat .llvm-version)"
+        echo "version_prefix=$(cat .llvm-version)" | tee -a "$GITHUB_OUTPUT"
 
     - name: find asset
       id: find
       uses: actions/github-script@v7
       env:
         target: ${{ inputs.target }}
-        version_prefix: ${{ steps.detect-version.outputs.version_prefix }}
+        version_prefix: ${{ steps.override.outputs.version || steps.detect-version.outputs.version_prefix }}
       with:
         result-encoding: string
         script: |

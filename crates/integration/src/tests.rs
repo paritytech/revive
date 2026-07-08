@@ -4769,6 +4769,86 @@ fn array_bounds_probe() {
     }
 }
 
+/// Regression (newyork type inference): a value stored to the free-memory-pointer
+/// slot `0x40` was narrowed to i64 (treated as a bounded pointer) even when the
+/// same value is observable at full width elsewhere. `f0`'s parameter `p0` is
+/// stored to the FMP slot *and* full-width at offset 8 (read by `mload(24)`); the
+/// i64 narrowing of the parameter inserts a call-boundary guard that traps
+/// (consumes all gas) for an argument `>= 2^64`. The first call passes `b`
+/// (`calldataload(32)`, a full 256-bit word), so newyork ran out of gas where EVM
+/// executes successfully. The fix records the FMP-stored value as an ordinary
+/// full-width memory value. Compared newyork-PVM vs solc-EVM.
+#[test]
+fn fn_native_fmp_store_no_spurious_trap() {
+    let mut actions = instantiate_yul("contracts/FnNativeFmpBug.yul", "FnNativeFmpBug");
+    // Four lane-distinct words; word1 (`b`) is >= 2^64 to exercise the guard.
+    let mut data = Vec::new();
+    for byte in [0x11u8, 0x22, 0x33, 0x44] {
+        data.extend_from_slice(&[byte; 32]);
+    }
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// Regression (newyork dead-store elimination vs `msize`): a store whose memory
+/// expansion an intervening `msize()` observes must not be eliminated as dead.
+/// `mstore(288, 1); let r := msize(); mstore(288, 2)` — the dead-store pass
+/// dropped the first store as overwritten by the second, moving the memory
+/// expansion to after the `msize()`, so `r` read the smaller value `0` instead of
+/// `0x140`. The fix clears the dead-store candidate set at an `msize()`, which
+/// observes the cumulative expansion of all prior stores. Compared newyork-PVM
+/// vs solc-EVM.
+#[test]
+fn msize_observes_dead_store_expansion() {
+    let mut actions = instantiate_yul("contracts/MsizeDseBug.yul", "MsizeDseBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: vec![],
+    });
+    run_differential(actions);
+}
+
+/// Regression (newyork FMP range proof): a `calldatacopy` whose *dynamic*
+/// destination can land on the free-memory-pointer word `[0x40, 0x60)` corrupts
+/// the FMP, but only *static* copy destinations flagged `fmp_could_be_unbounded`.
+/// `calldatacopy(and(b, 0xFF), 0, 23)` (with `b`'s low byte `0x40`) overwrites the
+/// FMP; the subsequent `mload(0x40)` was truncated to `0` by the surviving range
+/// proof instead of returning the copied bytes (23 × 0x11 then 9 × 0x00). The fix
+/// flags a dynamic copy destination unless it is provably free-pointer-relative
+/// (`add(mload(0x40), k)`, `>= 0x80`). Compared newyork-PVM vs solc-EVM.
+#[test]
+fn calldatacopy_dynamic_dest_fmp_corruption() {
+    let mut actions = instantiate_yul(
+        "contracts/CalldatacopyFmpDynBug.yul",
+        "CalldatacopyFmpDynBug",
+    );
+    // word0: source bytes (0x11); word1: `b` with low byte 0x40 (the copy destination).
+    let mut data = vec![0x11u8; 32];
+    let mut b = [0u8; 32];
+    b[31] = 0x40;
+    data.extend_from_slice(&b);
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so

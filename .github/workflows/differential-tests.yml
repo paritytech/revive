@@ -85,7 +85,12 @@ jobs:
         uses: actions/checkout@v6
         with:
           path: revive
-          submodules: recursive
+          # Submodules are initialized selectively below to avoid cloning
+          # LLVM which is both large and prone to GitHub rate limiting.
+          submodules: false
+
+      - name: Checkout revive-differential-tests
+        run: git -C revive submodule update --init --recursive --depth=1 revive-differential-tests
 
       - name: Download Binary
         uses: actions/download-artifact@v7
@@ -124,7 +129,12 @@ jobs:
         uses: actions/checkout@v6
         with:
           path: revive
-          submodules: true
+          # Submodules are initialized selectively below to avoid cloning
+          # LLVM which is both large and prone to GitHub rate limiting.
+          submodules: false
+
+      - name: Checkout revive-differential-tests
+        run: git -C revive submodule update --init --depth=1 revive-differential-tests
 
       - name: Compare Bytecode Hashes
         uses: ./revive/revive-differential-tests/.github/actions/compare-bytecode-hashes
@@ -154,7 +164,11 @@ jobs:
         uses: actions/checkout@v6
         with:
           path: revive
-          submodules: recursive
+          # Submodules are initialized selectively below to avoid cloning LLVM.
+          submodules: false
+
+      - name: Checkout revive-differential-tests
+        run: git -C revive submodule update --init --recursive --depth=1 revive-differential-tests
 
       - name: Download Binary
         uses: actions/download-artifact@v7

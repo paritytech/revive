@@ -143,17 +143,18 @@ pub struct HeapAnalysis {
     /// `0x40`; only hand-written Yul with an offset engineered to equal `0x40` reaches it.
     ///
     /// A *static* misaligned full-word store that overlaps the FMP word
-    /// ([`crate::ir::word_store_overlaps_free_pointer_slot`], e.g. `mstore(0x21, v)`) is the same
-    /// class of gap *for this flag's range-proof consumer*, and for the same cost reason: it is
-    /// not flagged here. solc emits exactly such stores when ABI-encoding a revert string
-    /// (`mstore(0x24, len)` / `mstore(0x44, data)` cover `0x40`), so flagging them would set this
-    /// for almost every contract with a `require`-with-message (~+12 % / +13 KB on the OZ corpus).
-    /// Those stores are benign — they precede an immediate `revert`, so the corrupted pointer is
-    /// never observed — and distinguishing observed from unobserved corruption needs a control-flow
-    /// dataflow this object-wide flag does not model. The FMP value-forwarding consumer *is*
-    /// defended cheaply at the corruption site (see the `word_store_overlaps_free_pointer_slot`
-    /// branch in `mem_opt`'s `FmpPropagation`); only the range-proof consumer carries this residual,
-    /// reachable solely by hand-written Yul that observes `mload(0x40)` after a misaligned overlap.
+    /// ([`crate::ir::word_store_overlaps_free_pointer_slot`], e.g. `mstore(0x21, v)`) corrupts the
+    /// pointer with arbitrary bytes. solc emits exactly such stores when ABI-encoding a revert
+    /// string (`mstore(0x24, len)` / `mstore(0x44, data)` cover `0x40`), so flagging every one
+    /// unconditionally would set this for almost every contract with a `require`-with-message
+    /// (~+12 % / +13 KB on the OZ corpus). Those revert-encoding stores are benign — they precede
+    /// an immediate frame terminator, so the corrupted pointer is never read back. This flag is
+    /// therefore set only for *observed* corruption: [`Self::detect_observed_fmp_corruption`] walks
+    /// control flow (see [`Self::scan_fmp_corruption`] and [`Self::fmp_corrupting_functions`]) and
+    /// sets it when an overlap store's corruption reaches a later `mload(0x40)`, or a call / error-
+    /// string encoding that reads it. The FMP value-forwarding consumer is additionally defended at
+    /// the corruption site (see the `word_store_overlaps_free_pointer_slot` branch in `mem_opt`'s
+    /// `FmpPropagation`).
     fmp_could_be_unbounded: bool,
     /// Per-`Let`-binding source expression, used by
     /// `is_trusted_fmp_source` to decide whether an mstore's value
@@ -203,7 +204,7 @@ impl Default for OffsetInfo {
 /// actual target. Collapsing them into one state would let a path that re-establishes the
 /// pointer mask a corrupted path that skips it.
 #[derive(Clone, Copy, Default)]
-struct CorruptionExit {
+struct FmpCorruptionExit {
     /// Corruption state at the fall-through exit. Meaningless when `terminates` is set.
     fallthrough_corrupt: bool,
     /// Whether every path leaves the sequence early (frame terminator, `leave`, `break`,
@@ -219,11 +220,11 @@ struct CorruptionExit {
     leave_corrupt: bool,
 }
 
-impl CorruptionExit {
+impl FmpCorruptionExit {
     /// Folds a nested region's loop and function edge states (`break`/`continue`/`leave`) into
     /// this sequence's exit; the fall-through and termination states are merged by the caller
     /// according to the construct's control flow.
-    fn absorb_jump_exits(&mut self, nested: CorruptionExit) {
+    fn absorb_jump_exits(&mut self, nested: FmpCorruptionExit) {
         self.break_corrupt |= nested.break_corrupt;
         self.continue_corrupt |= nested.continue_corrupt;
         self.leave_corrupt |= nested.leave_corrupt;
@@ -232,7 +233,7 @@ impl CorruptionExit {
 
 /// One pass over a loop's per-iteration sequence for
 /// [`HeapAnalysis::scan_loop_fmp_corruption`].
-struct LoopIterationScan {
+struct LoopIterationFmpCorruption {
     /// Corruption state after the loop exits: the condition-false fall-through or any `break`.
     exit_corrupt: bool,
     /// Corruption state at the next iteration's entry (after `post`, including `continue`
@@ -406,9 +407,11 @@ impl HeapAnalysis {
             Statement::For {
                 initial_values,
                 loop_variables,
+                condition,
                 outputs,
                 ..
             } => {
+                self.analyze_expression_side_effects(condition);
                 for (initial_value, loop_variable) in
                     initial_values.iter().zip(loop_variables.iter())
                 {
@@ -753,7 +756,7 @@ impl HeapAnalysis {
     /// `mstore(0x40, _)` overwrites the whole word and re-establishes a defined pointer.
     ///
     /// Corruption also propagates across the edges that leave a statement sequence without
-    /// terminating the frame ([`CorruptionExit`]): a `break` carries its state past the loop
+    /// terminating the frame ([`FmpCorruptionExit`]): a `break` carries its state past the loop
     /// `post` to the statement after the loop, a `continue` carries it into `post`, and a `leave`
     /// (or a function-body fall-through) carries it back to every caller. The latter is modeled
     /// interprocedurally: function summaries (`fmp_corrupting_functions`) are computed to a fixed
@@ -789,9 +792,9 @@ impl HeapAnalysis {
         &mut self,
         statements: &[Statement],
         corrupt_in: bool,
-    ) -> CorruptionExit {
+    ) -> FmpCorruptionExit {
         let mut corrupt = corrupt_in;
-        let mut exit = CorruptionExit::default();
+        let mut exit = FmpCorruptionExit::default();
         for statement in statements {
             match statement {
                 Statement::Let { value, .. } => {
@@ -823,9 +826,9 @@ impl HeapAnalysis {
                     let then_exit = self.scan_fmp_corruption(&then_region.statements, corrupt);
                     let else_exit = match else_region {
                         Some(region) => self.scan_fmp_corruption(&region.statements, corrupt),
-                        None => CorruptionExit {
+                        None => FmpCorruptionExit {
                             fallthrough_corrupt: corrupt,
-                            ..CorruptionExit::default()
+                            ..FmpCorruptionExit::default()
                         },
                     };
                     exit.absorb_jump_exits(then_exit);
@@ -866,12 +869,14 @@ impl HeapAnalysis {
                 }
                 Statement::For {
                     condition_statements,
+                    condition,
                     body,
                     post,
                     ..
                 } => {
                     corrupt = self.scan_loop_fmp_corruption(
                         condition_statements,
+                        condition,
                         &body.statements,
                         &post.statements,
                         corrupt,
@@ -948,46 +953,62 @@ impl HeapAnalysis {
     /// entry. Corruption is a two-point lattice, so one re-scan reaches the fixed point.
     ///
     /// The loop is left either through the condition evaluating false (fall-through of
-    /// `condition_statements`) or through a `break` — and a `break` jumps *past* `post`, so the
-    /// returned exit state is the union of those two edges, not the state after `post` (a `post`
-    /// that re-establishes the pointer must not mask a corrupted `break` path). `leave` states
-    /// from inside the loop are folded into `enclosing_exit`.
+    /// `condition_statements` followed by the `condition` expression) or through a `break` — and a
+    /// `break` jumps *past* `post`, so the returned exit state is the union of those two edges, not
+    /// the state after `post` (a `post` that re-establishes the pointer must not mask a corrupted
+    /// `break` path). `leave` states from inside the loop are folded into `enclosing_exit`.
     fn scan_loop_fmp_corruption(
         &mut self,
         condition_statements: &[Statement],
+        condition: &Expression,
         body: &[Statement],
         post: &[Statement],
         corrupt_in: bool,
-        enclosing_exit: &mut CorruptionExit,
+        enclosing_exit: &mut FmpCorruptionExit,
     ) -> bool {
-        let first_pass =
-            self.scan_loop_iteration(condition_statements, body, post, corrupt_in, enclosing_exit);
+        let first_pass = self.scan_loop_iteration_fmp_corruption(
+            condition_statements,
+            condition,
+            body,
+            post,
+            corrupt_in,
+            enclosing_exit,
+        );
         if first_pass.next_iteration_corrupt && !corrupt_in {
-            let second_pass =
-                self.scan_loop_iteration(condition_statements, body, post, true, enclosing_exit);
+            let second_pass = self.scan_loop_iteration_fmp_corruption(
+                condition_statements,
+                condition,
+                body,
+                post,
+                true,
+                enclosing_exit,
+            );
             return second_pass.exit_corrupt;
         }
         first_pass.exit_corrupt
     }
 
     /// One pass over a loop's per-iteration sequence for [`Self::scan_loop_fmp_corruption`].
-    fn scan_loop_iteration(
+    fn scan_loop_iteration_fmp_corruption(
         &mut self,
         condition_statements: &[Statement],
+        condition: &Expression,
         body: &[Statement],
         post: &[Statement],
         corrupt_in: bool,
-        enclosing_exit: &mut CorruptionExit,
-    ) -> LoopIterationScan {
+        enclosing_exit: &mut FmpCorruptionExit,
+    ) -> LoopIterationFmpCorruption {
         let condition_exit = self.scan_fmp_corruption(condition_statements, corrupt_in);
-        let body_exit = self.scan_fmp_corruption(body, condition_exit.fallthrough_corrupt);
+        let condition_corrupt =
+            self.scan_expression_fmp_corruption(condition, condition_exit.fallthrough_corrupt);
+        let body_exit = self.scan_fmp_corruption(body, condition_corrupt);
         let post_entry_corrupt =
             (!body_exit.terminates && body_exit.fallthrough_corrupt) || body_exit.continue_corrupt;
         let post_exit = self.scan_fmp_corruption(post, post_entry_corrupt);
         enclosing_exit.leave_corrupt |=
             condition_exit.leave_corrupt || body_exit.leave_corrupt || post_exit.leave_corrupt;
-        LoopIterationScan {
-            exit_corrupt: condition_exit.fallthrough_corrupt
+        LoopIterationFmpCorruption {
+            exit_corrupt: condition_corrupt
                 || condition_exit.break_corrupt
                 || body_exit.break_corrupt
                 || post_exit.break_corrupt,

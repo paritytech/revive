@@ -148,11 +148,11 @@ pub struct HeapAnalysis {
     /// string (`mstore(0x24, len)` / `mstore(0x44, data)` cover `0x40`), so flagging every one
     /// unconditionally would set this for almost every contract with a `require`-with-message
     /// (~+12 % / +13 KB on the OZ corpus). Those revert-encoding stores are benign — they precede
-    /// an immediate frame terminator, so the corrupted pointer is never read back. This flag is
-    /// therefore set only for *observed* corruption: [`Self::detect_observed_fmp_corruption`] walks
-    /// control flow (see [`Self::scan_fmp_corruption`] and [`Self::fmp_corrupting_functions`]) and
-    /// sets it when an overlap store's corruption reaches a later `mload(0x40)`, or a call / error-
-    /// string encoding that reads it. The FMP value-forwarding consumer is additionally defended at
+    /// an immediate frame terminator, so the corrupted pointer is never read back. For this class of
+    /// store, the flag is therefore set only when the corruption is *observed*:
+    /// [`Self::detect_observed_fmp_corruption`] walks control flow (see [`Self::scan_fmp_corruption`]
+    /// and [`Self::fmp_corrupting_functions`]) and sets it when an overlap store's corruption reaches
+    /// a later `mload(0x40)`, or a call / error-string encoding that reads it. The FMP value-forwarding consumer is additionally defended at
     /// the corruption site (see the `word_store_overlaps_free_pointer_slot` branch in `mem_opt`'s
     /// `FmpPropagation`).
     fmp_could_be_unbounded: bool,
@@ -1876,6 +1876,69 @@ mod tests {
         assert!(
             results.fmp_could_be_unbounded(),
             "a break skips the loop post, so its FMP restore must not mask the corrupted break path"
+        );
+    }
+
+    /// Builds a `For` loop with the given `condition` expression and empty
+    /// condition-statements, body and post.
+    fn loop_with_condition(condition: Expression) -> Statement {
+        use crate::ir::Region;
+        Statement::For {
+            initial_values: vec![],
+            loop_variables: vec![],
+            condition_statements: vec![],
+            condition,
+            body: Region {
+                statements: vec![],
+                yields: vec![],
+            },
+            post_input_variables: vec![],
+            post: Region {
+                statements: vec![],
+                yields: vec![],
+            },
+            outputs: vec![],
+        }
+    }
+
+    /// A loop *condition* that reads `mload(0x40)` while the FMP word is corrupted by a
+    /// preceding overlap store observes the corrupted pointer: the condition is evaluated
+    /// every iteration, so [`HeapAnalysis::scan_fmp_corruption`] must scan it and flag
+    /// unboundedness. With an empty body/post and no post-loop load, scanning the condition
+    /// is the only thing that sees the corruption.
+    #[test]
+    fn condition_observes_overlap_store_flags_unbounded() {
+        use crate::ir::ValueId;
+        let mut statements = establish_fmp_statements();
+        statements.extend(overlap_store_statements(2));
+        statements.push(literal_binding(4, 0x40));
+        statements.push(loop_with_condition(Expression::MLoad {
+            offset: Value::int(ValueId(4)),
+            region: MemoryRegion::FreePointerSlot,
+        }));
+        let results = object_with_code(statements, vec![]).analyze_heap();
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "a loop condition reading mload(0x40) after an overlap store observes the corruption"
+        );
+    }
+
+    /// The benign counterpart: a loop condition reads `mload(0x40)` but no overlap store
+    /// corrupts the pointer, so the observation must NOT flag unboundedness — guards the
+    /// condition scan against over-flagging.
+    #[test]
+    fn condition_reads_uncorrupted_fmp_stays_bounded() {
+        use crate::ir::ValueId;
+        let mut statements = establish_fmp_statements();
+        statements.push(literal_binding(4, 0x40));
+        statements.push(loop_with_condition(Expression::MLoad {
+            offset: Value::int(ValueId(4)),
+            region: MemoryRegion::FreePointerSlot,
+        }));
+        let results = object_with_code(statements, vec![]).analyze_heap();
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "reading mload(0x40) in a loop condition without corruption is not observed corruption"
         );
     }
 

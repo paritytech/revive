@@ -2387,6 +2387,66 @@ mod tests {
         );
     }
 
+    /// Builds a `For` loop with the given `condition` expression and empty
+    /// condition-statements, body and post.
+    fn loop_with_condition(condition: Expression) -> Statement {
+        Statement::For {
+            initial_values: vec![],
+            loop_variables: vec![],
+            condition_statements: vec![],
+            condition,
+            body: Region {
+                statements: vec![],
+                yields: vec![],
+            },
+            post_input_variables: vec![],
+            post: Region {
+                statements: vec![],
+                yields: vec![],
+            },
+            outputs: vec![],
+        }
+    }
+
+    /// A `For` loop whose *condition* calls a function that corrupts the FMP must invalidate
+    /// the tracked constant after the loop: `for_each_statement` never visits the condition
+    /// expression, so loop gating must consult it via `expression_modifies_fmp`. Otherwise the
+    /// `mload(0x40)` after the loop would be forwarded to the stale pre-loop pointer.
+    #[test]
+    fn for_condition_fmp_writer_call_invalidates_fmp() {
+        use crate::ir::{Function, FunctionId};
+        let mut function = Function::new(FunctionId(0), "corrupt_free_pointer".to_string());
+        function.body = Block {
+            statements: overlap_store_statements(10),
+        };
+        let middle = vec![loop_with_condition(Expression::Call {
+            function: FunctionId(0),
+            arguments: vec![],
+        })];
+        assert_eq!(
+            fmp_loads_eliminated_across(middle, vec![function]),
+            0,
+            "a For condition calling an FMP-corrupting function must invalidate the tracked constant"
+        );
+    }
+
+    /// The benign counterpart: a `For` whose condition does not touch the FMP (a literal) must
+    /// not invalidate the tracked constant — guards `expression_modifies_fmp` against
+    /// over-invalidation.
+    #[test]
+    fn for_benign_condition_keeps_fmp() {
+        use num::BigUint;
+        let middle = vec![loop_with_condition(Expression::Literal {
+            value: BigUint::from(1u64),
+            value_type: Type::Int(BitWidth::I256),
+        })];
+        assert_eq!(
+            fmp_loads_eliminated_across(middle, vec![]),
+            1,
+            "a For with a benign literal condition must not invalidate the tracked FMP constant"
+        );
+    }
+
     /// A statically-resolved `mstore8` into the FMP word overwrites one byte of the
     /// pointer, so the tracked constant must not survive it.
     #[test]

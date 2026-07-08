@@ -411,7 +411,6 @@ impl HeapAnalysis {
                 outputs,
                 ..
             } => {
-                self.analyze_expression_side_effects(condition);
                 for (initial_value, loop_variable) in
                     initial_values.iter().zip(loop_variables.iter())
                 {
@@ -426,6 +425,7 @@ impl HeapAnalysis {
                         self.offset_values.insert(output.0, info);
                     }
                 }
+                self.analyze_expression_side_effects(condition);
             }
 
             Statement::Expression(expression) => {

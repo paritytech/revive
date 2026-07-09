@@ -7,13 +7,14 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 ### Fixed
 
 - Restored the top-level `revive_version` field in `--standard-json` output and the `resolc_version` field in `--combined-json` output, both of which stopped being populated in `v0.4.0`. [#557](https://github.com/paritytech/revive/pull/557)
-- ICE triggered by `--disable-solc-optimizer --newyork where inlined loops could emit an unterminated basic block in the inlined entrypoint. [#561](https://github.com/paritytech/revive/pull/561)
+- ICE triggered by `--disable-solc-optimizer --newyork` where inlined loops could emit an unterminated basic block in the inlined entrypoint. [#561](https://github.com/paritytech/revive/pull/561)
 - `--newyork`: dead-store elimination could drop a store whose memory expansion an intervening `msize()` observes, so `msize()` read a stale (unexpanded) value. [#565](https://github.com/paritytech/revive/pull/565)
-- `--newyork`: dead-store elimination could drop a store that a later overlapping unaligned `mload` reads, returning zeroed memory instead of the stored bytes.
-- `--newyork`: an unaligned full-word `mload`/`mstore` overlapping a word kept native (little-endian) by the heap optimization returned byte-swapped bytes.
+- `--newyork`: dead-store elimination could drop a store that a later overlapping unaligned `mload` reads, returning zeroed memory instead of the stored bytes. [#563](https://github.com/paritytech/revive/pull/563)
+- `--newyork`: an unaligned full-word `mload`/`mstore` overlapping a word kept native (little-endian) by the heap optimization returned byte-swapped bytes. [#562](https://github.com/paritytech/revive/pull/562)
 - `--newyork`: a `calldatacopy`/`codecopy`/`returndatacopy` to a dynamic destination that could overwrite the free-memory-pointer word truncated a subsequent `mload(0x40)` to `0`. [#564](https://github.com/paritytech/revive/pull/564)
 - `--newyork`: a full-width value stored to the free-memory-pointer slot (e.g. a function parameter `>= 2^64`) was narrowed to 64 bits, inserting a checked truncation that consumed all gas. [#567](https://github.com/paritytech/revive/pull/567)
 - `--newyork`: an unaligned `mstore` corrupting the free-memory-pointer word let a later store through the corrupted pointer silently succeed where EVM runs out of gas. [#566](https://github.com/paritytech/revive/pull/566)
+- Fixed a bytecode divergence (yet functionally equivalent) between the resolc Linux/macOS builds and the Windows build for contracts with loops indexing array elements at constant offsets from a `uint8` loop variable (e.g. `array[i]`/`array[i + 1]`), compiled with `--newyork` at `-Oz` with the solc optimizer disabled. [#570](https://github.com/paritytech/revive/pull/570)
 
 ## v1.3.0
 

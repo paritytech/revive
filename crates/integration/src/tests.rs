@@ -4769,6 +4769,95 @@ fn array_bounds_probe() {
     }
 }
 
+/// Regression (newyork FMP range proof): an unaligned `mstore(56, not(0))`
+/// covers `[0x38, 0x58)`, overwriting the free-memory-pointer word
+/// `[0x40, 0x60)` with `0xff...`. A subsequent `mload(0x40)` reads the corrupted
+/// (huge) pointer and `mstore(mload(0x40), 0x42)` expands memory unboundedly, so
+/// EVM (and the stock pipeline) run out of gas. newyork kept its `FMP < heap_size`
+/// range proof — `fmp_could_be_unbounded` was not set for a misaligned overlap
+/// store — and truncated the corrupted pointer into range, silently succeeding.
+/// A control-flow-aware pass now sets the flag when such an overlap store is
+/// *observed* by a later `mload(0x40)` (revert/return-encoding overlap stores,
+/// which discard the FMP unobserved, stay optimized). Compared newyork-PVM vs
+/// solc-EVM; both must run out of gas.
+#[test]
+fn fmp_overlap_store_observed_traps() {
+    let mut actions = instantiate_yul("contracts/FmpOverlapOogBug.yul", "FmpOverlapOogBug");
+    actions.append(&mut vec![
+        Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: vec![],
+        },
+        VerifyCall(VerifyCallExpectation {
+            success: false,
+            ..Default::default()
+        }),
+    ]);
+    Specs {
+        actions,
+        differential: true,
+        ..Default::default()
+    }
+    .run();
+}
+
+/// Regression (newyork FMP constant forwarding): the conditional-branch variant of
+/// [`fmp_overlap_store_observed_traps`]. The corruption-observation flag handles a
+/// branch via path union, but `FmpPropagation`'s region-level invalidation
+/// (`region_modifies_fmp`) recognized only `FreePointerSlot`-tagged stores — the
+/// overlap store `mstore(56, not(0))` is tagged `Scratch` — so the stale constant
+/// `0x80` was forwarded to the `mload(0x40)` after the branch, and the store
+/// through the corrupted pointer silently succeeded where EVM runs out of gas.
+/// The predicate now resolves static store offsets and treats overlap stores (and
+/// byte stores into the FMP word) as FMP modifications. First call takes the
+/// benign path (word 0 zero, both stacks succeed); second call corrupts (word 0
+/// non-zero, both stacks must run out of gas). Compared newyork-PVM vs solc-EVM.
+#[test]
+fn fmp_overlap_store_in_branch_traps() {
+    let mut actions = instantiate_yul(
+        "contracts/FmpBranchOverlapOogBug.yul",
+        "FmpBranchOverlapOogBug",
+    );
+    let mut corrupting_word = [0u8; 32];
+    corrupting_word[31] = 1;
+    actions.append(&mut vec![
+        Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: vec![0u8; 32],
+        },
+        VerifyCall(VerifyCallExpectation {
+            success: true,
+            ..Default::default()
+        }),
+        Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: corrupting_word.to_vec(),
+        },
+        VerifyCall(VerifyCallExpectation {
+            success: false,
+            ..Default::default()
+        }),
+    ]);
+    Specs {
+        actions,
+        differential: true,
+        ..Default::default()
+    }
+    .run();
+}
+
 /// Regression (newyork type inference): a value stored to the free-memory-pointer
 /// slot `0x40` was narrowed to i64 (treated as a bounded pointer) even when the
 /// same value is observable at full width elsewhere. `f0`'s parameter `p0` is

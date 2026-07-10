@@ -17,7 +17,7 @@ pub enum ObjectFormat {
 }
 
 impl ObjectFormat {
-    pub const PVM_MAGIC: [u8; 4] = [b'P', b'V', b'M', b'\0'];
+    pub const PVM_MAGIC: [u8; 4] = *b"PVM\0";
     pub const ELF_MAGIC: [u8; 4] = [0x7f, b'E', b'L', b'F'];
 }
 

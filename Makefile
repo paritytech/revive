@@ -7,6 +7,7 @@
 	install-llvm \
 	install-llvm-coverage \
 	install-cargo-llvm-cov \
+	install-mdbook \
 	install-revive-runner \
 	format \
 	clippy \
@@ -22,6 +23,7 @@
 	test-llvm-builder \
 	test-book \
 	coverage \
+	coverage-book \
 	bench \
 	bench-pvm \
 	bench-evm \
@@ -55,6 +57,13 @@ install-llvm: install-llvm-builder
 install-llvm-coverage: install-llvm-builder
 	git submodule update --init --recursive --depth 1
 	CMAKE_BUILD_PARALLEL_LEVEL=$(JOBS) revive-llvm build --llvm-projects lld --llvm-projects clang --enable-coverage
+
+install-cargo-llvm-cov:
+	@command -v cargo-llvm-cov >/dev/null 2>&1 || cargo install cargo-llvm-cov --locked
+	@rustup component add llvm-tools-preview >/dev/null 2>&1 || true
+
+install-mdbook:
+	cargo install mdbook --version 0.5.1 --locked
 
 install-revive-runner:
 	cargo install --locked --force --path crates/runner --no-default-features
@@ -98,30 +107,33 @@ test-llvm-builder:
 	@echo "warning: the llvm-builder tests will take many hours"
 	cargo test --package revive-llvm-builder -- --test-threads=1
 
-install-cargo-llvm-cov:
-	@command -v cargo-llvm-cov >/dev/null 2>&1 || cargo install cargo-llvm-cov --locked
-	@rustup component add llvm-tools-preview >/dev/null 2>&1 || true
-
-test-book:
-	cargo install mdbook --version 0.5.1 --locked
+test-book: install-mdbook
 	mdbook test book
 
-# Coverage over `test-workspace` (excludes revive-llvm-builder). Everything
-# it writes lands under the gitignored book/src/coverage/ and docs/coverage/
-# trees, so a coverage run never dirties tracked files.
-coverage: install install-cargo-llvm-cov
-	cargo install mdbook --version 0.5.1 --locked
+coverage: install-cargo-llvm-cov
 	cargo llvm-cov clean --workspace
 	rm -rf target/coverage
+# Use `--no-report` in order to merge the two reports at the later step.
 	PATH="$(CURDIR)/target/llvm-cov-target/debug:$$PATH" \
-	cargo llvm-cov --workspace \
+	cargo llvm-cov --no-report --workspace \
 		--exclude revive-llvm-builder \
 		--all-targets \
 		--locked \
-		--ignore-run-fail \
-		--html \
-		--output-dir target/coverage
-	cargo llvm-cov report --summary-only > target/coverage/summary.txt
+		--ignore-run-fail
+	PATH="$(CURDIR)/target/llvm-cov-target/debug:$$PATH" \
+	cargo llvm-cov --no-report --package revive-integration \
+		--features newyork \
+		--locked \
+		--ignore-run-fail
+	cargo llvm-cov report --html --output-dir target/coverage
+	cargo llvm-cov report > target/coverage/html/report.txt
+# Slice the report's header and the `TOTAL` row into a summary file.
+	{ head -n 2 target/coverage/html/report.txt; tail -n 1 target/coverage/html/report.txt; } \
+		| tee target/coverage/summary.txt
+
+# Local coverage browsing: runs coverage then stages the report into the
+# gitignored book/src/coverage/ and rebuilds the book.
+coverage-book: coverage install-mdbook
 	rm -rf book/src/coverage
 	mkdir -p book/src/coverage
 	mv target/coverage/html book/src/coverage/html

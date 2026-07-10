@@ -4,6 +4,10 @@
 
 Supported `polkadot-sdk` rev: `2604.2.0`
 
+### Added
+
+- Support for solc v0.8.36 and the "Amsterdam" EVM version.
+
 ### Fixed
 
 - Restored the top-level `revive_version` field in `--standard-json` output and the `resolc_version` field in `--combined-json` output, both of which stopped being populated in `v0.4.0`. [#557](https://github.com/paritytech/revive/pull/557)

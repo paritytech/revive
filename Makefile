@@ -50,10 +50,9 @@ install-llvm: install-llvm-builder
 	git submodule update --init --recursive --depth 1
 	revive-llvm build --llvm-projects lld --llvm-projects clang
 
-# Build LLVM with `LLVM_BUILD_INSTRUMENTED_COVERAGE=On` so `llvm-cov`
-# reports cover C++ as well as Rust. Shares the `target-llvm/<env>/`
-# tree with `install-llvm`; run `revive-llvm clean` between variants.
-# `JOBS=N` caps thread count via CMAKE_BUILD_PARALLEL_LEVEL.
+# Build an instrumented LLVM, enabling LLVM C++ coverage.
+# Shares the `target-llvm/<env>/` tree with `install-llvm`.
+# Run `revive-llvm clean` between variants. `JOBS=N` caps build parallelism.
 install-llvm-coverage: install-llvm-builder
 	git submodule update --init --recursive --depth 1
 	CMAKE_BUILD_PARALLEL_LEVEL=$(JOBS) revive-llvm build --llvm-projects lld --llvm-projects clang --enable-coverage
@@ -130,6 +129,26 @@ coverage: install-cargo-llvm-cov
 # Slice the report's header and the `TOTAL` row into a summary file.
 	{ head -n 2 target/coverage/html/report.txt; tail -n 1 target/coverage/html/report.txt; } \
 		| tee target/coverage/summary.txt
+# The LLVM C++ report requires an instrumented LLVM and resolc rebuilt against it,
+# otherwise we skip it. The report is kept separate from the Rust report to prevent
+# blending LLVM percentages into resolc's own coverage numbers.
+# Raw llvm-profdata/llvm-cov is used (rather than `cargo llvm-cov`) since that
+# allows for include-only filtering (e.g. "only llvm/").
+	@if "$(LLVM_SYS_221_PREFIX)/bin/llvm-objdump" -h \
+		"$(LLVM_SYS_221_PREFIX)/lib/libLLVMCore.a" 2>/dev/null \
+		| grep -q __llvm_covmap; then \
+		mkdir -p target/coverage-llvm; \
+		"$(LLVM_SYS_221_PREFIX)/bin/llvm-profdata" merge -sparse \
+			$$(find target/llvm-cov-target -name '*.profraw') \
+			-o target/coverage-llvm/llvm.profdata; \
+		"$(LLVM_SYS_221_PREFIX)/bin/llvm-cov" report \
+			-instr-profile target/coverage-llvm/llvm.profdata \
+			target/llvm-cov-target/debug/resolc \
+			llvm/ | tee target/coverage-llvm/report.txt; \
+	else \
+		echo "note: LLVM at LLVM_SYS_221_PREFIX is not instrumented;" \
+			"skipping the LLVM C++ coverage report ('make install-llvm-coverage' enables it)."; \
+	fi
 
 # Local coverage browsing: runs coverage then stages the report into the
 # gitignored book/src/coverage/ and rebuilds the book.

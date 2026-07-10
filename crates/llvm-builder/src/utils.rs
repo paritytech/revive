@@ -104,6 +104,13 @@ pub fn ninja(build_dir: &Path) -> anyhow::Result<()> {
     if std::env::var("DRY_RUN").is_ok() {
         ninja.arg("-n");
     }
+    // Mirror cmake's native CMAKE_BUILD_PARALLEL_LEVEL so one env var
+    // throttles both this ninja call and the compiler-rt `cmake --build`.
+    if let Ok(jobs) = std::env::var("CMAKE_BUILD_PARALLEL_LEVEL") {
+        if !jobs.is_empty() {
+            ninja.args(["-j", &jobs]);
+        }
+    }
     command(ninja.arg("install"), "Running ninja install")?;
     Ok(())
 }

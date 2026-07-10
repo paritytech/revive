@@ -469,6 +469,29 @@ fn unaligned_mstore_forwarding() {
     run_differential(actions);
 }
 
+/// Regression (newyork heap optimization): a full-word `mload` at a
+/// non-word-aligned offset that overlaps a word classified native
+/// (little-endian, byte-swap elided) returned byte-swapped garbage. In the
+/// PoC `mstore(0x20, PAT)` is word-aligned and stays native, but `mload(0x08)`
+/// reads `[0x08, 0x28)` — overlapping the native word `0x20` — and lowers to a
+/// big-endian read, so the two accesses disagree on byte order for the shared
+/// bytes. The heap analysis now taints every word an unaligned full-word
+/// access covers, forcing them big-endian so all accesses agree. Compared
+/// newyork-PVM vs solc-EVM.
+#[test]
+fn unaligned_mload_native_byte_order() {
+    let mut actions = instantiate("contracts/UnalignedMloadNativeBug.sol", "UnalignedMload");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::unaligned_mload_native_bug().calldata,
+    });
+    run_differential(actions);
+}
+
 /// Regression: `to_llvm.rs::get_or_create_return_block` (and revert / Stop
 /// siblings) build the constant offset/length via
 /// `context.xlen_type().const_int(const_offset, false)`, which silently
@@ -4744,6 +4767,197 @@ fn array_bounds_probe() {
         });
         run_differential(actions);
     }
+}
+
+/// Regression (newyork FMP range proof): an unaligned `mstore(56, not(0))`
+/// covers `[0x38, 0x58)`, overwriting the free-memory-pointer word
+/// `[0x40, 0x60)` with `0xff...`. A subsequent `mload(0x40)` reads the corrupted
+/// (huge) pointer and `mstore(mload(0x40), 0x42)` expands memory unboundedly, so
+/// EVM (and the stock pipeline) run out of gas. newyork kept its `FMP < heap_size`
+/// range proof — `fmp_could_be_unbounded` was not set for a misaligned overlap
+/// store — and truncated the corrupted pointer into range, silently succeeding.
+/// A control-flow-aware pass now sets the flag when such an overlap store is
+/// *observed* by a later `mload(0x40)` (revert/return-encoding overlap stores,
+/// which discard the FMP unobserved, stay optimized). Compared newyork-PVM vs
+/// solc-EVM; both must run out of gas.
+#[test]
+fn fmp_overlap_store_observed_traps() {
+    let mut actions = instantiate_yul("contracts/FmpOverlapOogBug.yul", "FmpOverlapOogBug");
+    actions.append(&mut vec![
+        Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: vec![],
+        },
+        VerifyCall(VerifyCallExpectation {
+            success: false,
+            ..Default::default()
+        }),
+    ]);
+    Specs {
+        actions,
+        differential: true,
+        ..Default::default()
+    }
+    .run();
+}
+
+/// Regression (newyork FMP constant forwarding): the conditional-branch variant of
+/// [`fmp_overlap_store_observed_traps`]. The corruption-observation flag handles a
+/// branch via path union, but `FmpPropagation`'s region-level invalidation
+/// (`region_modifies_fmp`) recognized only `FreePointerSlot`-tagged stores — the
+/// overlap store `mstore(56, not(0))` is tagged `Scratch` — so the stale constant
+/// `0x80` was forwarded to the `mload(0x40)` after the branch, and the store
+/// through the corrupted pointer silently succeeded where EVM runs out of gas.
+/// The predicate now resolves static store offsets and treats overlap stores (and
+/// byte stores into the FMP word) as FMP modifications. First call takes the
+/// benign path (word 0 zero, both stacks succeed); second call corrupts (word 0
+/// non-zero, both stacks must run out of gas). Compared newyork-PVM vs solc-EVM.
+#[test]
+fn fmp_overlap_store_in_branch_traps() {
+    let mut actions = instantiate_yul(
+        "contracts/FmpBranchOverlapOogBug.yul",
+        "FmpBranchOverlapOogBug",
+    );
+    let mut corrupting_word = [0u8; 32];
+    corrupting_word[31] = 1;
+    actions.append(&mut vec![
+        Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: vec![0u8; 32],
+        },
+        VerifyCall(VerifyCallExpectation {
+            success: true,
+            ..Default::default()
+        }),
+        Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: corrupting_word.to_vec(),
+        },
+        VerifyCall(VerifyCallExpectation {
+            success: false,
+            ..Default::default()
+        }),
+    ]);
+    Specs {
+        actions,
+        differential: true,
+        ..Default::default()
+    }
+    .run();
+}
+
+/// Regression (newyork type inference): a value stored to the free-memory-pointer
+/// slot `0x40` was narrowed to i64 (treated as a bounded pointer) even when the
+/// same value is observable at full width elsewhere. `f0`'s parameter `p0` is
+/// stored to the FMP slot *and* full-width at offset 8 (read by `mload(24)`); the
+/// i64 narrowing of the parameter inserts a call-boundary guard that traps
+/// (consumes all gas) for an argument `>= 2^64`. The first call passes `b`
+/// (`calldataload(32)`, a full 256-bit word), so newyork ran out of gas where EVM
+/// executes successfully. The fix records the FMP-stored value as an ordinary
+/// full-width memory value. Compared newyork-PVM vs solc-EVM.
+#[test]
+fn fn_native_fmp_store_no_spurious_trap() {
+    let mut actions = instantiate_yul("contracts/FnNativeFmpBug.yul", "FnNativeFmpBug");
+    // Four lane-distinct words; word1 (`b`) is >= 2^64 to exercise the guard.
+    let mut data = Vec::new();
+    for byte in [0x11u8, 0x22, 0x33, 0x44] {
+        data.extend_from_slice(&[byte; 32]);
+    }
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// Regression (newyork dead-store elimination vs `msize`): a store whose memory
+/// expansion an intervening `msize()` observes must not be eliminated as dead.
+/// `mstore(288, 1); let r := msize(); mstore(288, 2)` — the dead-store pass
+/// dropped the first store as overwritten by the second, moving the memory
+/// expansion to after the `msize()`, so `r` read the smaller value `0` instead of
+/// `0x140`. The fix clears the dead-store candidate set at an `msize()`, which
+/// observes the cumulative expansion of all prior stores. Compared newyork-PVM
+/// vs solc-EVM.
+#[test]
+fn msize_observes_dead_store_expansion() {
+    let mut actions = instantiate_yul("contracts/MsizeDseBug.yul", "MsizeDseBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: vec![],
+    });
+    run_differential(actions);
+}
+
+/// Regression (newyork FMP range proof): a `calldatacopy` whose *dynamic*
+/// destination can land on the free-memory-pointer word `[0x40, 0x60)` corrupts
+/// the FMP, but only *static* copy destinations flagged `fmp_could_be_unbounded`.
+/// `calldatacopy(and(b, 0xFF), 0, 23)` (with `b`'s low byte `0x40`) overwrites the
+/// FMP; the subsequent `mload(0x40)` was truncated to `0` by the surviving range
+/// proof instead of returning the copied bytes (23 × 0x11 then 9 × 0x00). The fix
+/// flags a dynamic copy destination unless it is provably free-pointer-relative
+/// (`add(mload(0x40), k)`, `>= 0x80`). Compared newyork-PVM vs solc-EVM.
+#[test]
+fn calldatacopy_dynamic_dest_fmp_corruption() {
+    let mut actions = instantiate_yul(
+        "contracts/CalldatacopyFmpDynBug.yul",
+        "CalldatacopyFmpDynBug",
+    );
+    // word0: source bytes (0x11); word1: `b` with low byte 0x40 (the copy destination).
+    let mut data = vec![0x11u8; 32];
+    let mut b = [0u8; 32];
+    b[31] = 0x40;
+    data.extend_from_slice(&b);
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// Regression (newyork dead-store elimination): a store read back by an
+/// intervening unaligned *overlapping* load must not be eliminated as dead.
+/// `mem_opt` marked a pending store read only on an exact-offset load, so
+/// `mstore(1, PAT); r := mload(8); mstore(1, PAT)` left the first store a
+/// dead-store candidate — `mload(8)` reads `[8, 40)`, overlapping the store's
+/// `[1, 33)` at a different offset — and the second store eliminated it, so `r`
+/// read zeroed memory. The fix marks every pending store whose 32-byte range a
+/// load overlaps as read. Compared newyork-PVM vs solc-EVM.
+#[test]
+fn dead_store_read_by_overlapping_load() {
+    let mut actions = instantiate_yul("contracts/DeadStoreOverlapBug.yul", "DeadStoreOverlapBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: vec![],
+    });
+    run_differential(actions);
 }
 
 /// Regression test for the FMP range-proof gap (PR #7 review finding): a copy

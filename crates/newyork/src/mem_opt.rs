@@ -592,6 +592,24 @@ impl MemoryOptimizer {
         }
     }
 
+    /// Marks every pending store that an `mload(load_offset)` reads as read, dropping it from the
+    /// dead-store candidate set.
+    ///
+    /// An `mload(load_offset)` reads the 32 bytes `[load_offset, load_offset + 32)`. A pending store
+    /// at `p` wrote `[p, p + 32)`; if those ranges overlap, the load observes at least one of the
+    /// store's bytes, so the store is *not* dead and must not be eliminated by a later overwrite.
+    /// Removing only the exact-offset entry (`load_offset == p`) missed an *unaligned* overlapping
+    /// load: `mstore(1, v); r := mload(8); mstore(1, v)` reads `[8, 40)` — overlapping the first
+    /// store's `[1, 33)` — yet the exact-offset check left it pending, so the second store to `1`
+    /// eliminated it as dead and `r` read zeroed memory.
+    fn mark_stores_read_by_load(&mut self, load_offset: u64) {
+        let load_end = load_offset.saturating_add(BYTE_LENGTH_WORD as u64);
+        self.pending_stores.retain(|&pending_offset, _| {
+            let pending_end = pending_offset.saturating_add(BYTE_LENGTH_WORD as u64);
+            pending_end <= load_offset || pending_offset >= load_end
+        });
+    }
+
     /// Tracks memory reads for dead store elimination and load-after-store forwarding.
     ///
     /// When a load follows a store to the same static offset, the stored value is
@@ -604,7 +622,7 @@ impl MemoryOptimizer {
                 if let Some(static_offset) = self.try_get_static_offset(&offset) {
                     let word_offset = word_align(static_offset);
 
-                    self.pending_stores.remove(&static_offset);
+                    self.mark_stores_read_by_load(static_offset);
 
                     if let Some(tracked) = self.memory_state.get_mut(&word_offset) {
                         if tracked.offset == static_offset {
@@ -647,6 +665,11 @@ impl MemoryOptimizer {
             Expression::MappingSLoad { key, slot } => {
                 self.pending_stores.clear();
                 Expression::MappingSLoad { key, slot }
+            }
+
+            Expression::MSize => {
+                self.pending_stores.clear();
+                Expression::MSize
             }
 
             other => other,
@@ -965,6 +988,11 @@ impl FmpPropagation {
     /// `region == Unknown` for any non-literal offset, so the only safe move is to
     /// invalidate the tracked FMP. `Dynamic` (offset proven `>= 0x80`) and `Scratch`
     /// (`< 0x40`) regions can't reach 0x40 even at runtime, so they are kept.
+    ///
+    /// A statically-resolved `mstore8` into the FMP word `[0x40, 0x60)` overwrites one
+    /// byte of the pointer with an arbitrary value and invalidates likewise; a dynamic
+    /// `mstore8` that could wrap onto the word is the deliberate solc-unreachable gap
+    /// described in `heap_opt`'s `fmp_could_be_unbounded` field docs.
     fn propagate_statements(
         &mut self,
         statements: Vec<Statement>,
@@ -1000,6 +1028,16 @@ impl FmpPropagation {
                         value,
                         region,
                     });
+                }
+
+                Statement::MStore8 { ref offset, .. } => {
+                    if matches!(
+                        Self::resolve_offset(&constants, offset),
+                        Some(address) if (0x40..0x60).contains(&address)
+                    ) {
+                        fmp_value = None;
+                    }
+                    result.push(statement);
                 }
 
                 Statement::Let { bindings, value } => {
@@ -1056,11 +1094,12 @@ impl FmpPropagation {
                     outputs,
                 } => {
                     self.propagate_region(&mut then_region, fmp_value.clone());
-                    let then_writes = self.region_modifies_fmp(&then_region.statements);
+                    let then_writes = self.region_modifies_fmp(&then_region.statements, &constants);
 
                     let else_region = if let Some(mut else_branch) = else_region {
                         self.propagate_region(&mut else_branch, fmp_value.clone());
-                        let else_writes = self.region_modifies_fmp(&else_branch.statements);
+                        let else_writes =
+                            self.region_modifies_fmp(&else_branch.statements, &constants);
                         if then_writes || else_writes {
                             fmp_value = None;
                         }
@@ -1092,14 +1131,14 @@ impl FmpPropagation {
 
                     for case in &mut cases {
                         self.propagate_region(&mut case.body, fmp_value.clone());
-                        if self.region_modifies_fmp(&case.body.statements) {
+                        if self.region_modifies_fmp(&case.body.statements, &constants) {
                             any_writes = true;
                         }
                     }
 
                     let default = if let Some(mut default_region) = default {
                         self.propagate_region(&mut default_region, fmp_value.clone());
-                        if self.region_modifies_fmp(&default_region.statements) {
+                        if self.region_modifies_fmp(&default_region.statements, &constants) {
                             any_writes = true;
                         }
                         Some(default_region)
@@ -1130,9 +1169,10 @@ impl FmpPropagation {
                     mut post,
                     outputs,
                 } => {
-                    let loop_modifies_fmp = self.region_modifies_fmp(&body.statements)
-                        || self.region_modifies_fmp(&condition_statements)
-                        || self.region_modifies_fmp(&post.statements);
+                    let loop_modifies_fmp = self.region_modifies_fmp(&body.statements, &constants)
+                        || self.region_modifies_fmp(&condition_statements, &constants)
+                        || self.region_modifies_fmp(&post.statements, &constants)
+                        || self.expression_modifies_fmp(&condition);
                     let loop_entry_fmp = if loop_modifies_fmp {
                         None
                     } else {
@@ -1208,7 +1248,7 @@ impl FmpPropagation {
 
                 Statement::Block(mut region) => {
                     self.propagate_region(&mut region, fmp_value.clone());
-                    if self.region_modifies_fmp(&region.statements) {
+                    if self.region_modifies_fmp(&region.statements, &constants) {
                         fmp_value = None;
                     }
                     result.push(Statement::Block(region));
@@ -1261,53 +1301,129 @@ impl FmpPropagation {
 
     /// Checks if any statement (recursively) writes to offset 0x40 or otherwise
     /// invalidates the FMP. The IR translator marks FMP stores explicitly via
-    /// `MemoryRegion::FreePointerSlot`; `ExternalCall`/`Create` are conservative
-    /// invalidators because they can mutate arbitrary memory. `MCopy` to 0x40
-    /// is theoretically possible but is not generated by Solidity in practice
-    /// and would defeat the optimization for everyone.
+    /// `MemoryRegion::FreePointerSlot`; a copy whose destination may cover the FMP word and
+    /// `ExternalCall`/`Create` are conservative invalidators because they can mutate that word.
     ///
-    /// This is the tag-only direct-write predicate. It deliberately does NOT consult `fmp_writers`
+    /// This is the direct-write predicate. It deliberately does NOT consult `fmp_writers`
     /// (callers of allocating functions): `find_fmp_writers` uses it to seed that very set, so a
     /// `fmp_writers` lookup here would be circular. Region invalidation must instead use
     /// [`Self::region_modifies_fmp`], which adds the call case.
     fn statements_write_fmp(statements: &[Statement]) -> bool {
+        Self::statements_store_to_fmp_word(statements, &BTreeMap::new())
+    }
+
+    /// The store-recognition walk shared by [`Self::statements_write_fmp`] and
+    /// [`Self::region_modifies_fmp`]: whether any statement (recursively) writes into the FMP
+    /// word `[0x40, 0x60)` — an FMP store proper, a statically-resolved misaligned full-word
+    /// store overlapping the word ([`word_store_overlaps_free_pointer_slot`], which corrupts the
+    /// pointer), a statically-resolved `mstore8` into the word, a copy whose destination may cover
+    /// the word ([`Self::write_may_cover_fmp`]), or an `ExternalCall`/`Create`.
+    ///
+    /// Offsets are resolved against `constants` — the caller's resolution scope — extended with
+    /// literal bindings encountered during the (program-order) walk, mirroring the straight-line
+    /// resolution in `propagate_statements`. An offset bound outside the passed scope resolves to
+    /// `None` and falls back to the region tag, exactly as straight-line code does. A dynamic
+    /// (unresolvable) store or `mstore8` that could wrap onto the FMP word is the same deliberate,
+    /// solc-unreachable gap as in straight-line `mstore8` handling (see the
+    /// `fmp_could_be_unbounded` field docs in `heap_opt`).
+    fn statements_store_to_fmp_word(
+        statements: &[Statement],
+        constants: &BTreeMap<u32, BigUint>,
+    ) -> bool {
+        let mut local_constants = constants.clone();
         let mut found = false;
-        for_each_statement(statements, &mut |statement| {
-            if matches!(
-                statement,
-                Statement::MStore {
-                    region: MemoryRegion::FreePointerSlot,
-                    ..
-                } | Statement::ExternalCall { .. }
-                    | Statement::Create { .. }
-            ) {
-                found = true;
+        for_each_statement(statements, &mut |statement| match statement {
+            Statement::Let { bindings, value } => {
+                if bindings.len() == 1 {
+                    if let Some(constant) = Self::eval_const(&local_constants, value) {
+                        local_constants.insert(bindings[0].0, constant);
+                    }
+                }
             }
+            Statement::MStore { offset, region, .. } => {
+                let resolved_offset = Self::resolve_offset(&local_constants, offset);
+                if region.is_free_pointer_slot(resolved_offset)
+                    || word_store_overlaps_free_pointer_slot(resolved_offset)
+                {
+                    found = true;
+                }
+            }
+            Statement::MStore8 { offset, .. } => {
+                if matches!(
+                    Self::resolve_offset(&local_constants, offset),
+                    Some(address) if (0x40..0x60).contains(&address)
+                ) {
+                    found = true;
+                }
+            }
+            Statement::MCopy {
+                destination,
+                length,
+                ..
+            }
+            | Statement::CallDataCopy {
+                destination,
+                length,
+                ..
+            }
+            | Statement::CodeCopy {
+                destination,
+                length,
+                ..
+            }
+            | Statement::ExtCodeCopy {
+                destination,
+                length,
+                ..
+            }
+            | Statement::ReturnDataCopy {
+                destination,
+                length,
+                ..
+            }
+            | Statement::DataCopy {
+                destination,
+                length,
+                ..
+            } => {
+                if Self::write_may_cover_fmp(&local_constants, destination, length) {
+                    found = true;
+                }
+            }
+            Statement::ExternalCall { .. } | Statement::Create { .. } => found = true,
+            _ => {}
         });
         found
     }
 
     /// Whether these (recursively walked) statements could change the free-memory pointer: a direct
-    /// write to the FMP word, an `ExternalCall`/`Create` that can mutate arbitrary memory, or a call
-    /// to a function that (transitively) writes FMP.
+    /// write into the FMP word (including a statically-resolved misaligned overlap store or
+    /// `mstore8`, which *corrupt* the pointer — see [`Self::statements_store_to_fmp_word`]), an
+    /// `ExternalCall`/`Create` that can mutate arbitrary memory, or a call to a function that
+    /// (transitively) writes FMP.
     ///
     /// This is the region-level counterpart of the per-statement FMP invalidation that
     /// `propagate_statements` applies to straight-line code, and must match it — in particular the
-    /// `fmp_writers` call case, which the tag-only [`Self::statements_write_fmp`] misses. Two uses:
+    /// `fmp_writers` call case, which [`Self::statements_write_fmp`] misses. A nested `For` loop's
+    /// `condition` expression is checked via [`Self::expression_modifies_fmp`] because
+    /// `for_each_statement` does not visit it. `constants` is the caller's constant-resolution scope
+    /// at the region's entry, so offsets bound outside the region (and resolvable there) invalidate
+    /// exactly as they would in straight-line code. Two uses:
     /// - **Post-region invalidation** for `If`/`Switch`/`Block`: those regions run at most once, so
     ///   a tracked FMP constant survives them only if the region didn't move FMP.
     /// - **For-body gating**: a `For` body re-executes, so a loop that moves FMP must not have the
     ///   pre-loop constant propagated *into* it, or a loop-top `mload(0x40)` would be rewritten to
     ///   iteration 1's pointer and iterations ≥2 would alias that allocation.
-    fn region_modifies_fmp(&self, statements: &[Statement]) -> bool {
+    fn region_modifies_fmp(
+        &self,
+        statements: &[Statement],
+        constants: &BTreeMap<u32, BigUint>,
+    ) -> bool {
+        if Self::statements_store_to_fmp_word(statements, constants) {
+            return true;
+        }
         let mut found = false;
         for_each_statement(statements, &mut |statement| match statement {
-            Statement::MStore {
-                region: MemoryRegion::FreePointerSlot,
-                ..
-            }
-            | Statement::ExternalCall { .. }
-            | Statement::Create { .. } => found = true,
             Statement::Let {
                 value: Expression::Call { function, .. },
                 ..
@@ -1317,9 +1433,23 @@ impl FmpPropagation {
             {
                 found = true
             }
+            Statement::For { condition, .. } if self.expression_modifies_fmp(condition) => {
+                found = true
+            }
             _ => {}
         });
         found
+    }
+
+    /// Whether evaluating `expression` could move the free-memory pointer: a call to a function
+    /// that (transitively) writes FMP. Used for a `For` loop's `condition` expression, which
+    /// `for_each_statement` — and thus [`Self::region_modifies_fmp`]'s statement walk — does not
+    /// visit.
+    fn expression_modifies_fmp(&self, expression: &Expression) -> bool {
+        matches!(
+            expression,
+            Expression::Call { function, .. } if self.fmp_writers.contains(function)
+        )
     }
 
     /// Resolves a Value to a constant offset if known.
@@ -1453,6 +1583,129 @@ mod tests {
         } else {
             panic!("Expected Let statement");
         }
+    }
+
+    /// A store whose memory expansion an intervening `msize()` observes must not
+    /// be eliminated as dead by a later store to the same offset.
+    ///
+    /// Builds `mstore(288, 1); let r := msize(); mstore(288, 2)`: the `msize()`
+    /// observes the first store's expansion, so that store is not dead.
+    #[test]
+    fn msize_prevents_dead_store_elimination() {
+        use crate::ir::{MemoryRegion, Object};
+
+        fn literal(id: u32, value: u64) -> Statement {
+            Statement::Let {
+                bindings: vec![ValueId(id)],
+                value: Expression::Literal {
+                    value: BigUint::from(value),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            }
+        }
+        fn int(id: u32) -> Value {
+            Value {
+                id: ValueId(id),
+                value_type: Type::Int(BitWidth::I256),
+            }
+        }
+
+        let statements = vec![
+            literal(1, 288),
+            literal(2, 1),
+            Statement::MStore {
+                offset: int(1),
+                value: int(2),
+                region: MemoryRegion::Unknown,
+            },
+            Statement::Let {
+                bindings: vec![ValueId(3)],
+                value: Expression::MSize,
+            },
+            literal(4, 2),
+            Statement::MStore {
+                offset: int(1),
+                value: int(4),
+                region: MemoryRegion::Unknown,
+            },
+        ];
+
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements },
+            functions: BTreeMap::new(),
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        };
+
+        let statistics = MemoryOptimizer::new().optimize_object(&mut object);
+        assert_eq!(
+            statistics.stores_eliminated, 0,
+            "the first store's expansion is observed by the intervening msize()"
+        );
+    }
+
+    /// A store read back by an intervening unaligned *overlapping* load must not
+    /// be eliminated as dead by a later same-offset store.
+    ///
+    /// Builds `mstore(1, v); r := mload(8); mstore(1, v)`: the `mload(8)` reads
+    /// `[8, 40)`, overlapping the first store's `[1, 33)`, so that store is not dead.
+    #[test]
+    fn overlapping_load_prevents_dead_store_elimination() {
+        use crate::ir::{MemoryRegion, Object};
+
+        fn literal(id: u32, value: u64) -> Statement {
+            Statement::Let {
+                bindings: vec![ValueId(id)],
+                value: Expression::Literal {
+                    value: BigUint::from(value),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            }
+        }
+        fn int(id: u32) -> Value {
+            Value {
+                id: ValueId(id),
+                value_type: Type::Int(BitWidth::I256),
+            }
+        }
+
+        let statements = vec![
+            literal(1, 1),
+            literal(2, 0xdead),
+            Statement::MStore {
+                offset: int(1),
+                value: int(2),
+                region: MemoryRegion::Scratch,
+            },
+            literal(3, 8),
+            Statement::Let {
+                bindings: vec![ValueId(4)],
+                value: Expression::MLoad {
+                    offset: int(3),
+                    region: MemoryRegion::Scratch,
+                },
+            },
+            Statement::MStore {
+                offset: int(1),
+                value: int(2),
+                region: MemoryRegion::Scratch,
+            },
+        ];
+
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements },
+            functions: BTreeMap::new(),
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        };
+
+        let statistics = MemoryOptimizer::new().optimize_object(&mut object);
+        assert_eq!(
+            statistics.stores_eliminated, 0,
+            "the first store is read by the overlapping mload(8) and must survive"
+        );
     }
 
     #[test]
@@ -1977,6 +2230,241 @@ mod tests {
         assert_eq!(
             fmp.loads_eliminated, 0,
             "a misaligned store overlapping the FMP word must invalidate the tracked pointer"
+        );
+    }
+
+    /// Builds a `Let` binding `id` to the literal `value`.
+    fn fmp_literal_binding(id: u32, value: u64) -> Statement {
+        use num::BigUint;
+        Statement::Let {
+            bindings: vec![ValueId(id)],
+            value: Expression::Literal {
+                value: BigUint::from(value),
+                value_type: Type::Int(BitWidth::I256),
+            },
+        }
+    }
+
+    /// Builds the statements establishing the FMP (`mstore(0x40, 0x80)`) with value
+    /// IDs 1 (`0x80`) and 2 (`0x40`).
+    fn fmp_establish_statements() -> Vec<Statement> {
+        use crate::ir::MemoryRegion;
+        vec![
+            fmp_literal_binding(1, 0x80),
+            fmp_literal_binding(2, 0x40),
+            Statement::MStore {
+                offset: make_value(2),
+                value: make_value(1),
+                region: MemoryRegion::FreePointerSlot,
+            },
+        ]
+    }
+
+    /// Builds the trailing `mload(0x40)` whose elimination the tests assert on,
+    /// reusing the `0x40` offset bound to value ID 2.
+    fn fmp_observing_load(result_id: u32) -> Statement {
+        use crate::ir::MemoryRegion;
+        Statement::Let {
+            bindings: vec![ValueId(result_id)],
+            value: Expression::MLoad {
+                offset: make_value(2),
+                region: MemoryRegion::FreePointerSlot,
+            },
+        }
+    }
+
+    /// Runs FMP propagation over runtime code built as: establish FMP, `middle`,
+    /// `mload(0x40)`; returns the number of eliminated loads.
+    fn fmp_loads_eliminated_across(
+        middle: Vec<Statement>,
+        functions: Vec<crate::ir::Function>,
+    ) -> usize {
+        use crate::ir::Object;
+        let mut statements = fmp_establish_statements();
+        statements.extend(middle);
+        statements.push(fmp_observing_load(30));
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements },
+            functions: functions
+                .into_iter()
+                .map(|function| (function.id, function))
+                .collect(),
+            subobjects: vec![],
+            data: std::collections::BTreeMap::new(),
+        };
+        let mut fmp = FmpPropagation::new();
+        fmp.propagate_object(&mut object);
+        fmp.loads_eliminated
+    }
+
+    /// Builds the statements for a misaligned `mstore(0x38, v)` overlapping the FMP
+    /// word, with the offset literal bound inside the sequence (as the simplifier
+    /// materializes it) using value IDs `first_id` and `first_id + 1`.
+    fn overlap_store_statements(first_id: u32) -> Vec<Statement> {
+        use crate::ir::MemoryRegion;
+        vec![
+            fmp_literal_binding(first_id, 0xdead),
+            fmp_literal_binding(first_id + 1, 0x38),
+            Statement::MStore {
+                offset: make_value(first_id + 1),
+                value: make_value(first_id),
+                region: MemoryRegion::Scratch,
+            },
+        ]
+    }
+
+    /// Wraps `statements` into a one-armed `If` on an opaque condition.
+    fn conditional(condition_id: u32, statements: Vec<Statement>) -> Statement {
+        Statement::If {
+            condition: make_value(condition_id),
+            inputs: vec![],
+            then_region: Region {
+                statements,
+                yields: vec![],
+            },
+            else_region: None,
+            outputs: vec![],
+        }
+    }
+
+    /// A misaligned overlap store inside a conditional branch corrupts the FMP on the
+    /// taken path, so the tracked constant must not survive the `If`: forwarding it to
+    /// the `mload(0x40)` after the branch would resurrect the pre-corruption pointer.
+    #[test]
+    fn branch_overlap_store_invalidates_fmp() {
+        let middle = vec![conditional(1, overlap_store_statements(10))];
+        assert_eq!(
+            fmp_loads_eliminated_across(middle, vec![]),
+            0,
+            "an overlap store in a branch must invalidate the tracked FMP constant"
+        );
+    }
+
+    /// A benign scratch store in a conditional branch cannot touch the FMP word, so the
+    /// tracked constant must survive and the load elimination must still fire — guards
+    /// the overlap recognition against over-invalidation.
+    #[test]
+    fn branch_scratch_store_keeps_fmp() {
+        use crate::ir::MemoryRegion;
+        let middle = vec![conditional(
+            1,
+            vec![
+                fmp_literal_binding(10, 0xdead),
+                fmp_literal_binding(11, 0x00),
+                Statement::MStore {
+                    offset: make_value(11),
+                    value: make_value(10),
+                    region: MemoryRegion::Scratch,
+                },
+            ],
+        )];
+        assert_eq!(
+            fmp_loads_eliminated_across(middle, vec![]),
+            1,
+            "a scratch store below 0x21 cannot touch the FMP word"
+        );
+    }
+
+    /// A function whose body does a misaligned overlap store corrupts the FMP for its
+    /// callers, so `find_fmp_writers` must include it and a call must invalidate the
+    /// tracked constant.
+    #[test]
+    fn function_overlap_store_invalidates_fmp_at_call_site() {
+        use crate::ir::{Function, FunctionId};
+        let mut function = Function::new(FunctionId(0), "corrupt_free_pointer".to_string());
+        function.body = Block {
+            statements: overlap_store_statements(10),
+        };
+        let middle = vec![Statement::Expression(Expression::Call {
+            function: FunctionId(0),
+            arguments: vec![],
+        })];
+        assert_eq!(
+            fmp_loads_eliminated_across(middle, vec![function]),
+            0,
+            "a call to a function with an overlap store must invalidate the tracked FMP constant"
+        );
+    }
+
+    /// Builds a `For` loop with the given `condition` expression and empty
+    /// condition-statements, body and post.
+    fn loop_with_condition(condition: Expression) -> Statement {
+        Statement::For {
+            initial_values: vec![],
+            loop_variables: vec![],
+            condition_statements: vec![],
+            condition,
+            body: Region {
+                statements: vec![],
+                yields: vec![],
+            },
+            post_input_variables: vec![],
+            post: Region {
+                statements: vec![],
+                yields: vec![],
+            },
+            outputs: vec![],
+        }
+    }
+
+    /// A `For` loop whose *condition* calls a function that corrupts the FMP must invalidate
+    /// the tracked constant after the loop: `for_each_statement` never visits the condition
+    /// expression, so loop gating must consult it via `expression_modifies_fmp`. Otherwise the
+    /// `mload(0x40)` after the loop would be forwarded to the stale pre-loop pointer.
+    #[test]
+    fn for_condition_fmp_writer_call_invalidates_fmp() {
+        use crate::ir::{Function, FunctionId};
+        let mut function = Function::new(FunctionId(0), "corrupt_free_pointer".to_string());
+        function.body = Block {
+            statements: overlap_store_statements(10),
+        };
+        let middle = vec![loop_with_condition(Expression::Call {
+            function: FunctionId(0),
+            arguments: vec![],
+        })];
+        assert_eq!(
+            fmp_loads_eliminated_across(middle, vec![function]),
+            0,
+            "a For condition calling an FMP-corrupting function must invalidate the tracked constant"
+        );
+    }
+
+    /// The benign counterpart: a `For` whose condition does not touch the FMP (a literal) must
+    /// not invalidate the tracked constant — guards `expression_modifies_fmp` against
+    /// over-invalidation.
+    #[test]
+    fn for_benign_condition_keeps_fmp() {
+        use num::BigUint;
+        let middle = vec![loop_with_condition(Expression::Literal {
+            value: BigUint::from(1u64),
+            value_type: Type::Int(BitWidth::I256),
+        })];
+        assert_eq!(
+            fmp_loads_eliminated_across(middle, vec![]),
+            1,
+            "a For with a benign literal condition must not invalidate the tracked FMP constant"
+        );
+    }
+
+    /// A statically-resolved `mstore8` into the FMP word overwrites one byte of the
+    /// pointer, so the tracked constant must not survive it.
+    #[test]
+    fn static_mstore8_into_fmp_word_invalidates_fmp() {
+        use crate::ir::MemoryRegion;
+        let middle = vec![
+            fmp_literal_binding(10, 0xff),
+            fmp_literal_binding(11, 0x45),
+            Statement::MStore8 {
+                offset: make_value(11),
+                value: make_value(10),
+                region: MemoryRegion::Unknown,
+            },
+        ];
+        assert_eq!(
+            fmp_loads_eliminated_across(middle, vec![]),
+            0,
+            "a byte store into [0x40, 0x60) must invalidate the tracked FMP constant"
         );
     }
 }

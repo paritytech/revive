@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.4.0
 
 Supported `polkadot-sdk` rev: `2604.2.0`
 

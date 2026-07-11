@@ -21,6 +21,7 @@ pub fn build(
     default_target: Option<TargetTriple>,
     enable_tests: bool,
     enable_coverage: bool,
+    enable_sancov: bool,
     extra_args: &[String],
     ccache_variant: Option<CcacheVariant>,
     enable_assertions: bool,
@@ -76,6 +77,9 @@ pub fn build(
             ))
             .args(crate::platforms::shared::shared_build_opts_coverage(
                 enable_coverage,
+            ))
+            .args(crate::platforms::shared::shared_build_opts_sancov(
+                enable_sancov,
             ))
             .args(crate::platforms::shared::SHARED_BUILD_OPTS)
             .args(crate::platforms::shared::SHARED_BUILD_OPTS_NOT_MUSL)

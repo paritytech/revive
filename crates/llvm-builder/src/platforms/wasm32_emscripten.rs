@@ -14,6 +14,7 @@ pub fn build(
     default_target: Option<crate::TargetTriple>,
     enable_tests: bool,
     enable_coverage: bool,
+    enable_sancov: bool,
     extra_args: &[String],
     ccache_variant: Option<crate::ccache_variant::CcacheVariant>,
     enable_assertions: bool,
@@ -57,6 +58,7 @@ pub fn build(
         llvm_target_host.as_path(),
         enable_tests,
         enable_coverage,
+        enable_sancov,
         extra_args,
         ccache_variant,
         enable_assertions,
@@ -126,6 +128,7 @@ fn build_target(
     host_target_directory: &Path,
     enable_tests: bool,
     enable_coverage: bool,
+    enable_sancov: bool,
     extra_args: &[String],
     ccache_variant: Option<crate::ccache_variant::CcacheVariant>,
     enable_assertions: bool,
@@ -197,6 +200,9 @@ fn build_target(
             ))
             .args(crate::platforms::shared::shared_build_opts_coverage(
                 enable_coverage,
+            ))
+            .args(crate::platforms::shared::shared_build_opts_sancov(
+                enable_sancov,
             ))
             .args(extra_args)
             .args(crate::platforms::shared::shared_build_opts_ccache(

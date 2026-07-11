@@ -57,6 +57,7 @@ pub fn build(
     default_target: Option<TargetTriple>,
     enable_tests: bool,
     enable_coverage: bool,
+    enable_sancov: bool,
     extra_args: &[String],
     ccache_variant: Option<ccache_variant::CcacheVariant>,
     enable_assertions: bool,
@@ -71,6 +72,7 @@ pub fn build(
     log::trace!("default target: {default_target:?}");
     log::trace!("eneable tests: {enable_tests:?}");
     log::trace!("enable_coverage: {enable_coverage:?}");
+    log::trace!("enable_sancov: {enable_sancov:?}");
     log::trace!("extra args: {extra_args:?}");
     log::trace!("sanitzer: {sanitizer:?}");
     log::trace!("enable valgrind: {enable_valgrind:?}");
@@ -97,6 +99,7 @@ pub fn build(
                     default_target,
                     enable_tests,
                     enable_coverage,
+                    enable_sancov,
                     extra_args,
                     ccache_variant,
                     enable_assertions,
@@ -112,6 +115,7 @@ pub fn build(
                     default_target,
                     enable_tests,
                     enable_coverage,
+                    enable_sancov,
                     extra_args,
                     ccache_variant,
                     enable_assertions,
@@ -127,6 +131,7 @@ pub fn build(
                     default_target,
                     enable_tests,
                     enable_coverage,
+                    enable_sancov,
                     extra_args,
                     ccache_variant,
                     enable_assertions,
@@ -145,6 +150,7 @@ pub fn build(
                 default_target,
                 enable_tests,
                 enable_coverage,
+                enable_sancov,
                 extra_args,
                 ccache_variant,
                 enable_assertions,
@@ -159,6 +165,7 @@ pub fn build(
                 default_target,
                 enable_tests,
                 enable_coverage,
+                enable_sancov,
                 extra_args,
                 ccache_variant,
                 enable_assertions,
@@ -178,6 +185,7 @@ pub fn build(
                     default_target,
                     enable_tests,
                     enable_coverage,
+                    enable_sancov,
                     extra_args,
                     ccache_variant,
                     enable_assertions,
@@ -193,6 +201,7 @@ pub fn build(
                     default_target,
                     enable_tests,
                     enable_coverage,
+                    enable_sancov,
                     extra_args,
                     ccache_variant,
                     enable_assertions,
@@ -212,6 +221,7 @@ pub fn build(
                     default_target,
                     enable_tests,
                     enable_coverage,
+                    enable_sancov,
                     extra_args,
                     ccache_variant,
                     enable_assertions,
@@ -227,6 +237,7 @@ pub fn build(
                     default_target,
                     enable_tests,
                     enable_coverage,
+                    enable_sancov,
                     extra_args,
                     ccache_variant,
                     enable_assertions,

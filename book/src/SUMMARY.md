@@ -17,6 +17,7 @@
     - [IR reference](./developer_guide/newyork_ir.md)
   - [PVM and the pallet-revive runtime target](./developer_guide/target.md)
   - [Testing strategy](./developer_guide/testing.md)
+  - [Differential fuzzing](./developer_guide/fuzzing.md)
   - [Cross compilation](./developer_guide/cross_compilation.md)
 - [FAQ](./faq.md)
 - [Roadmap and Vision](./roadmap.md)

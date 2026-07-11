@@ -194,6 +194,23 @@ pub fn shared_build_opts_coverage(enabled: bool) -> Vec<String> {
     )]
 }
 
+/// SanitizerCoverage flags for libFuzzer mutation feedback.
+/// `-fsanitize=fuzzer-no-link` adds edge counters without pulling
+/// libFuzzer runtime (the fuzz-target binary supplies it). Bypasses
+/// `LLVM_USE_SANITIZE_COVERAGE` because that also builds
+/// `clang-fuzzer`, which needs a compiler-rt archive that hasn't been
+/// produced yet at this point in the build.
+pub fn shared_build_opts_sancov(enabled: bool) -> Vec<String> {
+    if !enabled {
+        return vec![];
+    }
+    const FLAG: &str = "-fsanitize=fuzzer-no-link";
+    vec![
+        format!("-DCMAKE_C_FLAGS={FLAG}"),
+        format!("-DCMAKE_CXX_FLAGS={FLAG}"),
+    ]
+}
+
 /// Use of compiler cache (ccache) to speed up the build process.
 pub fn shared_build_opts_ccache(ccache_variant: Option<CcacheVariant>) -> Vec<String> {
     match ccache_variant {

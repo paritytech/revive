@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-339ac392.js";
+            window.path_to_searchindex_js = "searchindex-7761a3ba.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-1290cc30.js"></script>
+        <script src="toc-763212e8.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -4819,6 +4819,275 @@ export PATH=/path/to/go-ethereum/build/bin/:$PATH
 <p>A lot of nuanced bugs caused by tiny implementation details inside the <code>revive</code> compiler <em>and</em> the <code>pallet-revive</code> runtime could be identified and eliminated early on thanks to the differential testing strategy. Thus, we decided to take this approach further and created a comprehensive test runner and a large suite of more complex test cases.</p>
 <p>The <a href="https://github.com/paritytech/revive-differential-tests/">Revive Differential Tests</a> follow the exact same strategy but implement a much more powerful test spec format, spec runner and reports. This allows differentially testing much more complex test cases (for example testing Uniswap pair creations and swaps), executed via transactions sent to actual blockchain nodes.</p>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="differential-fuzzing"><a class="header" href="#differential-fuzzing">Differential fuzzing</a></h1>
+<p><code>revive</code> ships a coverage-guided differential fuzzer that compares the
+same logical contract execution between resolc’s PVM lowering and
+solc’s EVM lowering. Any byte-level mismatch on revert flags or
+return data is treated as a backend bug.</p>
+<p>The harness uses libFuzzer with SanitizerCoverage feedback over every
+Rust crate in resolc’s dep graph, so the mutation engine learns from
+edge coverage in the parser, IR lowering, and pallet-revive
+simulation.</p>
+<blockquote class="blockquote-tag blockquote-tag-tip">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M8 1.5c-2.363 0-4 1.69-4 3.75 0 .984.424 1.625.984 2.304l.214.253c.223.264.47.556.673.848.284.411.537.896.621 1.49a.75.75 0 0 1-1.484.211c-.04-.282-.163-.547-.37-.847a8.456 8.456 0 0 0-.542-.68c-.084-.1-.173-.205-.268-.32C3.201 7.75 2.5 6.766 2.5 5.25 2.5 2.31 4.863 0 8 0s5.5 2.31 5.5 5.25c0 1.516-.701 2.5-1.328 3.259-.095.115-.184.22-.268.319-.207.245-.383.453-.541.681-.208.3-.33.565-.37.847a.751.751 0 0 1-1.485-.212c.084-.593.337-1.078.621-1.489.203-.292.45-.584.673-.848.075-.088.147-.173.213-.253.561-.679.985-1.32.985-2.304 0-2.06-1.637-3.75-4-3.75ZM5.75 12h4.5a.75.75 0 0 1 0 1.5h-4.5a.75.75 0 0 1 0-1.5ZM6 15.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"></path></svg>Tip</p>
+<p>The fuzzer shells out to <code>solc</code> and geth’s <code>evm</code>. Both must be on
+<code>$PATH</code>. See the <a href="#testing-strategy">Testing strategy</a> chapter for the
+geth EVM-tool installation snippet.</p>
+</blockquote>
+<h2 id="running-the-fuzzer"><a class="header" href="#running-the-fuzzer">Running the fuzzer</a></h2>
+<pre><code class="language-bash"># 4 forked workers, runs until interrupted
+make fuzz-libfuzzer
+
+# Tune fork count
+make fuzz-libfuzzer JOBS=8
+
+# Equivalent direct invocation (gives access to every libFuzzer flag)
+cd fuzz
+cargo +nightly fuzz run solidity_differential -- -fork=8
+</code></pre>
+<p>Useful libFuzzer flags (everything after the bare <code>--</code> is passed
+through to the libFuzzer runtime):</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Flag</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>-fork=N</code></td><td>N parallel forked workers, sharing the corpus dir.</td></tr>
+<tr><td><code>-max_total_time=S</code></td><td>Wall-clock budget in seconds.</td></tr>
+<tr><td><code>-runs=N</code></td><td>Iteration budget instead of wall-clock.</td></tr>
+<tr><td><code>-max_len=N</code></td><td>Cap input length (default 4096).</td></tr>
+<tr><td><code>-rss_limit_mb=N</code></td><td>OOM threshold per worker (default 2048).</td></tr>
+<tr><td><code>-ignore_crashes=1</code></td><td>Keep running after a crash instead of stopping.</td></tr>
+<tr><td><code>-print_final_stats=1</code></td><td>Print coverage / corpus stats at exit.</td></tr>
+</tbody>
+</table>
+</div>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>libFuzzer needs a nightly Rust toolchain because the SanitizerCoverage
+flags it relies on (<code>-Zsanitizer-coverage-*</code>, <code>-Cpasses=sancov-module</code>,
+etc.) are nightly-only. The <code>rust-toolchain.toml</code> inside <code>fuzz/</code>
+scopes nightly to that directory — the rest of the workspace stays
+on stable.</p>
+</blockquote>
+<h3 id="reproducing-a-crash"><a class="header" href="#reproducing-a-crash">Reproducing a crash</a></h3>
+<p>libFuzzer writes crash inputs to
+<code>fuzz/artifacts/solidity_differential/crash-&lt;sha256&gt;</code>. The bytes are
+deterministic — re-feeding them produces the same <code>SolidityCase</code>:</p>
+<pre><code class="language-bash">cd fuzz
+cargo +nightly fuzz run solidity_differential \
+  artifacts/solidity_differential/crash-&lt;sha256&gt;
+</code></pre>
+<p>The panic message embeds the rendered contract source plus the action
+sequence in hex — enough to file an issue without keeping the input
+bytes around.</p>
+<h2 id="what-the-fuzzer-does"><a class="header" href="#what-the-fuzzer-does">What the fuzzer does</a></h2>
+<pre><code class="language-text">                  libFuzzer mutator (random bytes)
+                            │
+                            ▼
+                Unstructured ──► TemplateKind::arbitrary
+                            │
+                            ▼  pick template + per-template op selectors
+            SolidityCase { source, constructor_args, actions }
+                            │
+                ┌───────────┴────────────┐
+                ▼                        ▼
+         resolc → PVM blob           solc → EVM bytecode
+                │                        │
+                ▼                        ▼
+      revive_runner::Specs.run     geth `evm` subprocess
+      (pallet-revive sim)          (constructor + per-action calls)
+                │                        │
+                └───────────┬────────────┘
+                            ▼
+                       compare()
+                  ├─ deploy_reverted flag
+                  ├─ per-action revert flag
+                  └─ per-action return-data bytes
+                            │
+                  any mismatch → Divergence → panic
+</code></pre>
+<p>Both observers replay the same calldata sequence (<code>constructor_args</code>
+concatenated as constructor input; <code>fn_0(uint256)</code> selector + 32-byte
+arg per subsequent action). State carries across actions on both
+backends. The harness compares revert flags and return-data bytes
+only — gas-cost differences between geth <code>evm</code> and pallet-revive sim
+are by design not part of the comparison.</p>
+<h2 id="coverage-signal"><a class="header" href="#coverage-signal">Coverage signal</a></h2>
+<p>cargo-fuzz compiles every Rust crate in the dep graph with
+SanitizerCoverage, so the libFuzzer mutation engine sees edges in:</p>
+<ul>
+<li><code>revive-yul</code> parser</li>
+<li><code>resolc</code> standard-json pipeline</li>
+<li><code>revive-llvm-context</code> codegen (every lowering pattern)</li>
+<li><code>revive-runner</code> / pallet-revive simulation</li>
+<li><code>arbitrary</code> and the generator itself</li>
+</ul>
+<p>Opaque (not instrumented by default):</p>
+<ul>
+<li><code>solc</code> subprocess</li>
+<li>geth <code>evm</code> subprocess</li>
+<li>LLVM C++ libraries inside resolc</li>
+</ul>
+<p>To extend SanCov instrumentation into LLVM’s C++ codebase, rebuild
+LLVM via <code>make install-llvm-sancov</code>. That target adds
+<code>-fsanitize=fuzzer-no-link</code> to LLVM’s C/CXX flags, so every basic
+block in the resulting static archives carries libFuzzer edge
+counters. The <code>-no-link</code> suffix avoids requiring <code>libclang_rt.fuzzer.a</code>
+at LLVM-build time — the libFuzzer runtime comes from the fuzz-target
+binary.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>A SanCov-instrumented LLVM at <code>$LLVM_SYS_221_PREFIX</code> will break
+non-fuzz <code>cargo build</code> invocations: the linker needs
+<code>__sanitizer_cov_*</code> symbols that only the libFuzzer runtime
+supplies. Keep two LLVM trees if you need both: switch via
+<code>LLVM_SYS_221_PREFIX</code>.</p>
+</blockquote>
+<p>This is the right shape: the engine explores <strong>resolc’s</strong> Rust-side
+input space (and optionally LLVM internals), not solc’s or geth’s. A
+5-minute run on 4 forks against a non-instrumented LLVM loads ~1.17M
+edges, of which the templated generator reaches ~28.5K.</p>
+<h2 id="generator"><a class="header" href="#generator">Generator</a></h2>
+<p><code>crates/fuzz/src/templates.rs</code> defines eight contract templates. Each
+exposes the same wire shape:</p>
+<pre><code class="language-solidity">constructor(uint256 seed) { ... }
+function fn_0(uint256 arg) external returns (T) { ... }
+</code></pre>
+<p>so the observer doesn’t need to know which template it’s running.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Kind</th><th>What it exercises</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Srem</code></td><td><code>int256</code> storage slot + <code>slot0 % arg</code> — the original <a href="https://github.com/paritytech/revive/pull/527">paritytech/revive#527</a> probe</td></tr>
+<tr><td><code>ArithChain</code></td><td>Two storage slots, three signed-arithmetic ops chained</td></tr>
+<tr><td><code>UncheckedArith</code></td><td><code>unchecked { … }</code> wrapping arithmetic on <code>uint256</code></td></tr>
+<tr><td><code>Mapping</code></td><td><code>mapping(uint256 =&gt; uint256)</code> increment — exercises keccak-derived storage slots</td></tr>
+<tr><td><code>DynArray</code></td><td>Dynamic <code>uint256[]</code> push + indexed read — exercises array layout + length update</td></tr>
+<tr><td><code>RequireGuard</code></td><td><code>require(predicate, "guard")</code> with eight predicate shapes</td></tr>
+<tr><td><code>LoopAccum</code></td><td>Bounded <code>for</code> accumulator (<code>bound = arg &amp; 0x1F</code>, ≤ 31 iterations)</td></tr>
+<tr><td><code>Bitwise</code></td><td>Pure-bitwise composition (<code>&amp; | ^</code> + <code>&lt;&lt;</code> / <code>&gt;&gt;</code>)</td></tr>
+</tbody>
+</table>
+</div>
+<p>Op selectors inside each template are themselves <code>arbitrary</code>-driven,
+so one template covers many distinct opcode lowerings. The
+<code>#[ignore]</code>d <code>every_template_compiles</code> test pipes each template
+through <code>solc --standard-json</code> and asserts no fatal errors:</p>
+<pre><code class="language-bash">cargo test -p revive-fuzz --lib -- --ignored every_template_compiles
+</code></pre>
+<p>A 256-bit boundary-value pool (<code>0</code>, <code>1</code>, <code>-1</code>, <code>INT_MIN</code>, <code>INT_MAX</code>,
+<code>2^128</code>, <code>2^64</code>, alternating-bit patterns, …) is mixed into operands
+with 1-in-5 probability so corner-case pairs surface within a minute
+under pure-random. libFuzzer’s mutator preserves the biasing because
+it operates on the same byte tape <code>Unstructured</code> consumes.</p>
+<h2 id="divergence-taxonomy"><a class="header" href="#divergence-taxonomy">Divergence taxonomy</a></h2>
+<p><code>Divergence</code> (in <code>crates/fuzz/src/differential.rs</code>) categorises every
+outcome:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Variant</th><th>Meaning</th><th>libFuzzer treatment</th></tr>
+</thead>
+<tbody>
+<tr><td><code>EvmCompile(msg)</code></td><td><code>solc → EVM</code> panicked. Almost always a <strong>generator bug</strong> (template emitted Solidity solc rejects).</td><td><strong>Silent skip</strong> in the libFuzzer panic helper — doesn’t burn a corpus slot.</td></tr>
+<tr><td><code>PvmCompile(msg)</code></td><td><code>resolc → PVM</code> panicked. solc accepted but resolc choked.</td><td><strong>Crash</strong> — exactly the kind of resolc ICE the fuzzer is meant to find.</td></tr>
+<tr><td><code>DeployRevert { … }</code></td><td>Constructor reverted on one backend but not the other.</td><td>Crash.</td></tr>
+<tr><td><code>ActionCount { … }</code></td><td>Action result vectors of unequal length. Defensive; should not happen.</td><td>Crash.</td></tr>
+<tr><td><code>ActionRevert { … }</code></td><td>One backend reverted on a call the other completed.</td><td>Crash.</td></tr>
+<tr><td><code>ActionReturnData { … }</code></td><td>Both completed; return-data bytes differ.</td><td>Crash.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Compile failures used to panic the whole process via
+<code>.expect("source should compile")</code> inside resolc’s <code>test_utils</code>. The
+harness wraps both calls in <code>std::panic::catch_unwind</code> and routes the
+payload into a dedicated variant, so a generator bug doesn’t poison
+the whole libFuzzer run.</p>
+<h2 id="performance"><a class="header" href="#performance">Performance</a></h2>
+<p>Templated Solidity on an M-class laptop:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Step</th><th>Cost</th></tr>
+</thead>
+<tbody>
+<tr><td><code>arbitrary → SolidityCase</code></td><td>&lt;1 ms</td></tr>
+<tr><td><code>solc → EVM</code> (subprocess)</td><td>~80–100 ms</td></tr>
+<tr><td><code>resolc → PVM</code> (in-process)</td><td>~150 ms</td></tr>
+<tr><td>geth <code>evm</code> per action</td><td>~10 ms × 2–4 actions</td></tr>
+<tr><td><code>revive_runner::Specs.run()</code> per action</td><td>~5 ms</td></tr>
+</tbody>
+</table>
+</div>
+<p>≈ 250 ms / iter end-to-end. With <code>-fork=12</code>: ~30–40 iter/sec total.</p>
+<p>Five-minute runs from an empty corpus, four forks:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Generator</th><th>Iters</th><th><code>cov</code> (edges)</th><th><code>ft</code> (features)</th><th>Corpus</th></tr>
+</thead>
+<tbody>
+<tr><td>SREM-only</td><td>14,077</td><td>26,669</td><td>32,392</td><td>101</td></tr>
+<tr><td>Templated</td><td>6,087</td><td><strong>28,566</strong></td><td><strong>46,530</strong></td><td><strong>313</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p>The templated generator opens ~2K more edges and 14K more features
+than the SREM-only baseline, and keeps a 3× larger corpus.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>libFuzzer is single-threaded per process. Use <code>-fork=N</code> for
+parallelism — not Rust threads, not rayon. Rayon inside a fuzz
+target would interleave coverage counters and produce useless data.</p>
+</blockquote>
+<h2 id="known-limitations"><a class="header" href="#known-limitations">Known limitations</a></h2>
+<ul>
+<li><strong>Subprocess overhead dominates.</strong> <code>solc</code> + <code>evm</code> subprocess costs
+cap throughput at ~30 iter/sec on 12 cores. A native-Rust EVM on the
+EVM side would be ~10× faster but is out of scope.</li>
+<li><strong>Recursive resolc isn’t instrumented.</strong> <code>resolc::test_utils</code> spawns
+the installed <code>~/.cargo/bin/resolc</code> as a subprocess via
+<code>--recursive-process</code> for per-contract lowering. Only the
+in-process call sites carry SanCov instrumentation; the subprocess
+is opaque to libFuzzer. <code>revive_fuzz::warn_if_resolc_stale</code> logs a
+warning when the installed binary is older than workspace source,
+to flag the case where a local fix isn’t visible to the fuzzer.</li>
+<li><strong>One external function shape.</strong> The harness hardcodes
+<code>fn_0(uint256)</code> so the observer doesn’t have to vary calldata
+encoding. Removing that assumption requires generalising
+<code>observe::action_calldata</code>.</li>
+<li><strong>Solc internals are opaque.</strong> libFuzzer can’t see solc’s Yul
+optimiser. Fine for resolc-side bug finding; not useful for solc
+bug finding.</li>
+<li><strong>Stack traces aren’t captured</strong> in <code>catch_unwind</code> payloads. Easy
+follow-up to wire <code>std::backtrace::Backtrace::capture()</code> through.</li>
+</ul>
+<h2 id="code-map"><a class="header" href="#code-map">Code map</a></h2>
+<pre><code class="language-text">crates/fuzz/                         # revive-fuzz harness library (stable Rust, main workspace)
+├── Cargo.toml                       # `panic-on-divergence` feature
+├── src/
+│   ├── lib.rs                       # re-exports + `panic_on_divergence` helper
+│   ├── generator.rs                 # SolidityCase + Arbitrary impl
+│   ├── templates.rs                 # 8 template renderers + solc self-test
+│   ├── pipeline.rs                  # solc / resolc invocation helpers
+│   ├── observe.rs                   # observe_evm / observe_pvm
+│   ├── differential.rs              # Divergence + run_case_solc_evm
+│   └── stale.rs                     # `warn_if_resolc_stale`
+
+fuzz/                                # cargo-fuzz package (separate workspace, nightly)
+├── Cargo.toml                       # libfuzzer-sys + path-dep on revive-fuzz
+├── rust-toolchain.toml              # nightly, scoped here only
+└── fuzz_targets/
+    └── solidity_differential.rs     # libFuzzer entry
+</code></pre>
+<p>The split exists because cargo-fuzz needs a nightly toolchain and
+pulls in <code>libfuzzer-sys</code> — keeping that in a separate workspace
+prevents either from leaking into the main <code>cargo build</code>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cross-compilation"><a class="header" href="#cross-compilation">Cross compilation</a></h1>
 <p>We cross-compile the <code>resolc.js</code> frontend executable to Wasm for running it in a Node.js or browser environment.</p>
 <p>The <a href="https://www.musl-libc.org/">musl</a> target is used to obtain statically linked ELF binaries for Linux.</p>
@@ -4888,22 +5157,6 @@ make test-wasm
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
-        <!-- Livereload script (if served using the cli tool) -->
-        <script>
-            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
-            const socket = new WebSocket(wsAddress);
-            socket.onmessage = function (event) {
-                if (event.data === "reload") {
-                    socket.close();
-                    location.reload();
-                }
-            };
-
-            window.onbeforeunload = function() {
-                socket.close();
-            }
-        </script>
 
 
         <script>

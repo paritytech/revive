@@ -1,0 +1,32 @@
+[package]
+name = "revive-fuzz"
+version = "1.0.0"
+license.workspace = true
+edition.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "Differential fuzzer harness; libFuzzer target lives in fuzz/"
+
+[features]
+default = []
+# Surface `Divergence` and compile failures as panics so libFuzzer treats
+# them as crashes and saves the input bytes to `fuzz/artifacts/`.
+panic-on-divergence = []
+
+[dependencies]
+resolc = { workspace = true }
+revive-yul = { workspace = true }
+revive-differential = { workspace = true }
+revive-llvm-context = { workspace = true }
+revive-runner = { workspace = true }
+revive-solc-json-interface = { workspace = true }
+
+alloy-primitives = { workspace = true }
+anyhow = { workspace = true }
+arbitrary = { version = "1.4", features = ["derive"] }
+hex = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+which = { workspace = true }

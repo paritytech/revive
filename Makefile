@@ -109,10 +109,15 @@ test-llvm-builder:
 test-book: install-mdbook
 	mdbook test book
 
+# Envs are used for reducing disk and memory usage, and preventing errors
+# arising because of it. See ./book/src/developer_guide/coverage.md on
+# more details and troubleshooting techniques.
+coverage: export CARGO_PROFILE_DEV_DEBUG = 0
+coverage: export LLVM_PROFILE_FILE_NAME = revive-%4m.profraw
 coverage: install-cargo-llvm-cov
 	cargo llvm-cov clean --workspace
 	rm -rf target/coverage
-# Use `--no-report` in order to merge the two reports at the later step.
+# Use `--no-report` in order to merge the two Rust reports at the later step.
 	PATH="$(CURDIR)/target/llvm-cov-target/debug:$$PATH" \
 	cargo llvm-cov --no-report --workspace \
 		--exclude revive-llvm-builder \
@@ -129,16 +134,17 @@ coverage: install-cargo-llvm-cov
 # Slice the report's header and the `TOTAL` row into a summary file.
 	{ head -n 2 target/coverage/html/report.txt; tail -n 1 target/coverage/html/report.txt; } \
 		| tee target/coverage/summary.txt
-# The LLVM C++ report requires an instrumented LLVM and resolc rebuilt against it,
-# otherwise we skip it. The report is kept separate from the Rust report to prevent
-# blending LLVM percentages into resolc's own coverage numbers.
-# Raw llvm-profdata/llvm-cov is used (rather than `cargo llvm-cov`) since that
-# allows for include-only filtering (e.g. "only llvm/").
+# The LLVM C++ report requires an instrumented LLVM, otherwise we skip it.
+# The report is kept separate from the Rust report to prevent blending LLVM
+# percentages into resolc's own coverage numbers.
+# Raw llvm-profdata/llvm-cov is used (rather than `cargo llvm-cov`) since
+# that allows for include-only filtering (e.g. "only llvm/").
 	@if "$(LLVM_SYS_221_PREFIX)/bin/llvm-objdump" -h \
 		"$(LLVM_SYS_221_PREFIX)/lib/libLLVMCore.a" 2>/dev/null \
 		| grep -q __llvm_covmap; then \
 		mkdir -p target/coverage-llvm; \
 		"$(LLVM_SYS_221_PREFIX)/bin/llvm-profdata" merge -sparse \
+			--failure-mode=all \
 			$$(find target/llvm-cov-target -name '*.profraw') \
 			-o target/coverage-llvm/llvm.profdata; \
 		"$(LLVM_SYS_221_PREFIX)/bin/llvm-cov" report \
@@ -146,7 +152,7 @@ coverage: install-cargo-llvm-cov
 			target/llvm-cov-target/debug/resolc \
 			llvm/ | tee target/coverage-llvm/report.txt; \
 	else \
-		echo "note: LLVM at LLVM_SYS_221_PREFIX is not instrumented;" \
+		echo "note: no instrumented LLVM found at LLVM_SYS_221_PREFIX='$(LLVM_SYS_221_PREFIX)';" \
 			"skipping the LLVM C++ coverage report ('make install-llvm-coverage' enables it)."; \
 	fi
 

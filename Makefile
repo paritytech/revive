@@ -118,10 +118,13 @@ coverage: install-cargo-llvm-cov
 	cargo llvm-cov clean --workspace
 	rm -rf target/coverage
 # Use `--no-report` in order to merge the two Rust reports at the later step.
+# Benches are excluded (i.e. `--all-targets` is not used) since they run duplicate
+# coverage the tests already provide, while their binaries noticeably inflate each
+# report pass with instrumented LLVM.
 	PATH="$(CURDIR)/target/llvm-cov-target/debug:$$PATH" \
 	cargo llvm-cov --no-report --workspace \
 		--exclude revive-llvm-builder \
-		--all-targets \
+		--lib --bins --tests \
 		--locked \
 		--ignore-run-fail
 	PATH="$(CURDIR)/target/llvm-cov-target/debug:$$PATH" \

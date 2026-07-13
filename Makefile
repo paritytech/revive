@@ -112,12 +112,19 @@ test-book:
 # Reports accumulate under coverage-reports/<stamp>/.
 COVERAGE_REPORTS_DIR = coverage-reports/$$(cat target/llvm-cov-target/coverage-stamp)
 
+LLVM_IS_INSTRUMENTED = "$(LLVM_SYS_221_PREFIX)/bin/llvm-objdump" -h \
+	"$(LLVM_SYS_221_PREFIX)/lib/libLLVMCore.a" 2>/dev/null \
+	| grep -q __llvm_covmap
+
 # Envs are used for reducing disk and memory usage, and preventing errors
 # arising because of it. See ./book/src/developer_guide/coverage.md on
 # more details and troubleshooting techniques.
 coverage: export CARGO_PROFILE_DEV_DEBUG = 0
 coverage: export LLVM_PROFILE_FILE_NAME = revive-%4m.profraw
 coverage: install-cargo-llvm-cov
+	@if $(LLVM_IS_INSTRUMENTED); then \
+		echo "note: instrumented LLVM in use. This run also collects LLVM C++ coverage and takes several hours."; \
+	fi
 	cargo llvm-cov clean --workspace
 	mkdir -p target/llvm-cov-target
 	date '+%Y-%m-%d_%H-%M' > target/llvm-cov-target/coverage-stamp
@@ -148,9 +155,7 @@ coverage: install-cargo-llvm-cov
 	  tail -n 1 $(COVERAGE_REPORTS_DIR)/revive/report.txt; } \
 		| tee $(COVERAGE_REPORTS_DIR)/revive/summary.txt
 	@echo "revive coverage report: file://$(CURDIR)/$(COVERAGE_REPORTS_DIR)/revive/html/index.html"
-	@if "$(LLVM_SYS_221_PREFIX)/bin/llvm-objdump" -h \
-		"$(LLVM_SYS_221_PREFIX)/lib/libLLVMCore.a" 2>/dev/null \
-		| grep -q __llvm_covmap; then \
+	@if $(LLVM_IS_INSTRUMENTED); then \
 		echo "note: instrumented LLVM detected. Run 'make coverage-llvm-report'" \
 			"to generate the LLVM C++ coverage report from this run."; \
 	fi
@@ -159,9 +164,7 @@ coverage: install-cargo-llvm-cov
 # instrumented LLVM enabled. This is kept separate from the Rust report to
 # prevent blending LLVM percentages into resolc's own coverage numbers.
 coverage-llvm-report:
-	@"$(LLVM_SYS_221_PREFIX)/bin/llvm-objdump" -h \
-		"$(LLVM_SYS_221_PREFIX)/lib/libLLVMCore.a" 2>/dev/null \
-		| grep -q __llvm_covmap || { \
+	@$(LLVM_IS_INSTRUMENTED) || { \
 		echo "error: no instrumented LLVM at LLVM_SYS_221_PREFIX='$(LLVM_SYS_221_PREFIX)'" \
 			"('make install-llvm-coverage' enables it)."; \
 		exit 1; \

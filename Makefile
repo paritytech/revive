@@ -128,6 +128,13 @@ coverage: install-cargo-llvm-cov
 	cargo llvm-cov clean --workspace
 	mkdir -p target/llvm-cov-target
 	date '+%Y-%m-%d_%H-%M' > target/llvm-cov-target/coverage-stamp
+# Explicitly build the resolc binary that the test suites spawn so
+# that cargo uplifts it into the debug/ path used further below.
+	cargo llvm-cov run --no-report --bin resolc --locked -- --version
+	@test -x target/llvm-cov-target/debug/resolc || { \
+		echo "error: no runnable resolc in target/llvm-cov-target/debug/."; \
+		exit 1; \
+	}
 # Use `--no-report` in order to merge the two Rust reports at the later step.
 # Benches are excluded (i.e. `--all-targets` is not used) since they run duplicate
 # coverage the tests already provide, while their binaries noticeably inflate each

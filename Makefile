@@ -116,6 +116,7 @@ LLVM_IS_INSTRUMENTED = "$(LLVM_SYS_221_PREFIX)/bin/llvm-objdump" -h \
 	"$(LLVM_SYS_221_PREFIX)/lib/libLLVMCore.a" 2>/dev/null \
 	| grep -q __llvm_covmap
 
+# Build instrumented resolc against the existing LLVM build and run coverage.
 # Envs are used for reducing disk and memory usage, and preventing errors
 # arising because of it. See ./book/src/developer_guide/coverage.md on
 # more details and troubleshooting techniques.
@@ -150,8 +151,8 @@ coverage: install-cargo-llvm-cov
 		--features newyork \
 		--locked \
 		--ignore-run-fail
-# Exclude the llvm/ and target-llvm/ trees from this workspace-only report
-# (see `coverage-llvm-report`), and the benchmarks which are excluded from the run.
+# Exclude the llvm/ and target-llvm/ trees from this workspace-only report (see
+# `coverage-llvm-report` target), and the benchmarks which are excluded from the run.
 	cargo llvm-cov report --html --output-dir $(COVERAGE_REPORTS_DIR)/revive \
 		--ignore-filename-regex '^$(CURDIR)/(llvm|target-llvm|crates/benchmarks)/'
 # Slice the HTML report's header and totals rows into a Markdown-table summary,

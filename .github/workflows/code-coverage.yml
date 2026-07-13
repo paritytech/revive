@@ -115,12 +115,11 @@ jobs:
             const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
             const artifactUrl = process.env.ARTIFACT_URL || runUrl;
             const marker = '<!-- code-coverage-bot -->';
-
             const body = [
               marker,
               `### Code coverage`,
               ``,
-              `Report for commit \`${sha}\`: [click here to download the report](${artifactUrl}) and open \`html/index.html\` in a browser`,
+              `Report for commit \`${sha}\`: [click here to download the report](${artifactUrl}) and open \`html/index.html\` in a browser.`,
               ``,
               `<details open><summary>Summary</summary>`,
               ``,

@@ -9,7 +9,9 @@ name: Code coverage
 
 on:
   pull_request:
-    branches: [main]
+    # TODO: Remove `kvpanch/code_coverage` from the `branches` list before merge.
+    # It is temporary in order to test this workflow on this PR.
+    branches: [main, kvpanch/code_coverage]
     types: [labeled]
 
 concurrency:

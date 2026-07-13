@@ -60,7 +60,7 @@ fn main_inner() -> anyhow::Result<()> {
                 .map_err(|platform| anyhow::anyhow!("Unknown platform `{}`", platform))?;
             targets.insert(revive_llvm_builder::Platform::PolkaVM);
 
-            log::info!("build targets: {:?}", &targets);
+            log::info!("build targets: {:?}", targets);
 
             let extra_args_unescaped: Vec<String> = extra_args
                 .iter()
@@ -91,7 +91,7 @@ fn main_inner() -> anyhow::Result<()> {
                 .map_err(|project| anyhow::anyhow!("Unknown LLVM project `{}`", project))?;
             projects.insert(revive_llvm_builder::llvm_project::LLVMProject::LLD);
 
-            log::info!("build projects: {:?}", &projects);
+            log::info!("build projects: {:?}", projects);
 
             revive_llvm_builder::build(
                 build_type,

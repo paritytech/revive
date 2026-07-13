@@ -1,8 +1,12 @@
 # Changelog
 
-## Unreleased
+## v1.4.0
 
 Supported `polkadot-sdk` rev: `2604.2.0`
+
+### Added
+
+- Support for solc v0.8.36 and the "Amsterdam" EVM version.
 
 ### Fixed
 

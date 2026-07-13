@@ -14,7 +14,7 @@ env:
   # The compiler modes allowed to run during e2e test execution by retester.
   # E.g. this can be updated to allow only `"Y, NY Mz S+"` (all Yul modes + newyork with -Oz and solc optimizer enabled).
   E2E_ALLOWED_MODES: "Y, NY"
-  SOLC_VERSION: "0.8.35"
+  SOLC_VERSION: "0.8.36"
 
 jobs:
   build-linux:

@@ -154,14 +154,15 @@ coverage: install-cargo-llvm-cov
 # (see `coverage-llvm-report` for an LLVM report).
 	cargo llvm-cov report --html --output-dir $(COVERAGE_REPORTS_DIR)/revive \
 		--ignore-filename-regex '^$(CURDIR)/(llvm|target-llvm)/'
-# Slice the HTML report's header and totals rows into a summary file, rather
-# than invoking `report` again which would cost another full covmap decode.
+# Slice the HTML report's header and totals rows into a Markdown-table summary,
+# rather than invoking `report` again which would cost another full covmap decode.
 	awk '{ gsub(/<tr/, "\n<tr"); gsub(/<\/table/, "\n"); print }' \
 		$(COVERAGE_REPORTS_DIR)/revive/html/index.html \
 		| grep -e ">Filename<" -e ">Totals<" \
-		| sed 's/<[^>]*>/ /g; s/  */ /g; s/^ //; s/ $$//' \
+		| sed 's/<\/td>/|/g; s/<[^>]*>//g; s/  */ /g; s/ *| */ | /g; s/^/| /; s/ $$//' \
+		| awk 'NR == 1 { print; sep = $$0; gsub(/[^|]/, "-", sep); print sep; next } { print }' \
 		| tee $(COVERAGE_REPORTS_DIR)/revive/summary.txt
-	@[ "$$(wc -l < $(COVERAGE_REPORTS_DIR)/revive/summary.txt)" -eq 2 ] || { \
+	@[ "$$(wc -l < $(COVERAGE_REPORTS_DIR)/revive/summary.txt)" -eq 3 ] || { \
 		echo "error: unexpected llvm-cov HTML structure. Fix the summary extraction."; \
 		exit 1; \
 	}

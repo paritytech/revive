@@ -29,7 +29,7 @@ jobs:
     name: Measure coverage
     if: ${{ github.event.label.name == 'measure code coverage' }}
     runs-on: parity-large
-    timeout-minutes: 60
+    timeout-minutes: 30
     outputs:
       artifact-url: ${{ steps.upload.outputs.artifact-url }}
     permissions:
@@ -120,14 +120,11 @@ jobs:
               marker,
               `### Code coverage`,
               ``,
-              `Report for \`${sha}\`: [click here to download the report](${artifactUrl})`,
-              `and open \`html/index.html\` in a browser`,
+              `Report for commit \`${sha}\`: [click here to download the report](${artifactUrl}) and open \`html/index.html\` in a browser`,
               ``,
               `<details open><summary>Summary</summary>`,
               ``,
-              `\`\`\``,
               summary,
-              `\`\`\``,
               ``,
               `</details>`,
               ``,

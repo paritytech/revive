@@ -23,6 +23,7 @@
 	test-llvm-builder \
 	test-book \
 	coverage \
+	coverage-llvm-report \
 	coverage-book \
 	bench \
 	bench-pvm \
@@ -132,32 +133,56 @@ coverage: install-cargo-llvm-cov
 		--features newyork \
 		--locked \
 		--ignore-run-fail
-	cargo llvm-cov report --html --output-dir target/coverage
-	cargo llvm-cov report > target/coverage/html/report.txt
+# Exclude the llvm/ and target-llvm/ trees from this workspace-only report
+# (see `coverage-llvm-report` for an LLVM report).
+	cargo llvm-cov report --html --output-dir target/coverage \
+		--ignore-filename-regex '^$(CURDIR)/(llvm|target-llvm)/'
+	cargo llvm-cov report \
+		--ignore-filename-regex '^$(CURDIR)/(llvm|target-llvm)/' \
+		> target/coverage/html/report.txt
 # Slice the report's header and the `TOTAL` row into a summary file.
 	{ head -n 2 target/coverage/html/report.txt; tail -n 1 target/coverage/html/report.txt; } \
 		| tee target/coverage/summary.txt
-# The LLVM C++ report requires an instrumented LLVM, otherwise we skip it.
-# The report is kept separate from the Rust report to prevent blending LLVM
-# percentages into resolc's own coverage numbers.
-# Raw llvm-profdata/llvm-cov is used (rather than `cargo llvm-cov`) since
-# that allows for include-only filtering (e.g. "only llvm/").
 	@if "$(LLVM_SYS_221_PREFIX)/bin/llvm-objdump" -h \
 		"$(LLVM_SYS_221_PREFIX)/lib/libLLVMCore.a" 2>/dev/null \
 		| grep -q __llvm_covmap; then \
-		mkdir -p target/coverage-llvm; \
-		"$(LLVM_SYS_221_PREFIX)/bin/llvm-profdata" merge -sparse \
-			--failure-mode=all \
-			$$(find target/llvm-cov-target -name '*.profraw') \
-			-o target/coverage-llvm/llvm.profdata; \
-		"$(LLVM_SYS_221_PREFIX)/bin/llvm-cov" report \
-			-instr-profile target/coverage-llvm/llvm.profdata \
-			target/llvm-cov-target/debug/resolc \
-			llvm/ | tee target/coverage-llvm/report.txt; \
-	else \
-		echo "note: no instrumented LLVM found at LLVM_SYS_221_PREFIX='$(LLVM_SYS_221_PREFIX)';" \
-			"skipping the LLVM C++ coverage report ('make install-llvm-coverage' enables it)."; \
+		echo "note: instrumented LLVM detected; run 'make coverage-llvm-report'" \
+			"to generate the LLVM C++ coverage report from this run."; \
 	fi
+
+# Render the LLVM C++ coverage report that a `make coverage` run against an
+# instrumented LLVM enabled. This is kept separate from the Rust report to
+# prevent blending LLVM percentages into resolc's own coverage numbers.
+coverage-llvm-report:
+	@"$(LLVM_SYS_221_PREFIX)/bin/llvm-objdump" -h \
+		"$(LLVM_SYS_221_PREFIX)/lib/libLLVMCore.a" 2>/dev/null \
+		| grep -q __llvm_covmap || { \
+		echo "error: no instrumented LLVM at LLVM_SYS_221_PREFIX='$(LLVM_SYS_221_PREFIX)'" \
+			"('make install-llvm-coverage' enables it)."; \
+		exit 1; \
+	}
+	@"$(LLVM_SYS_221_PREFIX)/bin/llvm-config" --system-libs | grep -q -- -lz || { \
+		echo "error: the instrumented LLVM at LLVM_SYS_221_PREFIX lacks zlib." \
+			"Install it and rebuild LLVM with 'make install-llvm-coverage'."; \
+		exit 1; \
+	}
+	@find target/llvm-cov-target -name '*.profraw' 2>/dev/null | grep -q . || { \
+		echo "error: no coverage profiles found. Run 'make coverage' first."; \
+		exit 1; \
+	}
+	mkdir -p target/coverage-llvm
+# Raw llvm-profdata/llvm-cov is used (rather than `cargo llvm-cov`) since
+# that allows include-only filtering (e.g. "only llvm/").
+	"$(LLVM_SYS_221_PREFIX)/bin/llvm-profdata" merge -sparse \
+		--failure-mode=all \
+		$$(find target/llvm-cov-target -name '*.profraw') \
+		-o target/coverage-llvm/llvm.profdata
+	"$(LLVM_SYS_221_PREFIX)/bin/llvm-cov" show -format=html \
+		-output-dir target/coverage-llvm/html \
+		-instr-profile target/coverage-llvm/llvm.profdata \
+		target/llvm-cov-target/debug/resolc \
+		llvm/
+	@echo "LLVM C++ coverage report: target/coverage-llvm/html/index.html"
 
 # Local coverage browsing: runs coverage then stages the report into the
 # gitignored book/src/coverage/ and rebuilds the book.

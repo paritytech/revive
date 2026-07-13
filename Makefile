@@ -7,7 +7,6 @@
 	install-llvm \
 	install-llvm-coverage \
 	install-cargo-llvm-cov \
-	install-mdbook \
 	install-revive-runner \
 	format \
 	clippy \
@@ -24,7 +23,7 @@
 	test-book \
 	coverage \
 	coverage-llvm-report \
-	coverage-book \
+	coverage-browse \
 	bench \
 	bench-pvm \
 	bench-evm \
@@ -61,9 +60,6 @@ install-llvm-coverage: install-llvm-builder
 install-cargo-llvm-cov:
 	@command -v cargo-llvm-cov >/dev/null 2>&1 || cargo install cargo-llvm-cov --locked
 	@rustup component add llvm-tools-preview >/dev/null 2>&1 || true
-
-install-mdbook:
-	cargo install mdbook --version 0.5.1 --locked
 
 install-revive-runner:
 	cargo install --locked --force --path crates/runner --no-default-features
@@ -107,8 +103,14 @@ test-llvm-builder:
 	@echo "warning: the llvm-builder tests will take many hours"
 	cargo test --package revive-llvm-builder -- --test-threads=1
 
-test-book: install-mdbook
+test-book:
+	cargo install mdbook --version 0.5.1 --locked
 	mdbook test book
+
+# The active run's report directory. Resolved at recipe time
+# from the stamp that `coverage` records next to the profiles.
+# Reports accumulate under coverage-reports/<stamp>/.
+COVERAGE_REPORTS_DIR = coverage-reports/$$(cat target/llvm-cov-target/coverage-stamp)
 
 # Envs are used for reducing disk and memory usage, and preventing errors
 # arising because of it. See ./book/src/developer_guide/coverage.md on
@@ -117,7 +119,8 @@ coverage: export CARGO_PROFILE_DEV_DEBUG = 0
 coverage: export LLVM_PROFILE_FILE_NAME = revive-%4m.profraw
 coverage: install-cargo-llvm-cov
 	cargo llvm-cov clean --workspace
-	rm -rf target/coverage
+	mkdir -p target/llvm-cov-target
+	date '+%Y-%m-%d_%H-%M' > target/llvm-cov-target/coverage-stamp
 # Use `--no-report` in order to merge the two Rust reports at the later step.
 # Benches are excluded (i.e. `--all-targets` is not used) since they run duplicate
 # coverage the tests already provide, while their binaries noticeably inflate each
@@ -135,18 +138,20 @@ coverage: install-cargo-llvm-cov
 		--ignore-run-fail
 # Exclude the llvm/ and target-llvm/ trees from this workspace-only report
 # (see `coverage-llvm-report` for an LLVM report).
-	cargo llvm-cov report --html --output-dir target/coverage \
+	cargo llvm-cov report --html --output-dir $(COVERAGE_REPORTS_DIR)/revive \
 		--ignore-filename-regex '^$(CURDIR)/(llvm|target-llvm)/'
 	cargo llvm-cov report \
 		--ignore-filename-regex '^$(CURDIR)/(llvm|target-llvm)/' \
-		> target/coverage/html/report.txt
+		> $(COVERAGE_REPORTS_DIR)/revive/report.txt
 # Slice the report's header and the `TOTAL` row into a summary file.
-	{ head -n 2 target/coverage/html/report.txt; tail -n 1 target/coverage/html/report.txt; } \
-		| tee target/coverage/summary.txt
+	{ head -n 2 $(COVERAGE_REPORTS_DIR)/revive/report.txt; \
+	  tail -n 1 $(COVERAGE_REPORTS_DIR)/revive/report.txt; } \
+		| tee $(COVERAGE_REPORTS_DIR)/revive/summary.txt
+	@echo "revive coverage report: file://$(CURDIR)/$(COVERAGE_REPORTS_DIR)/revive/html/index.html"
 	@if "$(LLVM_SYS_221_PREFIX)/bin/llvm-objdump" -h \
 		"$(LLVM_SYS_221_PREFIX)/lib/libLLVMCore.a" 2>/dev/null \
 		| grep -q __llvm_covmap; then \
-		echo "note: instrumented LLVM detected; run 'make coverage-llvm-report'" \
+		echo "note: instrumented LLVM detected. Run 'make coverage-llvm-report'" \
 			"to generate the LLVM C++ coverage report from this run."; \
 	fi
 
@@ -170,6 +175,10 @@ coverage-llvm-report:
 		echo "error: no coverage profiles found. Run 'make coverage' first."; \
 		exit 1; \
 	}
+	@test -f target/llvm-cov-target/coverage-stamp || { \
+		echo "error: no recorded coverage run stamp. Run 'make coverage' first."; \
+		exit 1; \
+	}
 	mkdir -p target/coverage-llvm
 # Raw llvm-profdata/llvm-cov is used (rather than `cargo llvm-cov`) since
 # that allows include-only filtering (e.g. "only llvm/").
@@ -178,23 +187,30 @@ coverage-llvm-report:
 		$$(find target/llvm-cov-target -name '*.profraw') \
 		-o target/coverage-llvm/llvm.profdata
 	"$(LLVM_SYS_221_PREFIX)/bin/llvm-cov" show -format=html \
-		-output-dir target/coverage-llvm/html \
+		-output-dir $(COVERAGE_REPORTS_DIR)/llvm/html \
 		-instr-profile target/coverage-llvm/llvm.profdata \
 		target/llvm-cov-target/debug/resolc \
 		llvm/
-	@echo "LLVM C++ coverage report: target/coverage-llvm/html/index.html"
+	@echo "LLVM C++ coverage report: file://$(CURDIR)/$(COVERAGE_REPORTS_DIR)/llvm/html/index.html"
 
-# Local coverage browsing: runs coverage then stages the report into the
-# gitignored book/src/coverage/ and rebuilds the book.
-coverage-book: coverage install-mdbook
-	rm -rf book/src/coverage
-	mkdir -p book/src/coverage
-	mv target/coverage/html book/src/coverage/html
-	mv target/coverage/summary.txt book/src/coverage/summary.txt
-	mdbook build book
-	@echo
-	@echo "Coverage collected under book/src/coverage/ (gitignored)."
-	@echo "Open docs/coverage/html/index.html, or run 'make book' to browse it."
+# Local coverage browsing.
+# Prints clickable links to the HTML reports of every recorded coverage run.
+coverage-browse:
+	@runs="$$(ls -1r coverage-reports 2>/dev/null)"; \
+	if [ -z "$$runs" ]; then \
+		echo "note: no coverage reports found. Run 'make coverage' first."; \
+	else \
+		for run in $$runs; do \
+			echo "$$run:"; \
+			test -f "coverage-reports/$$run/revive/html/index.html" && \
+				echo "  revive:   file://$(CURDIR)/coverage-reports/$$run/revive/html/index.html" && \
+				echo; \
+			test -f "coverage-reports/$$run/llvm/html/index.html" && \
+				echo "  LLVM C++: file://$(CURDIR)/coverage-reports/$$run/llvm/html/index.html" && \
+				echo; \
+			true; \
+		done; \
+	fi
 
 bench: install-bin
 	cargo criterion --all --all-features --message-format=json \

@@ -151,9 +151,9 @@ coverage: install-cargo-llvm-cov
 		--locked \
 		--ignore-run-fail
 # Exclude the llvm/ and target-llvm/ trees from this workspace-only report
-# (see `coverage-llvm-report` for an LLVM report).
+# (see `coverage-llvm-report`), and the benchmarks which are excluded from the run.
 	cargo llvm-cov report --html --output-dir $(COVERAGE_REPORTS_DIR)/revive \
-		--ignore-filename-regex '^$(CURDIR)/(llvm|target-llvm)/'
+		--ignore-filename-regex '^$(CURDIR)/(llvm|target-llvm|crates/benchmarks)/'
 # Slice the HTML report's header and totals rows into a Markdown-table summary,
 # rather than invoking `report` again which would cost another full covmap decode.
 	awk '{ gsub(/<tr/, "\n<tr"); gsub(/<\/table/, "\n"); print }' \

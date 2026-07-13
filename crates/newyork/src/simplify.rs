@@ -970,10 +970,9 @@ impl Simplifier {
                 let (exponent, value) =
                     if let Some(exponent) = rhs_value.as_ref().and_then(log2_exact) {
                         (exponent, lhs)
-                    } else if let Some(exponent) = lhs_value.as_ref().and_then(log2_exact) {
-                        (exponent, rhs)
                     } else {
-                        return None;
+                        let exponent = lhs_value.as_ref().and_then(log2_exact)?;
+                        (exponent, rhs)
                     };
                 in_range(exponent).then(|| {
                     self.emit_strength_reduce(

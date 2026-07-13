@@ -14,7 +14,7 @@ function getEnv(name) {
 
 /** @type {import('hardhat/config').HardhatUserConfig} */
 module.exports = {
-    solidity: "0.8.35",
+    solidity: "0.8.36",
     resolc: {
         compilerSource: "binary",
         settings: {

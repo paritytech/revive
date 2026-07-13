@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-58a4728c.js";
+            window.path_to_searchindex_js = "searchindex-57ec751f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f74aae8e.js"></script>
@@ -4820,41 +4820,65 @@ export PATH=/path/to/go-ethereum/build/bin/:$PATH
 <p>The <a href="https://github.com/paritytech/revive-differential-tests/">Revive Differential Tests</a> follow the exact same strategy but implement a much more powerful test spec format, spec runner and reports. This allows differentially testing much more complex test cases (for example testing Uniswap pair creations and swaps), executed via transactions sent to actual blockchain nodes.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="code-coverage"><a class="header" href="#code-coverage">Code coverage</a></h1>
-<p>Revive measures Rust line and branch coverage with
-<a href="https://github.com/taiki-e/cargo-llvm-cov"><code>cargo-llvm-cov</code></a> over the same
-crate set as <code>make test-workspace</code> (the workspace minus
-<code>revive-llvm-builder</code>).</p>
+<p>Revive measures Rust and LLVM C++ line and region coverage with <a href="https://github.com/taiki-e/cargo-llvm-cov"><code>cargo-llvm-cov</code></a> over the same tests as <code>make test-workspace</code>.</p>
 <p>Two ways to obtain a report:</p>
 <ol>
-<li><strong>Locally:</strong> <code>make coverage</code> (described below).</li>
-<li><strong>Per PR:</strong> apply the <code>measure code coverage</code> label. The workflow at
-<code>.github/workflows/code-coverage.yml</code> publishes the report to
-<code>https://paritytech.github.io/revive/pr-&lt;N&gt;/</code> and comments the link on
-the PR. Label requires maintainer privileges.</li>
+<li><strong>Locally:</strong> <code>make coverage</code> and <code>make coverage-llvm-report</code> (described below).</li>
+<li><strong>Per PR:</strong> apply the <code>measure code coverage</code> label and read the bot-generated PR comment once the triggered workflow completes.</li>
 </ol>
 <h2 id="running-locally"><a class="header" href="#running-locally">Running locally</a></h2>
-<pre><code class="language-bash">make coverage
+<pre><code class="language-bash"># Install LLVM.
+make install-llvm
+
+# Or install instrumented LLVM.
+make install-llvm-coverage
+
+# ..set LLVM_SYS_221_PREFIX to a compatible LLVM build..
+
+# Run coverage and generate revive Rust report.
+make coverage
+
+# Generate a separate LLVM C++ report if needed, if
+# instrumented LLVM was used for `make coverage`.
+make coverage-llvm-report
+
+# Print clickable links to all accumulated HTML reports detected
+# (they're grouped by timestamps) to easily view them in the browser.
+make coverage-browse
 </code></pre>
 <p>The target:</p>
 <ol>
-<li>Builds and tests the workspace under cargo-llvm-cov with
-<code>--ignore-run-fail</code> so partial coverage lands even when test binaries
-exit non-zero.</li>
-<li>Writes HTML to <code>book/src/coverage/html/</code> and a summary to
-<code>book/src/coverage/summary.txt</code>.</li>
-<li>Runs <code>mdbook build</code>, which copies the report to <code>docs/coverage/</code>.</li>
+<li>Builds and tests the workspace under cargo-llvm-cov with <code>--ignore-run-fail</code> so partial coverage lands even when test binaries exit non-zero.</li>
+<li>Writes a browsable HTML report into a timestamped run directory (<code>coverage-reports/&lt;stamp&gt;/revive/</code> or <code>coverage-reports/&lt;stamp&gt;/llvm/</code>).</li>
 </ol>
-<p>Everything it writes lives under <code>book/src/coverage/</code> and <code>docs/coverage/</code>,
-both of which are gitignored, so a coverage run never touches tracked files —
-there is nothing to revert before committing.</p>
-<p>Open the report at <code>docs/coverage/html/index.html</code>, or run <code>make book</code> to
-browse it in the rendered book.</p>
-<p>Prerequisites:</p>
+<h2 id="resource-requirements-and-troubleshooting"><a class="header" href="#resource-requirements-and-troubleshooting">Resource requirements and troubleshooting</a></h2>
+<p><code>make coverage</code> bakes in two defaults that keep instrumented runs tractable:</p>
 <ul>
-<li><code>LLVM_SYS_221_PREFIX</code> exported and pointing at a compatible LLVM build
-(same as <code>make test-workspace</code>).</li>
-<li><code>llvm-tools-preview</code> rustup component, <code>cargo-llvm-cov</code>, and the pinned
-<code>mdbook</code> version — all installed on demand by the target.</li>
+<li>It drops DWARF with <code>CARGO_PROFILE_DEV_DEBUG=0</code> since coverage line data lives in the binaries’ <code>__llvm_covmap</code> sections.</li>
+<li>It bounds profile output with <code>LLVM_PROFILE_FILE_NAME=revive-%4m.profraw</code>. The default pattern contains <code>%p</code>, writing one raw profile per process. With an instrumented LLVM this could exceed tens of gigabytes of raw profiles in a full run. The <code>%4m</code> merge pool makes processes merge their counters into a handful of files instead.</li>
+</ul>
+<p>Even with those defaults, plan for:</p>
+<ul>
+<li>Disk space:
+<ul>
+<li>Building instrumented LLVM and running an instrumented <code>make coverage</code> still needs tens of gigabytes of disk space.</li>
+</ul>
+</li>
+<li>LLVM link memory (<code>make install-llvm-coverage</code>):
+<ul>
+<li>If a link step gets OOM-killed, rerun with capped parallelism (e.g. <code>JOBS=1</code>) to serialize the links. The rerun resumes incrementally.</li>
+</ul>
+</li>
+<li>Test-binary link memory (<code>make coverage</code>):
+<ul>
+<li>If a link gets OOM-killed, rerun with <code>RUSTFLAGS="-C link-arg=-fuse-ld=lld"</code> (or <em>additionally</em> with capped parallelism, e.g. <code>CARGO_BUILD_JOBS=1</code>). GNU ld holds every input object and the coverage mapping of the entire dependency closure in memory at once. lld links with a smaller peak.</li>
+</ul>
+</li>
+<li>Test-run memory (<code>make coverage</code>):
+<ul>
+<li>Each concurrently running test spawns an instrumented resolc. On memory-constrained machines cap it with <code>RUST_TEST_THREADS=4</code>. This throttles test execution only, not compilation.</li>
+</ul>
+</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="cross-compilation"><a class="header" href="#cross-compilation">Cross compilation</a></h1>

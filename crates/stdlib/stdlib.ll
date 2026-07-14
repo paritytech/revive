@@ -235,32 +235,13 @@ full:
   ret { i256, i256 } %v49
 }
 
-; Remainder of (phi:plo) mod m. Precondition: phi < m, m != 0.
+; Remainder of (phi:plo) mod m. Preconditions: phi < m, m >= 2^128. The sole
+; caller is __mulmod's 512-bit branch, which is only taken for m >= 2^128.
+; Smaller moduli take __mulmod's 256-bit fast path through __urem256.
 define i256 @__urem512by256(i256 %plo, i256 %phi, i256 %m) #0 {
 entry:
   %v1 = lshr i256 %m, 128
   %v2 = trunc i256 %v1 to i128
-  %v3 = trunc i256 %m to i128
-  %v4 = icmp ne i128 %v2, 0
-  br i1 %v4, label %full, label %single
-single:
-  %v5 = lshr i256 %phi, 128
-  %v6 = trunc i256 %v5 to i128
-  %v7 = trunc i256 %phi to i128
-  %v8 = lshr i256 %plo, 128
-  %v9 = trunc i256 %v8 to i128
-  %v10 = trunc i256 %plo to i128
-  %v11 = call { i128, i128 } @__udiv_qrnnd_128(i128 0, i128 %v6, i128 %v3)
-  %v12 = extractvalue { i128, i128 } %v11, 1
-  %v13 = call { i128, i128 } @__udiv_qrnnd_128(i128 %v12, i128 %v7, i128 %v3)
-  %v14 = extractvalue { i128, i128 } %v13, 1
-  %v15 = call { i128, i128 } @__udiv_qrnnd_128(i128 %v14, i128 %v9, i128 %v3)
-  %v16 = extractvalue { i128, i128 } %v15, 1
-  %v17 = call { i128, i128 } @__udiv_qrnnd_128(i128 %v16, i128 %v10, i128 %v3)
-  %v18 = extractvalue { i128, i128 } %v17, 1
-  %v19 = zext i128 %v18 to i256
-  ret i256 %v19
-full:
   %v20 = call i128 @llvm.ctlz.i128(i128 %v2, i1 false)
   %v21 = zext i128 %v20 to i256
   %v22 = shl i256 %m, %v21

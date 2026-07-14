@@ -1785,6 +1785,14 @@ impl<'ctx> Context<'ctx> {
             .module()
             .get_function(LLVMRuntime::FUNCTION_UREM256)
             .expect("__urem256 must be declared in the stdlib module");
+        let sdiv256 = self
+            .module()
+            .get_function(LLVMRuntime::FUNCTION_SDIV256)
+            .expect("__sdiv256 must be declared in the stdlib module");
+        let srem256 = self
+            .module()
+            .get_function(LLVMRuntime::FUNCTION_SREM256)
+            .expect("__srem256 must be declared in the stdlib module");
 
         for function in self.module().get_functions() {
             let mut to_narrow = Vec::new();
@@ -1835,15 +1843,17 @@ impl<'ctx> Context<'ctx> {
                         }
                     }
 
-                    // An i256 unsigned div/rem we cannot prove narrowable would
-                    // otherwise be expanded by the backend into a ~500-instruction
-                    // bit-at-a-time loop. Route it to the efficient stdlib runtime
-                    // routine (128-bit-digit long division bottoming out at a
-                    // hardware-backed 128/64 divide via `__udivti3`) instead.
+                    // An i256 div/rem we cannot prove narrowable would otherwise be expanded by
+                    // the backend into a ~500-instruction bit-at-a-time loop. Route it to the
+                    // efficient stdlib routines instead: unsigned ops use 128-bit-digit long
+                    // division bottoming out at a hardware-backed 128/64 divide via `__udivti3`.
+                    // Signed ops wrap those with sign-magnitude.
                     if !narrowed && bit_width == 256 {
                         match instruction.get_opcode() {
                             InstructionOpcode::UDiv => to_route.push((instruction, udiv256)),
                             InstructionOpcode::URem => to_route.push((instruction, urem256)),
+                            InstructionOpcode::SDiv => to_route.push((instruction, sdiv256)),
+                            InstructionOpcode::SRem => to_route.push((instruction, srem256)),
                             _ => {}
                         }
                     }

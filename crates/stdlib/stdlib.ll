@@ -325,6 +325,40 @@ define i256 @__urem256(i256 %u, i256 %v) #0 {
   ret i256 %r
 }
 
+; Signed 256-bit division via sign-magnitude over the unsigned wrapper. The
+; caller only reaches this for a safe operand set (the runtime div body guards
+; away divisor == 0 and the INT_MIN / -1 overflow pair), so the magnitude
+; divide is exact and the sign-adjusted quotient fits in i256. abs(x) is
+; (x ^ (x >>s 255)) - (x >>s 255). The sign mask x >>s 255 is 0 or -1.
+define i256 @__sdiv256(i256 %a, i256 %b) #0 {
+  %sign_a = ashr i256 %a, 255
+  %sign_b = ashr i256 %b, 255
+  %xa = xor i256 %a, %sign_a
+  %abs_a = sub i256 %xa, %sign_a
+  %xb = xor i256 %b, %sign_b
+  %abs_b = sub i256 %xb, %sign_b
+  %abs_q = call i256 @__udiv256(i256 %abs_a, i256 %abs_b)
+  %sign_q = xor i256 %sign_a, %sign_b
+  %xq = xor i256 %abs_q, %sign_q
+  %q = sub i256 %xq, %sign_q
+  ret i256 %q
+}
+
+; Signed 256-bit remainder via sign-magnitude. The remainder takes the sign of
+; the dividend, matching EVM SMOD.
+define i256 @__srem256(i256 %a, i256 %b) #0 {
+  %sign_a = ashr i256 %a, 255
+  %sign_b = ashr i256 %b, 255
+  %xa = xor i256 %a, %sign_a
+  %abs_a = sub i256 %xa, %sign_a
+  %xb = xor i256 %b, %sign_b
+  %abs_b = sub i256 %xb, %sign_b
+  %abs_r = call i256 @__urem256(i256 %abs_a, i256 %abs_b)
+  %xr = xor i256 %abs_r, %sign_a
+  %r = sub i256 %xr, %sign_a
+  ret i256 %r
+}
+
 define i256 @__mulmod(i256 %arg1, i256 %arg2, i256 %modulo) #0 {
 entry:
   %cccond = icmp eq i256 %modulo, 0

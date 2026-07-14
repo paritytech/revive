@@ -31,17 +31,29 @@ impl<'ctx> LLVMRuntime<'ctx> {
     /// The corresponding runtime function name.
     pub const FUNCTION_SIGNEXTEND: &'static str = "__signextend";
 
-    /// The corresponding runtime function name.
+    /// Name of the unsigned 256-bit division helper in `stdlib.ll`
     /// It is not a registered runtime function. It must keep external
     /// linkage so it survives optimization until `narrow_divrem_instructions`
     /// reroutes non-narrowable i256 `udiv` to it, so only its name lives here.
     pub const FUNCTION_UDIV256: &'static str = "__udiv256";
 
-    /// The corresponding runtime function name.
+    /// Name of the unsigned 256-bit remainder helper in `stdlib.ll`
     /// It is not a registered runtime function. It must keep external
     /// linkage so it survives optimization until `narrow_divrem_instructions`
     /// reroutes non-narrowable i256 `urem` to it, so only its name lives here.
     pub const FUNCTION_UREM256: &'static str = "__urem256";
+
+    /// Name of the signed 256-bit division helper in `stdlib.ll`
+    /// It is not a registered runtime function. It must keep external
+    /// linkage so it survives optimization until `narrow_divrem_instructions`
+    /// reroutes non-narrowable i256 `sdiv` to it, so only its name lives here.
+    pub const FUNCTION_SDIV256: &'static str = "__sdiv256";
+
+    /// Name of the signed 256-bit remainder helper in `stdlib.ll`
+    /// It is not a registered runtime function. It must keep external
+    /// linkage so it survives optimization until `narrow_divrem_instructions`
+    /// reroutes non-narrowable i256 `srem` to it, so only its name lives here.
+    pub const FUNCTION_SREM256: &'static str = "__srem256";
 
     /// A shortcut constructor.
     pub fn new(

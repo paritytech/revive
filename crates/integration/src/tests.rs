@@ -226,6 +226,68 @@ fn div_mod_fuzz() {
     run_differential(actions);
 }
 
+/// Differential fuzz of the signed 256-bit `sdiv`/`smod` routing. Non-provable
+/// i256 `sdiv`/`srem` are rewritten into calls to the stdlib `__sdiv256`/
+/// `__srem256`, which reduce to the unsigned routine via sign-magnitude. Fixed
+/// vectors pin the signed edges (`INT_MIN`, the `INT_MIN / -1` overflow, `-1`
+/// and `0` divisors, mixed signs, `|n| < |d|`); the keccak stream covers
+/// full-width signed operands, alternating the divisor so `|d|` exercises both
+/// the `full` and `twoone` paths of the underlying `__udivrem256`.
+#[test]
+fn sdiv_smod_fuzz() {
+    use alloy_primitives::keccak256;
+
+    let mut cases: Vec<(I256, I256)> = vec![
+        (I256::MIN, I256::MINUS_ONE), // overflow: SDIV = INT_MIN, SMOD = 0
+        (I256::MIN, I256::try_from(2).unwrap()),
+        (I256::MAX, I256::MINUS_ONE),
+        (I256::try_from(-7).unwrap(), I256::try_from(3).unwrap()),
+        (I256::try_from(7).unwrap(), I256::try_from(-3).unwrap()),
+        (I256::try_from(-7).unwrap(), I256::try_from(-3).unwrap()),
+        (I256::try_from(3).unwrap(), I256::try_from(7).unwrap()), // |n| < |d|
+        (I256::MIN, I256::MIN),                                   // n == d
+        (I256::try_from(5).unwrap(), I256::ZERO),                 // divisor 0: guarded, returns 0
+    ];
+
+    for i in 0u64..256 {
+        let derive = |tag: &[u8]| -> U256 {
+            let mut buf = Vec::with_capacity(8 + tag.len());
+            buf.extend_from_slice(&i.to_be_bytes());
+            buf.extend_from_slice(tag);
+            U256::from_be_bytes::<32>(keccak256(&buf).0)
+        };
+        let n = I256::from_raw(derive(b"n"));
+        let d_raw = derive(b"d");
+        // Even i: full-width signed divisor (|d| usually >= 2^128, the full
+        // path). Odd i: small-magnitude divisor (|d| < 2^128, the twoone path).
+        let d = if i % 2 == 0 {
+            I256::from_raw(d_raw)
+        } else {
+            I256::from_raw(d_raw >> 129)
+        };
+        cases.push((n, d));
+    }
+
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+    for (n, d) in cases {
+        for data in [
+            Contract::division_arithmetics_sdiv(n, d).calldata,
+            Contract::division_arithmetics_smod(n, d).calldata,
+        ] {
+            actions.push(Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data,
+            });
+        }
+    }
+
+    run_differential(actions);
+}
+
 #[test]
 fn bitwise_byte() {
     let mut actions = instantiate("contracts/Bitwise.sol", "Bitwise");

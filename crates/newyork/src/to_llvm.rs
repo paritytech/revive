@@ -4714,8 +4714,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     }
                 } else {
                     let entry_block = context.basic_block();
-                    context.build_conditional_branch(condition_bool, then_block, join_block)?;
-
                     let mut else_yields = Vec::new();
                     for (index, input_value) in inputs.iter().enumerate() {
                         else_yields.push(self.translate_value_as_word(
@@ -4724,6 +4722,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                             &format!("input_yield_{}", index),
                         )?);
                     }
+                    context.build_conditional_branch(condition_bool, then_block, join_block)?;
                     phi_incoming.push((else_yields, entry_block));
 
                     context.set_basic_block(then_block);

@@ -318,6 +318,18 @@ case!(
 );
 
 sol!(
+    contract UnalignedMload {
+        function f() external pure returns (bytes32);
+    }
+);
+case!(
+    "UnalignedMloadNativeBug.sol",
+    UnalignedMload,
+    fCall,
+    unaligned_mload_native_bug,
+);
+
+sol!(
     contract ConstReturnOverflowBug {
         function bug() external pure returns (uint256);
     }

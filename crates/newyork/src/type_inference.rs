@@ -1051,6 +1051,7 @@ impl TypeInference {
             }
             Statement::For {
                 condition_statements,
+                condition,
                 body,
                 post,
                 ..
@@ -1058,6 +1059,7 @@ impl TypeInference {
                 let saved = self.in_unconditional_context;
                 self.in_unconditional_context = false;
                 self.collect_uses_statements(condition_statements);
+                self.collect_uses_expression(condition);
                 self.collect_uses_statements(&body.statements);
                 self.collect_uses_statements(&post.statements);
                 self.in_unconditional_context = saved;
@@ -1108,19 +1110,10 @@ impl TypeInference {
     /// walks nested regions so the conditional context is tracked).
     fn collect_uses_statement(&mut self, statement: &Statement) {
         match statement {
-            Statement::MStore {
-                offset,
-                value,
-                region,
-            } => {
+            Statement::MStore { offset, value, .. } => {
                 self.record_use(offset.id, UseContext::MemoryOffset);
                 self.narrow_from_use(offset.id, BitWidth::I64);
-                if *region == MemoryRegion::FreePointerSlot {
-                    self.record_use(value.id, UseContext::MemoryOffset);
-                    self.narrow_from_use(value.id, BitWidth::I64);
-                } else {
-                    self.record_use(value.id, UseContext::MemoryValue);
-                }
+                self.record_use(value.id, UseContext::MemoryValue);
             }
             Statement::MStore8 { offset, value, .. } => {
                 self.record_use(offset.id, UseContext::MemoryOffset);

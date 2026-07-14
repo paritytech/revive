@@ -49,6 +49,9 @@ pub enum EVMVersion {
     /// The corresponding EVM version.
     #[serde(rename = "osaka")]
     Osaka,
+    /// The corresponding EVM version.
+    #[serde(rename = "amsterdam")]
+    Amsterdam,
 }
 
 impl TryFrom<&str> for EVMVersion {
@@ -70,6 +73,7 @@ impl TryFrom<&str> for EVMVersion {
             "cancun" => Self::Cancun,
             "prague" => Self::Prague,
             "osaka" => Self::Osaka,
+            "amsterdam" => Self::Amsterdam,
             _ => anyhow::bail!("Invalid EVM version: {}", value),
         })
     }
@@ -92,6 +96,7 @@ impl std::fmt::Display for EVMVersion {
             Self::Cancun => write!(f, "cancun"),
             Self::Prague => write!(f, "prague"),
             Self::Osaka => write!(f, "osaka"),
+            Self::Amsterdam => write!(f, "amsterdam"),
         }
     }
 }

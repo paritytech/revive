@@ -15,6 +15,10 @@ pub const SOLIDITY_DEPENDENCY_CONTRACT_PATH: &str = "src/tests/data/solidity/dep
 /// The simple Solidity contract containing i256 divisions and remains
 /// that should be compiled correctly.
 pub const SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH: &str = "src/tests/data/solidity/large_div_rem.sol";
+/// The verbatim reproducer from paritytech/revive#560: a folded guard plus an
+/// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
+pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
+    "src/tests/data/solidity/folded_guard_inlined_loop.sol";
 
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";

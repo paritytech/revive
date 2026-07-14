@@ -2,8 +2,9 @@
 
 use crate::{
     cli_utils::{
-        absolute_path, assert_command_success, execute_command, CommandResult, ResolcOptSettings,
-        SolcOptSettings, SOLIDITY_CONTRACT_PATH, STANDARD_JSON_CONTRACTS_PATH,
+        absolute_path, assert_command_success, execute_command, execute_resolc, CommandResult,
+        ResolcOptSettings, SolcOptSettings, SOLIDITY_CONTRACT_PATH,
+        SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH, STANDARD_JSON_CONTRACTS_PATH,
         YUL_MEMSET_CONTRACT_PATH,
     },
     SolcCompiler,
@@ -163,6 +164,20 @@ fn compiles_yul_to_binary_blob() {
 
     let solc_result = execute_command(SolcCompiler::DEFAULT_EXECUTABLE_NAME, solc_arguments, None);
     assert_evm_blob_from_yul(&solc_result);
+}
+
+/// Compile regression for [paritytech/revive#560](https://github.com/paritytech/revive/issues/560):
+/// the verbatim Solidity from the issue crashed the newyork pipeline under
+/// `--disable-solc-optimizer` with "Basic Block in function 'fun_run_runtime' does
+/// not have terminator! label %for_join" (the one-armed `if` lowering emitted the
+/// fall-through input `zext` after the branch terminator).
+#[test]
+fn compiles_newyork_folded_guard_inlined_loop() {
+    let path = absolute_path(SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH);
+    let arguments = &[&path, "--newyork", "--disable-solc-optimizer", "--bin"];
+
+    let result = execute_resolc(arguments);
+    assert_pvm_blob(&result);
 }
 
 /// This test mimics the command used in the `resolc` benchmarks when compiling Solidity via standard JSON input.

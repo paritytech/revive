@@ -22,6 +22,8 @@
 	test-llvm-builder \
 	test-book \
 	coverage \
+	coverage-llvm-report \
+	coverage-browse \
 	bench \
 	bench-pvm \
 	bench-evm \
@@ -48,13 +50,16 @@ install-llvm: install-llvm-builder
 	git submodule update --init --recursive --depth 1
 	revive-llvm build --llvm-projects lld --llvm-projects clang
 
-# Build LLVM with `LLVM_BUILD_INSTRUMENTED_COVERAGE=On` so `llvm-cov`
-# reports cover C++ as well as Rust. Shares the `target-llvm/<env>/`
-# tree with `install-llvm`; run `revive-llvm clean` between variants.
-# `JOBS=N` caps thread count via CMAKE_BUILD_PARALLEL_LEVEL.
+# Build an instrumented LLVM, enabling LLVM C++ coverage.
+# Shares the `target-llvm/<env>/` tree with `install-llvm`.
+# Run `revive-llvm clean` between variants. `JOBS=N` caps build parallelism.
 install-llvm-coverage: install-llvm-builder
 	git submodule update --init --recursive --depth 1
 	CMAKE_BUILD_PARALLEL_LEVEL=$(JOBS) revive-llvm build --llvm-projects lld --llvm-projects clang --enable-coverage
+
+install-cargo-llvm-cov:
+	@command -v cargo-llvm-cov >/dev/null 2>&1 || cargo install cargo-llvm-cov --locked
+	@rustup component add llvm-tools-preview >/dev/null 2>&1 || true
 
 install-revive-runner:
 	cargo install --locked --force --path crates/runner --no-default-features
@@ -98,38 +103,130 @@ test-llvm-builder:
 	@echo "warning: the llvm-builder tests will take many hours"
 	cargo test --package revive-llvm-builder -- --test-threads=1
 
-install-cargo-llvm-cov:
-	@command -v cargo-llvm-cov >/dev/null 2>&1 || cargo install cargo-llvm-cov --locked
-	@rustup component add llvm-tools-preview >/dev/null 2>&1 || true
-
 test-book:
 	cargo install mdbook --version 0.5.1 --locked
 	mdbook test book
 
-# Coverage over `test-workspace` (excludes revive-llvm-builder). Everything
-# it writes lands under the gitignored book/src/coverage/ and docs/coverage/
-# trees, so a coverage run never dirties tracked files.
-coverage: install install-cargo-llvm-cov
-	cargo install mdbook --version 0.5.1 --locked
+# The active run's report directory. Resolved at recipe time
+# from the stamp that `coverage` records next to the profiles.
+# Reports accumulate under coverage-reports/<stamp>/.
+COVERAGE_REPORTS_DIR = coverage-reports/$$(cat target/llvm-cov-target/coverage-stamp)
+
+LLVM_IS_INSTRUMENTED = "$(LLVM_SYS_221_PREFIX)/bin/llvm-objdump" -h \
+	"$(LLVM_SYS_221_PREFIX)/lib/libLLVMCore.a" 2>/dev/null \
+	| grep -q __llvm_covmap
+
+# Build instrumented resolc against the existing LLVM build and run coverage.
+# Envs are used for reducing disk and memory usage, and preventing errors
+# arising because of it. See ./book/src/developer_guide/coverage.md on
+# more details and troubleshooting techniques.
+coverage: export CARGO_PROFILE_DEV_DEBUG = 0
+coverage: export LLVM_PROFILE_FILE_NAME = revive-%4m.profraw
+coverage: install-cargo-llvm-cov
+	@if $(LLVM_IS_INSTRUMENTED); then \
+		echo "note: instrumented LLVM in use. This run also collects LLVM C++ coverage and takes several hours."; \
+	fi
 	cargo llvm-cov clean --workspace
-	rm -rf target/coverage
+	mkdir -p target/llvm-cov-target
+	date '+%Y-%m-%d_%H-%M' > target/llvm-cov-target/coverage-stamp
+# Explicitly build the resolc binary that the test suites spawn so
+# that cargo uplifts it into the debug/ path used further below.
+	cargo llvm-cov run --no-report --bin resolc --locked -- --version
+	@test -x target/llvm-cov-target/debug/resolc || { \
+		echo "error: no runnable resolc in target/llvm-cov-target/debug/."; \
+		exit 1; \
+	}
+# Use `--no-report` in order to merge the two Rust reports at the later step.
+# Benches are excluded (i.e. `--all-targets` is not used) since they run duplicate
+# coverage the tests already provide, while their binaries noticeably inflate each
+# report pass with instrumented LLVM.
 	PATH="$(CURDIR)/target/llvm-cov-target/debug:$$PATH" \
-	cargo llvm-cov --workspace \
+	cargo llvm-cov --no-report --workspace \
 		--exclude revive-llvm-builder \
-		--all-targets \
+		--lib --bins --tests \
 		--locked \
-		--ignore-run-fail \
-		--html \
-		--output-dir target/coverage
-	cargo llvm-cov report --summary-only > target/coverage/summary.txt
-	rm -rf book/src/coverage
-	mkdir -p book/src/coverage
-	mv target/coverage/html book/src/coverage/html
-	mv target/coverage/summary.txt book/src/coverage/summary.txt
-	mdbook build book
-	@echo
-	@echo "Coverage collected under book/src/coverage/ (gitignored)."
-	@echo "Open docs/coverage/html/index.html, or run 'make book' to browse it."
+		--ignore-run-fail
+	PATH="$(CURDIR)/target/llvm-cov-target/debug:$$PATH" \
+	cargo llvm-cov --no-report --package revive-integration \
+		--features newyork \
+		--locked \
+		--ignore-run-fail
+# Exclude the llvm/ and target-llvm/ trees from this workspace-only report (see
+# `coverage-llvm-report` target), and the benchmarks which are excluded from the run.
+	cargo llvm-cov report --html --output-dir $(COVERAGE_REPORTS_DIR)/revive \
+		--ignore-filename-regex '^$(CURDIR)/(llvm|target-llvm|crates/benchmarks)/'
+# Slice the HTML report's header and totals rows into a Markdown-table summary,
+# rather than invoking `report` again which would cost another full covmap decode.
+	awk '{ gsub(/<tr/, "\n<tr"); gsub(/<\/table/, "\n"); print }' \
+		$(COVERAGE_REPORTS_DIR)/revive/html/index.html \
+		| grep -e ">Filename<" -e ">Totals<" \
+		| sed 's/<\/td>/|/g; s/<[^>]*>//g; s/  */ /g; s/ *| */ | /g; s/^/| /; s/ $$//' \
+		| awk 'NR == 1 { print; sep = $$0; gsub(/[^|]/, "-", sep); print sep; next } { print }' \
+		| tee $(COVERAGE_REPORTS_DIR)/revive/summary.txt
+	@[ "$$(wc -l < $(COVERAGE_REPORTS_DIR)/revive/summary.txt)" -eq 3 ] || { \
+		echo "error: unexpected llvm-cov HTML structure. Fix the summary extraction."; \
+		exit 1; \
+	}
+	@echo "revive coverage report: file://$(CURDIR)/$(COVERAGE_REPORTS_DIR)/revive/html/index.html"
+	@if $(LLVM_IS_INSTRUMENTED); then \
+		echo "note: instrumented LLVM detected. Run 'make coverage-llvm-report'" \
+			"to generate the LLVM C++ coverage report from this run."; \
+	fi
+
+# Render the LLVM C++ coverage report that a `make coverage` run against an
+# instrumented LLVM enabled. This is kept separate from the Rust report to
+# prevent blending LLVM percentages into resolc's own coverage numbers.
+coverage-llvm-report:
+	@$(LLVM_IS_INSTRUMENTED) || { \
+		echo "error: no instrumented LLVM at LLVM_SYS_221_PREFIX='$(LLVM_SYS_221_PREFIX)'" \
+			"('make install-llvm-coverage' enables it)."; \
+		exit 1; \
+	}
+	@"$(LLVM_SYS_221_PREFIX)/bin/llvm-config" --system-libs | grep -q -- -lz || { \
+		echo "error: the instrumented LLVM at LLVM_SYS_221_PREFIX lacks zlib." \
+			"Install it and rebuild LLVM with 'make install-llvm-coverage'."; \
+		exit 1; \
+	}
+	@find target/llvm-cov-target -name '*.profraw' 2>/dev/null | grep -q . || { \
+		echo "error: no coverage profiles found. Run 'make coverage' first."; \
+		exit 1; \
+	}
+	@test -f target/llvm-cov-target/coverage-stamp || { \
+		echo "error: no recorded coverage run stamp. Run 'make coverage' first."; \
+		exit 1; \
+	}
+	mkdir -p target/coverage-llvm
+# Raw llvm-profdata/llvm-cov is used (rather than `cargo llvm-cov`) since
+# that allows include-only filtering (e.g. "only llvm/").
+	"$(LLVM_SYS_221_PREFIX)/bin/llvm-profdata" merge -sparse \
+		--failure-mode=all \
+		$$(find target/llvm-cov-target -name '*.profraw') \
+		-o target/coverage-llvm/llvm.profdata
+	"$(LLVM_SYS_221_PREFIX)/bin/llvm-cov" show -format=html \
+		-output-dir $(COVERAGE_REPORTS_DIR)/llvm/html \
+		-instr-profile target/coverage-llvm/llvm.profdata \
+		target/llvm-cov-target/debug/resolc \
+		llvm/
+	@echo "LLVM C++ coverage report: file://$(CURDIR)/$(COVERAGE_REPORTS_DIR)/llvm/html/index.html"
+
+# Local coverage browsing.
+# Prints clickable links to the HTML reports of every recorded coverage run.
+coverage-browse:
+	@runs="$$(ls -1r coverage-reports 2>/dev/null)"; \
+	if [ -z "$$runs" ]; then \
+		echo "note: no coverage reports found. Run 'make coverage' first."; \
+	else \
+		for run in $$runs; do \
+			echo "$$run:"; \
+			test -f "coverage-reports/$$run/revive/html/index.html" && \
+				echo "  revive:   file://$(CURDIR)/coverage-reports/$$run/revive/html/index.html" && \
+				echo; \
+			test -f "coverage-reports/$$run/llvm/html/index.html" && \
+				echo "  LLVM C++: file://$(CURDIR)/coverage-reports/$$run/llvm/html/index.html" && \
+				echo; \
+			true; \
+		done; \
+	fi
 
 bench: install-bin
 	cargo criterion --all --all-features --message-format=json \

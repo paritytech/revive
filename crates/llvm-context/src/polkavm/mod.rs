@@ -22,6 +22,7 @@ use self::context::Context;
 pub use self::r#const::*;
 
 pub mod r#const;
+pub mod const_division;
 pub mod context;
 pub mod evm;
 

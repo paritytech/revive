@@ -86,7 +86,7 @@ entry:
   ret i256 %res
 }
 
-define i256 @__mulmod(i256 %arg1, i256 %arg2, i256 %modulo) #0 {
+define i256 @__mulmod(i256 %arg1, i256 %arg2, i256 %modulo) #20 {
 entry:
   %cccond = icmp eq i256 %modulo, 0
   br i1 %cccond, label %ccret, label %entrycont
@@ -729,3 +729,4 @@ declare void @llvm.lifetime.end.p0(ptr captures(none)) #11
 attributes #10 = { nofree norecurse nosync nounwind memory(argmem: readwrite) }
 attributes #11 = { nocallback nofree nosync nounwind willreturn memory(argmem: readwrite) }
 attributes #12 = { nounwind }
+attributes #20 = { noinline mustprogress nofree norecurse nosync nounwind readnone willreturn }

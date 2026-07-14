@@ -80,7 +80,26 @@ impl Optimizer {
         } else {
             format!("default<O{optimization_level}>")
         };
-        target_machine.run_optimization_passes(module, &pass_pipeline)
+        if std::env::var_os("REVIVE_NO_CONST_DIV").is_none() {
+            // `__mulmod` is `noinline`, so a light interprocedural
+            // constant-propagation prepass fixes a constant modulus onto the
+            // surviving call. The const-division rewrite then specializes those
+            // calls (and any constant-divisor `udiv`/`urem`) into Barrett
+            // sequences before the main pipeline dissolves the reduction into
+            // constant-limb code that cannot be pattern-matched.
+            target_machine.run_optimization_passes(module, "ipsccp")?;
+            crate::polkavm::const_division::run(module);
+        }
+        target_machine.run_optimization_passes(module, &pass_pipeline)?;
+        if std::env::var_os("REVIVE_NO_CONST_DIV").is_none() {
+            // Second sweep: catch constant divisions exposed only by the main
+            // pipeline's inlining and constant propagation.
+            let rewritten = crate::polkavm::const_division::run(module);
+            if rewritten > 0 {
+                target_machine.run_optimization_passes(module, "instcombine,dce")?;
+            }
+        }
+        Ok(())
     }
 
     /// Returns the optimizer settings reference.

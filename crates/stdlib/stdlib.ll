@@ -179,6 +179,16 @@ entry:
 ; Full unsigned 256/256 -> { quotient, remainder }. Precondition: v != 0.
 define { i256, i256 } @__udivrem256(i256 %u, i256 %v) #0 {
 entry:
+  ; Early exit: u < v yields quotient 0, remainder u. Makes the __mulmod
+  ; argument pre-reductions nearly free when the arguments are already
+  ; reduced (< modulus), the common case in modular-arithmetic-heavy code.
+  %small = icmp ult i256 %u, %v
+  br i1 %small, label %early, label %split
+early:
+  %e1 = insertvalue { i256, i256 } undef, i256 0, 0
+  %e2 = insertvalue { i256, i256 } %e1, i256 %u, 1
+  ret { i256, i256 } %e2
+split:
   %v1 = lshr i256 %v, 128
   %v2 = trunc i256 %v1 to i128
   %v3 = trunc i256 %v to i128

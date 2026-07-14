@@ -1,70 +1,99 @@
-//! Barrett rewrite for wide divisions by compile-time constants.
+//! Barrett rewrite for wide divisions and modmuls by compile-time constants.
 //!
 //! LLVM has no fast lowering for `udiv`/`urem` wider than 128 bits on
-//! riscv64: its fallback expands them into bit-serial shift-subtract loops
-//! (one quotient bit per iteration). When the divisor is a compile-time
-//! constant, division can instead be performed by multiplication with a
-//! precomputed fixed-point reciprocal (Barrett / Granlund-Montgomery):
+//! riscv64: it expands them into bit-serial shift-subtract loops (one
+//! quotient bit per iteration). When the divisor/modulus is a compile-time
+//! constant, the operation can instead be done by multiplication with a
+//! precomputed fixed-point reciprocal (Barrett / Granlund-Montgomery).
 //!
-//!   mu = floor(2^256 / C)                      (computed here, at compile time)
-//!   q0 = (zext(x, 512) * mu) >> 256            (one wide multiply)
-//!   r0 = x - q0 * C
-//!   two conditional corrections (provably sufficient: the estimate
-//!   error is at most 1 for any x < 2^256; see below)
+//! The reduction sequences are ~900 instructions each. Emitting them inline
+//! would overflow PolkaVM's basic-block instruction limit whenever a
+//! contract chains several modular operations in one straight-line block
+//! (e.g. elliptic-curve field arithmetic). So each reduction is **outlined**
+//! into a `noinline` helper function, generated once per (operation,
+//! constant), and every site becomes a small call. This keeps basic blocks
+//! small, deduplicates the code, and matches how the stock stdlib and revm
+//! structure the same work (a routine you call, not inlined math).
 //!
-//! Runs after the optimization pipeline, so constants exposed by inlining
-//! and interprocedural constant propagation (e.g. Solidity `constant`
-//! moduli routed through solc accessor functions) are visible. Divisions
-//! by runtime values are left untouched and take the generic path.
-//!
-//! Error bound: with mu = floor(2^256/C) we have mu > 2^256/C - 1, so for
-//! any x < 2^256: x*mu/2^256 > x/C - x/2^256 > x/C - 1, hence
-//! q0 = floor(x*mu/2^256) >= floor(x/C) - 1. Since also q0 <= floor(x/C),
-//! one correction suffices; two are emitted as margin. Each computed mu is
-//! additionally self-verified against its defining inequality at emission
-//! time; violation aborts compilation rather than emitting wrong code.
+//! Runs after an `ipsccp` prepass so constants exposed by inlining and
+//! interprocedural constant propagation are visible; runtime divisors are
+//! left untouched and take the generic path. Each reciprocal is verified
+//! against its defining inequality at emission; violation aborts compilation.
 
 use std::num::NonZeroU32;
 
+use inkwell::attributes::AttributeLoc;
+use inkwell::module::Linkage;
 use inkwell::types::StringRadix;
-use inkwell::values::{AnyValue, BasicValue, InstructionOpcode, InstructionValue, IntValue};
+use inkwell::values::{
+    AnyValue, BasicValue, FunctionValue, InstructionOpcode, InstructionValue, IntValue,
+};
 use num::{BigUint, One, Zero};
 
-/// Minimum bit width handled. Below 128 bits the target has native or
-/// libcall lowerings that are already adequate.
+/// Minimum bit width handled for plain division. Below 128 bits the target
+/// has native or libcall lowerings that are already adequate.
 const MIN_WIDTH: u32 = 129;
-/// Maximum bit width handled (the EVM word).
-const MAX_WIDTH: u32 = 512;
+/// Maximum bit width handled.
+const MAX_WIDTH: u32 = 256;
+/// Name prefix for the outlined helper functions.
+const PREFIX: &str = "__cbarrett_";
 
-/// Rewrites eligible constant-divisor divisions in `module`.
-/// Returns the number of rewritten instructions.
+/// Rewrites eligible constant-divisor divisions and constant-modulus mulmods
+/// in `module` into calls to outlined Barrett helpers. Returns the number of
+/// rewritten sites.
 pub fn run(module: &inkwell::module::Module) -> usize {
-    let mut rewritten = rewrite_mulmod_calls(module);
+    // Collect all sites before mutating (adding helper functions would
+    // otherwise invalidate the function/instruction iterators).
+    let mut mulmod_calls = Vec::new();
+    let mut div_sites = Vec::new();
+    let has_mulmod = module.get_function("__mulmod").is_some();
     for function in module.get_functions() {
-        let mut candidates = Vec::new();
+        if function
+            .get_name()
+            .to_str()
+            .map(|name| name.starts_with(PREFIX))
+            .unwrap_or(false)
+        {
+            continue; // don't reprocess our own helpers
+        }
         for block in function.get_basic_block_iter() {
             let mut instruction = block.get_first_instruction();
             while let Some(current) = instruction {
                 instruction = current.get_next_instruction();
-                if matches!(
-                    current.get_opcode(),
-                    InstructionOpcode::UDiv | InstructionOpcode::URem
-                ) {
-                    candidates.push(current);
+                match current.get_opcode() {
+                    InstructionOpcode::UDiv | InstructionOpcode::URem => {
+                        if let Some(divisor) = eligible_constant_divisor(&current) {
+                            div_sites.push((current, divisor));
+                        }
+                    }
+                    InstructionOpcode::Call if has_mulmod => {
+                        if let Some(modulus) = eligible_mulmod_call(&current) {
+                            mulmod_calls.push((current, modulus));
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
-        for instr in candidates {
-            if let Some(divisor) = eligible_constant_divisor(&instr) {
-                rewrite(&instr, &divisor);
-                rewritten += 1;
-            }
-        }
+    }
+
+    let mut rewritten = 0;
+    for (call, modulus) in mulmod_calls {
+        rewrite_mulmod_call(module, &call, &modulus);
+        rewritten += 1;
+    }
+    for (instr, divisor) in div_sites {
+        rewrite_division(module, &instr, &divisor);
+        rewritten += 1;
     }
     rewritten
 }
 
-/// Returns the divisor value when `instr` is a division of width
+// ---------------------------------------------------------------------------
+// Eligibility
+// ---------------------------------------------------------------------------
+
+/// Returns the divisor when `instr` is a division of width
 /// [`MIN_WIDTH`]..=[`MAX_WIDTH`] by an eligible integer constant.
 fn eligible_constant_divisor(instr: &InstructionValue) -> Option<BigUint> {
     let ty = instr.get_type().into_int_type();
@@ -78,18 +107,39 @@ fn eligible_constant_divisor(instr: &InstructionValue) -> Option<BigUint> {
     }
     let value = parse_wide_constant(&divisor, width)?;
     if value <= BigUint::one() {
-        return None; // division by zero or one: leave to LLVM's folding
+        return None; // 0/1: leave to LLVM's folding
     }
     if (&value & (&value - 1u8)).is_zero() {
-        return None; // power of two: LLVM lowers to shift/mask already
+        return None; // power of two: already a shift/mask
+    }
+    Some(value)
+}
+
+/// Returns the modulus when `call` is `__mulmod(a, b, C)` with a 256-bit
+/// compile-time constant modulus. HAC 14.42 Barrett needs `a*b < 2^(2t)`;
+/// since `a, b < 2^256`, this holds exactly at `t = 256`, so only 256-bit
+/// moduli qualify. Smaller moduli keep the generic `__mulmod` path.
+fn eligible_mulmod_call(call: &InstructionValue) -> Option<BigUint> {
+    let count = call.get_num_operands();
+    if count != 4 {
+        return None; // three arguments plus the callee
+    }
+    let callee = call.get_operand(count - 1)?.value()?.into_pointer_value();
+    if callee.get_name().to_str().ok()? != "__mulmod" {
+        return None;
+    }
+    let modulus = call.get_operand(2)?.value()?.into_int_value();
+    if !modulus.is_const() {
+        return None;
+    }
+    let value = parse_wide_constant(&modulus, 256)?;
+    if value.bits() as u32 != 256 {
+        return None;
     }
     Some(value)
 }
 
 /// Extracts an arbitrary-width unsigned constant from an `IntValue`.
-///
-/// inkwell exposes constants only up to 64 bits directly, so wider values
-/// are recovered from the textual form (`iN <signed decimal>`).
 fn parse_wide_constant(value: &IntValue, width: u32) -> Option<BigUint> {
     if let Some(small) = value.get_zero_extended_constant() {
         return Some(BigUint::from(small));
@@ -104,240 +154,216 @@ fn parse_wide_constant(value: &IntValue, width: u32) -> Option<BigUint> {
     }
 }
 
-/// Replaces `instr` (udiv/urem of width w by constant C) with the Barrett
-/// multiply-shift-subtract sequence.
-fn rewrite(instr: &InstructionValue, divisor: &BigUint) {
-    let opcode = instr.get_opcode();
-    let block = instr
-        .get_parent()
-        .expect("division instruction must be in a basic block");
-    let context = block.get_context();
+// ---------------------------------------------------------------------------
+// Rewrites: replace each site with a call to an outlined helper
+// ---------------------------------------------------------------------------
+
+fn rewrite_mulmod_call(
+    module: &inkwell::module::Module,
+    call: &InstructionValue,
+    modulus: &BigUint,
+) {
+    let helper = mulmod_helper(module, modulus);
+    let context = module.get_context();
+    let builder = context.create_builder();
+    builder.position_before(call);
+    let a = call.get_operand(0).unwrap().value().unwrap().into_int_value();
+    let b = call.get_operand(1).unwrap().value().unwrap().into_int_value();
+    let result = builder
+        .build_call(helper, &[a.into(), b.into()], "cbarrett_mm")
+        .expect("call")
+        .try_as_basic_value()
+        .basic()
+        .expect("mulmod helper returns a value")
+        .into_int_value();
+    call.replace_all_uses_with(&result.as_instruction_value().expect("call is an instruction"));
+    call.erase_from_basic_block();
+}
+
+fn rewrite_division(module: &inkwell::module::Module, instr: &InstructionValue, divisor: &BigUint) {
     let ty = instr.get_type().into_int_type();
     let width = ty.get_bit_width();
-    // mu = floor(2^w / C), self-verified: mu*C <= 2^w < (mu+1)*C.
+    let is_rem = instr.get_opcode() == InstructionOpcode::URem;
+    let helper = division_helper(module, divisor, width, is_rem);
+    let context = module.get_context();
+    let builder = context.create_builder();
+    builder.position_before(instr);
+    let x = instr.get_operand(0).unwrap().value().unwrap().into_int_value();
+    let result = builder
+        .build_call(helper, &[x.into()], "cbarrett_div")
+        .expect("call")
+        .try_as_basic_value()
+        .basic()
+        .expect("division helper returns a value")
+        .into_int_value();
+    instr.replace_all_uses_with(&result.as_instruction_value().expect("call is an instruction"));
+    instr.erase_from_basic_block();
+}
+
+// ---------------------------------------------------------------------------
+// Outlined helper generation (get-or-create, deduplicated by name)
+// ---------------------------------------------------------------------------
+
+fn dec(value: &BigUint) -> String {
+    value.to_str_radix(10)
+}
+
+/// `noinline internal i256 @__cbarrett_mulmod_<hex>(i256, i256)` computing
+/// `(a*b) mod C` via HAC 14.42 Barrett (bit-shift form) over i576.
+fn mulmod_helper<'ctx>(
+    module: &inkwell::module::Module<'ctx>,
+    modulus: &BigUint,
+) -> FunctionValue<'ctx> {
+    let name = format!("{PREFIX}mulmod_{}", modulus.to_str_radix(16));
+    if let Some(existing) = module.get_function(&name) {
+        return existing;
+    }
+    let context = module.get_context();
+    let i256 = int_ty(context, 256);
+    let i512 = int_ty(context, 512);
+    let i576 = int_ty(context, 576);
+
+    let function = module.add_function(
+        &name,
+        i256.fn_type(&[i256.into(), i256.into()], false),
+        Some(Linkage::Internal),
+    );
+    mark_noinline(context, function);
+    let entry = context.append_basic_block(function, "entry");
+    let builder = context.create_builder();
+    builder.position_at_end(entry);
+
+    let a = function.get_nth_param(0).unwrap().into_int_value();
+    let b = function.get_nth_param(1).unwrap().into_int_value();
+
+    let t = 256u64;
+    let two_t = BigUint::one() << (2 * t);
+    let mu = &two_t / modulus;
+    assert!(
+        &mu * modulus <= two_t && (&mu + BigUint::one()) * modulus > two_t,
+        "const-division: mulmod reciprocal self-check failed for {modulus}"
+    );
+
+    let m512 = i512.const_int_from_string(&dec(modulus), StringRadix::Decimal).unwrap();
+    let mu576 = i576.const_int_from_string(&dec(&mu), StringRadix::Decimal).unwrap();
+
+    let aw = builder.build_int_z_extend(a, i512, "aw").unwrap();
+    let bw = builder.build_int_z_extend(b, i512, "bw").unwrap();
+    let x = builder.build_int_mul(aw, bw, "x").unwrap();
+    let pre = builder
+        .build_right_shift(x, i512.const_int(t - 1, false), false, "pre")
+        .unwrap();
+    let pre576 = builder.build_int_z_extend(pre, i576, "pre576").unwrap();
+    let prod = builder.build_int_mul(pre576, mu576, "prod").unwrap();
+    let q576 = builder
+        .build_right_shift(prod, i576.const_int(t + 1, false), false, "q576")
+        .unwrap();
+    let q = builder.build_int_truncate(q576, i512, "q").unwrap();
+    let qm = builder.build_int_mul(q, m512, "qm").unwrap();
+    let mut r = builder.build_int_sub(x, qm, "r").unwrap();
+    for step in 0..2 {
+        r = correct(&builder, r, m512, step);
+    }
+    let result = builder.build_int_truncate(r, i256, "res").unwrap();
+    builder.build_return(Some(&result)).unwrap();
+    function
+}
+
+/// `noinline internal iW @__cbarrett_{udiv|urem}_<W>_<hex>(iW)` computing
+/// `x / C` or `x % C` via Barrett (multiply by `floor(2^W / C)`).
+fn division_helper<'ctx>(
+    module: &inkwell::module::Module<'ctx>,
+    divisor: &BigUint,
+    width: u32,
+    is_rem: bool,
+) -> FunctionValue<'ctx> {
+    let op = if is_rem { "urem" } else { "udiv" };
+    let name = format!("{PREFIX}{op}_{width}_{}", divisor.to_str_radix(16));
+    if let Some(existing) = module.get_function(&name) {
+        return existing;
+    }
+    let context = module.get_context();
+    let ty = int_ty(context, width);
+
     let bound = BigUint::one() << width;
     let mu = &bound / divisor;
-    // The product x*mu needs at most width + bitlen(mu) bits; size the wide
-    // type to that (limb-aligned) rather than 2*width, so the multiply's
-    // legalized expansion stays small enough for the PVM basic-block limit.
-    let wide_bits = (((width + mu.bits() as u32) + 63) / 64) * 64;
-    let wide = context
-        .custom_width_int_type(NonZeroU32::new(wide_bits).expect("nonzero width"))
-        .expect("custom width type");
     assert!(
         &mu * divisor <= bound && (&mu + BigUint::one()) * divisor > bound,
         "const-division: reciprocal self-check failed for divisor {divisor}"
     );
-    assert!(mu < bound, "const-division: reciprocal exceeds width");
+    let wide_bits = (((width + mu.bits() as u32) + 63) / 64) * 64;
+    let wide = int_ty(context, wide_bits);
 
+    let function = module.add_function(
+        &name,
+        ty.fn_type(&[ty.into()], false),
+        Some(Linkage::Internal),
+    );
+    mark_noinline(context, function);
+    let entry = context.append_basic_block(function, "entry");
     let builder = context.create_builder();
-    builder.position_before(instr);
+    builder.position_at_end(entry);
 
-    let dividend = instr
-        .get_operand(0)
-        .expect("division has a dividend")
-        .value()
-        .expect("dividend is a value")
-        .into_int_value();
+    let x = function.get_nth_param(0).unwrap().into_int_value();
+    let c = ty.const_int_from_string(&dec(divisor), StringRadix::Decimal).unwrap();
+    let mu_wide = wide.const_int_from_string(&dec(&mu), StringRadix::Decimal).unwrap();
 
-    let dec = |v: &BigUint| v.to_str_radix(10);
-    let c_narrow = ty
-        .const_int_from_string(&dec(divisor), StringRadix::Decimal)
-        .expect("divisor literal");
-    let mu_wide = wide
-        .const_int_from_string(&dec(&mu), StringRadix::Decimal)
-        .expect("reciprocal literal");
-    let shift_amount = wide.const_int(width as u64, false);
-    let one = ty.const_int(1, false);
-
-    let x_wide = builder
-        .build_int_z_extend(dividend, wide, "cdiv_x")
-        .expect("zext");
-    let product = builder
-        .build_int_mul(x_wide, mu_wide, "cdiv_mul")
-        .expect("mul");
+    let xw = builder.build_int_z_extend(x, wide, "xw").unwrap();
+    let prod = builder.build_int_mul(xw, mu_wide, "prod").unwrap();
     let shifted = builder
-        .build_right_shift(product, shift_amount, false, "cdiv_shr")
-        .expect("shr");
-    let mut quotient = builder
-        .build_int_truncate(shifted, ty, "cdiv_q")
-        .expect("trunc");
-    let estimate_times_c = builder
-        .build_int_mul(quotient, c_narrow, "cdiv_qc")
-        .expect("mul");
-    let mut remainder = builder
-        .build_int_sub(dividend, estimate_times_c, "cdiv_r")
-        .expect("sub");
-
-    // Two conditional corrections (error bound is 1; the second is margin).
+        .build_right_shift(prod, wide.const_int(width as u64, false), false, "shr")
+        .unwrap();
+    let mut q = builder.build_int_truncate(shifted, ty, "q").unwrap();
+    let qc = builder.build_int_mul(q, c, "qc").unwrap();
+    let mut r = builder.build_int_sub(x, qc, "r").unwrap();
+    let one = ty.const_int(1, false);
     for step in 0..2 {
         let needs = builder
-            .build_int_compare(
-                inkwell::IntPredicate::UGE,
-                remainder,
-                c_narrow,
-                &format!("cdiv_ge{step}"),
-            )
-            .expect("cmp");
-        let r_sub = builder
-            .build_int_sub(remainder, c_narrow, &format!("cdiv_rs{step}"))
-            .expect("sub");
-        let q_add = builder
-            .build_int_add(quotient, one, &format!("cdiv_qa{step}"))
-            .expect("add");
-        remainder = builder
-            .build_select(needs, r_sub, remainder, &format!("cdiv_r{step}"))
-            .expect("select")
+            .build_int_compare(inkwell::IntPredicate::UGE, r, c, &format!("ge{step}"))
+            .unwrap();
+        let r_sub = builder.build_int_sub(r, c, &format!("rs{step}")).unwrap();
+        let q_add = builder.build_int_add(q, one, &format!("qa{step}")).unwrap();
+        r = builder
+            .build_select(needs, r_sub, r, &format!("r{step}"))
+            .unwrap()
             .into_int_value();
-        quotient = builder
-            .build_select(needs, q_add, quotient, &format!("cdiv_q{step}"))
-            .expect("select")
+        q = builder
+            .build_select(needs, q_add, q, &format!("q{step}"))
+            .unwrap()
             .into_int_value();
     }
-
-    let result = match opcode {
-        InstructionOpcode::URem => remainder,
-        InstructionOpcode::UDiv => quotient,
-        _ => unreachable!("only udiv/urem are collected"),
-    };
-    let replacement = result
-        .as_instruction_value()
-        .expect("select produces an instruction");
-    instr.replace_all_uses_with(&replacement);
-    instr.erase_from_basic_block();
+    builder.build_return(Some(if is_rem { &r } else { &q })).unwrap();
+    function
 }
 
-/// Specializes `__mulmod(a, b, m)` with a compile-time constant modulus into
-/// `(a * b) mod m` computed as a 512-bit product followed by a single
-/// `urem i512`. No operand pre-reduction is needed — `a, b < 2^256` so the
-/// product is `< 2^512` and the reduction handles the full range. The `urem`
-/// is Barretted by [`run`] (hence [`MAX_WIDTH`] covers 512). A runtime
-/// modulus keeps the `__mulmod` call and the generic path.
-fn rewrite_mulmod_calls(module: &inkwell::module::Module) -> usize {
-    const MULMOD: &str = "__mulmod";
-    if module.get_function(MULMOD).is_none() {
-        return 0;
-    }
-    let context = module.get_context();
-    let i256 = context
-        .custom_width_int_type(NonZeroU32::new(256).expect("nonzero"))
-        .expect("i256");
-    let i512 = context
-        .custom_width_int_type(NonZeroU32::new(512).expect("nonzero"))
-        .expect("i512");
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
 
-    let mut rewritten = 0;
-    for function in module.get_functions() {
-        let mut calls = Vec::new();
-        for block in function.get_basic_block_iter() {
-            let mut instruction = block.get_first_instruction();
-            while let Some(current) = instruction {
-                instruction = current.get_next_instruction();
-                if current.get_opcode() != InstructionOpcode::Call {
-                    continue;
-                }
-                let count = current.get_num_operands();
-                if count != 4 {
-                    continue;
-                }
-                let is_mulmod = current
-                    .get_operand(count - 1)
-                    .and_then(|operand| operand.value())
-                    .map(|value| value.into_pointer_value())
-                    .and_then(|callee| callee.get_name().to_str().ok().map(str::to_owned))
-                    .is_some_and(|name| name == MULMOD);
-                if is_mulmod {
-                    calls.push(current);
-                }
-            }
-        }
-        for call in calls {
-            let modulus = call
-                .get_operand(2)
-                .and_then(|operand| operand.value())
-                .map(|value| value.into_int_value())
-                .filter(|value| value.is_const())
-                .as_ref()
-                .and_then(|value| parse_wide_constant(value, 256));
-            let Some(modulus) = modulus else { continue };
-
-            let builder = context.create_builder();
-            builder.position_before(&call);
-            let arg = |index| {
-                call.get_operand(index)
-                    .expect("mulmod argument")
-                    .value()
-                    .expect("mulmod argument is a value")
-                    .into_int_value()
-            };
-            let (a, b) = (arg(0), arg(1));
-            let t = modulus.bits() as u32;
-            // HAC 14.42 Barrett needs x = a*b < 2^(2t). Since a,b < 2^256,
-            // x < 2^512, so this holds exactly at t = 256 (the crypto field
-            // primes). Smaller moduli keep the generic __mulmod path.
-            if t != 256 {
-                continue;
-            }
-            let i576 = context
-                .custom_width_int_type(NonZeroU32::new(576).expect("nonzero"))
-                .expect("i576");
-            let result = if modulus <= BigUint::one() {
-                i256.const_zero()
-            } else {
-                let two_t = BigUint::one() << (2 * t);
-                let mu = &two_t / &modulus;
-                assert!(
-                    &mu * &modulus <= two_t && (&mu + BigUint::one()) * &modulus > two_t,
-                    "const-division: mulmod reciprocal self-check failed for {modulus}"
-                );
-                let dec = |v: &BigUint| v.to_str_radix(10);
-                let m512 = i512
-                    .const_int_from_string(&dec(&modulus), StringRadix::Decimal)
-                    .expect("modulus literal");
-                let mu576 = i576
-                    .const_int_from_string(&dec(&mu), StringRadix::Decimal)
-                    .expect("reciprocal literal");
-                // x = a*b (< 2^512)
-                let a_wide = builder.build_int_z_extend(a, i512, "mm_aw").expect("zext");
-                let b_wide = builder.build_int_z_extend(b, i512, "mm_bw").expect("zext");
-                let x = builder.build_int_mul(a_wide, b_wide, "mm_x").expect("mul");
-                // q = ((x >> (t-1)) * mu) >> (t+1)
-                let pre = builder
-                    .build_right_shift(x, i512.const_int((t - 1) as u64, false), false, "mm_pre")
-                    .expect("shr");
-                let pre576 = builder.build_int_z_extend(pre, i576, "mm_pre576").expect("zext");
-                let prod = builder.build_int_mul(pre576, mu576, "mm_qmul").expect("mul");
-                let q576 = builder
-                    .build_right_shift(prod, i576.const_int((t + 1) as u64, false), false, "mm_qs")
-                    .expect("shr");
-                let q = builder.build_int_truncate(q576, i512, "mm_q").expect("trunc");
-                // r = x - q*m, two conditional corrections (bound is 1)
-                let qm = builder.build_int_mul(q, m512, "mm_qm").expect("mul");
-                let mut r = builder.build_int_sub(x, qm, "mm_r").expect("sub");
-                let one = i512.const_int(1, false);
-                let _ = one;
-                for step in 0..2 {
-                    let ge = builder
-                        .build_int_compare(inkwell::IntPredicate::UGE, r, m512, &format!("mm_ge{step}"))
-                        .expect("cmp");
-                    let sub = builder
-                        .build_int_sub(r, m512, &format!("mm_rs{step}"))
-                        .expect("sub");
-                    r = builder
-                        .build_select(ge, sub, r, &format!("mm_rsel{step}"))
-                        .expect("select")
-                        .into_int_value();
-                }
-                builder.build_int_truncate(r, i256, "mm_res").expect("trunc")
-            };
-            let replacement = result
-                .as_instruction_value()
-                .expect("rewrite produces an instruction");
-            call.replace_all_uses_with(&replacement);
-            call.erase_from_basic_block();
-            rewritten += 1;
-        }
-    }
-    rewritten
+fn int_ty(context: inkwell::context::ContextRef<'_>, bits: u32) -> inkwell::types::IntType<'_> {
+    context
+        .custom_width_int_type(NonZeroU32::new(bits).expect("nonzero width"))
+        .expect("custom width type")
 }
 
+fn mark_noinline(context: inkwell::context::ContextRef<'_>, function: FunctionValue<'_>) {
+    let kind = inkwell::attributes::Attribute::get_named_enum_kind_id("noinline");
+    function.add_attribute(AttributeLoc::Function, context.create_enum_attribute(kind, 0));
+}
+
+/// One conditional Barrett correction: `if r >= m { r -= m }`, via select.
+fn correct<'ctx>(
+    builder: &inkwell::builder::Builder<'ctx>,
+    r: IntValue<'ctx>,
+    m: IntValue<'ctx>,
+    step: usize,
+) -> IntValue<'ctx> {
+    let needs = builder
+        .build_int_compare(inkwell::IntPredicate::UGE, r, m, &format!("mge{step}"))
+        .unwrap();
+    let sub = builder.build_int_sub(r, m, &format!("ms{step}")).unwrap();
+    builder
+        .build_select(needs, sub, r, &format!("mr{step}"))
+        .unwrap()
+        .into_int_value()
+}

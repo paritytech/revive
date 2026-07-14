@@ -37,7 +37,7 @@ return:
 ; Assumption at every entry: divisor / modulus != 0 (guarded by the caller).
 ;
 ; (uh:ul) / v -> { quotient, remainder }. Precondition: uh < v, 0 < v < 2^128.
-define private { i128, i128 } @__udiv_qrnnd_128(i128 %uh, i128 %ul, i128 %v) #0 {
+define private { i128, i128 } @__udiv_qrnnd_128(i128 %uh, i128 %ul, i128 %v) noinline #0 {
 entry:
   %v1 = call i128 @llvm.ctlz.i128(i128 %v, i1 false)
   %v2 = shl i128 %v, %v1
@@ -131,7 +131,7 @@ entry:
 
 ; One normalized 128-bit quotient digit: qhat estimate (guarded cap at 2^128-1)
 ; plus two branchless correction steps. vn is the normalized 256-bit divisor.
-define private i128 @__digit_quot(i128 %uhi, i128 %ulo, i256 %vn, i128 %unext) #0 {
+define private i128 @__digit_quot(i128 %uhi, i128 %ulo, i256 %vn, i128 %unext) noinline #0 {
 entry:
   %v1 = lshr i256 %vn, 128
   %v2 = trunc i256 %v1 to i128

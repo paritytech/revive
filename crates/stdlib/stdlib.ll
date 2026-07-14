@@ -3,6 +3,8 @@
 target datalayout = "e-m:e-p:32:64-p1:32:64-i64:64-i128:128-n32:64-S64"
 target triple = "riscv64-unknown-none-elf"
 
+declare i128 @llvm.ctlz.i128(i128, i1)
+
 define i256 @__addmod(i256 %arg1, i256 %arg2, i256 %modulo) #0 {
 entry:
   %is_zero = icmp eq i256 %modulo, 0
@@ -28,142 +30,299 @@ return:
   ret i256 %value
 }
 
-define private i256 @__clz(i256 %v) #0 {
+; Efficient unsigned 256-bit division / remainder and 512-by-256 reduction.
+; Core divide primitive is a 128/64 udiv (efficient __udivti3 libcall),
+; never a raw i256 udiv/urem (LLVM expands those into a ~500-instruction
+; bit-at-a-time loop). Algorithm: Knuth Algorithm D.
+; Assumption at every entry: divisor / modulus != 0 (guarded by the caller).
+;
+; (uh:ul) / v -> { quotient, remainder }. Precondition: uh < v, 0 < v < 2^128.
+define private { i128, i128 } @__udiv_qrnnd_128(i128 %uh, i128 %ul, i128 %v) #0 {
 entry:
-  %vs128 = lshr i256 %v, 128
-  %vs128nz = icmp ne i256 %vs128, 0
-  %n128 = select i1 %vs128nz, i256 128, i256 256
-  %va128 = select i1 %vs128nz, i256 %vs128, i256 %v
-  %vs64 = lshr i256 %va128, 64
-  %vs64nz = icmp ne i256 %vs64, 0
-  %clza64 = sub i256 %n128, 64
-  %n64 = select i1 %vs64nz, i256 %clza64, i256 %n128
-  %va64 = select i1 %vs64nz, i256 %vs64, i256 %va128
-  %vs32 = lshr i256 %va64, 32
-  %vs32nz = icmp ne i256 %vs32, 0
-  %clza32 = sub i256 %n64, 32
-  %n32 = select i1 %vs32nz, i256 %clza32, i256 %n64
-  %va32 = select i1 %vs32nz, i256 %vs32, i256 %va64
-  %vs16 = lshr i256 %va32, 16
-  %vs16nz = icmp ne i256 %vs16, 0
-  %clza16 = sub i256 %n32, 16
-  %n16 = select i1 %vs16nz, i256 %clza16, i256 %n32
-  %va16 = select i1 %vs16nz, i256 %vs16, i256 %va32
-  %vs8 = lshr i256 %va16, 8
-  %vs8nz = icmp ne i256 %vs8, 0
-  %clza8 = sub i256 %n16, 8
-  %n8 = select i1 %vs8nz, i256 %clza8, i256 %n16
-  %va8 = select i1 %vs8nz, i256 %vs8, i256 %va16
-  %vs4 = lshr i256 %va8, 4
-  %vs4nz = icmp ne i256 %vs4, 0
-  %clza4 = sub i256 %n8, 4
-  %n4 = select i1 %vs4nz, i256 %clza4, i256 %n8
-  %va4 = select i1 %vs4nz, i256 %vs4, i256 %va8
-  %vs2 = lshr i256 %va4, 2
-  %vs2nz = icmp ne i256 %vs2, 0
-  %clza2 = sub i256 %n4, 2
-  %n2 = select i1 %vs2nz, i256 %clza2, i256 %n4
-  %va2 = select i1 %vs2nz, i256 %vs2, i256 %va4
-  %vs1 = lshr i256 %va2, 1
-  %vs1nz = icmp ne i256 %vs1, 0
-  %clza1 = sub i256 %n2, 2
-  %clzax = sub i256 %n2, %va2
-  %result = select i1 %vs1nz, i256 %clza1, i256 %clzax
-  ret i256 %result
+  %v1 = call i128 @llvm.ctlz.i128(i128 %v, i1 false)
+  %v2 = shl i128 %v, %v1
+  %v3 = lshr i128 %v2, 64
+  %v4 = and i128 %v2, 18446744073709551615
+  %v5 = zext i128 %uh to i256
+  %v6 = zext i128 %ul to i256
+  %v7 = shl i256 %v5, 128
+  %v8 = or i256 %v7, %v6
+  %v9 = zext i128 %v1 to i256
+  %v10 = shl i256 %v8, %v9
+  %v11 = lshr i256 %v10, 128
+  %v12 = trunc i256 %v11 to i128
+  %v13 = lshr i256 %v10, 64
+  %v14 = and i256 %v13, 18446744073709551615
+  %v15 = trunc i256 %v14 to i128
+  %v16 = and i256 %v10, 18446744073709551615
+  %v17 = trunc i256 %v16 to i128
+  %v18 = udiv i128 %v12, %v3
+  %v19 = icmp ugt i128 %v18, 18446744073709551615
+  %v20 = select i1 %v19, i128 18446744073709551615, i128 %v18
+  %v21 = mul i128 %v20, %v3
+  %v22 = sub i128 %v12, %v21
+  %v23 = zext i128 %v22 to i256
+  %v24 = zext i128 %v3 to i256
+  %v25 = zext i128 %v15 to i256
+  %v26 = mul i128 %v20, %v4
+  %v27 = zext i128 %v26 to i256
+  %v28 = shl i256 %v23, 64
+  %v29 = add i256 %v28, %v25
+  %v30 = icmp ugt i256 %v27, %v29
+  %v31 = sub i128 %v20, 1
+  %v32 = add i256 %v23, %v24
+  %v33 = select i1 %v30, i128 %v31, i128 %v20
+  %v34 = select i1 %v30, i256 %v32, i256 %v23
+  %v35 = mul i128 %v33, %v4
+  %v36 = zext i128 %v35 to i256
+  %v37 = shl i256 %v34, 64
+  %v38 = add i256 %v37, %v25
+  %v39 = icmp ugt i256 %v36, %v38
+  %v40 = sub i128 %v33, 1
+  %v41 = add i256 %v34, %v24
+  %v42 = select i1 %v39, i128 %v40, i128 %v33
+  %v43 = select i1 %v39, i256 %v41, i256 %v34
+  %v44 = shl i128 %v12, 64
+  %v45 = add i128 %v44, %v15
+  %v46 = mul i128 %v42, %v2
+  %v47 = sub i128 %v45, %v46
+  %v48 = udiv i128 %v47, %v3
+  %v49 = icmp ugt i128 %v48, 18446744073709551615
+  %v50 = select i1 %v49, i128 18446744073709551615, i128 %v48
+  %v51 = mul i128 %v50, %v3
+  %v52 = sub i128 %v47, %v51
+  %v53 = zext i128 %v52 to i256
+  %v54 = zext i128 %v3 to i256
+  %v55 = zext i128 %v17 to i256
+  %v56 = mul i128 %v50, %v4
+  %v57 = zext i128 %v56 to i256
+  %v58 = shl i256 %v53, 64
+  %v59 = add i256 %v58, %v55
+  %v60 = icmp ugt i256 %v57, %v59
+  %v61 = sub i128 %v50, 1
+  %v62 = add i256 %v53, %v54
+  %v63 = select i1 %v60, i128 %v61, i128 %v50
+  %v64 = select i1 %v60, i256 %v62, i256 %v53
+  %v65 = mul i128 %v63, %v4
+  %v66 = zext i128 %v65 to i256
+  %v67 = shl i256 %v64, 64
+  %v68 = add i256 %v67, %v55
+  %v69 = icmp ugt i256 %v66, %v68
+  %v70 = sub i128 %v63, 1
+  %v71 = add i256 %v64, %v54
+  %v72 = select i1 %v69, i128 %v70, i128 %v63
+  %v73 = select i1 %v69, i256 %v71, i256 %v64
+  %v74 = zext i128 %v47 to i256
+  %v75 = shl i256 %v74, 64
+  %v76 = zext i128 %v17 to i256
+  %v77 = add i256 %v75, %v76
+  %v78 = zext i128 %v72 to i256
+  %v79 = zext i128 %v2 to i256
+  %v80 = mul i256 %v78, %v79
+  %v81 = sub i256 %v77, %v80
+  %v82 = lshr i256 %v81, %v9
+  %v83 = trunc i256 %v82 to i128
+  %v84 = shl i128 %v42, 64
+  %v85 = or i128 %v84, %v72
+  %v86 = insertvalue { i128, i128 } undef, i128 %v85, 0
+  %v87 = insertvalue { i128, i128 } %v86, i128 %v83, 1
+  ret { i128, i128 } %v87
 }
 
-define private i256 @__ulongrem(i256 %0, i256 %1, i256 %2) #0 {
-  %.not = icmp ult i256 %1, %2
-  br i1 %.not, label %4, label %51
+; One normalized 128-bit quotient digit: qhat estimate (guarded cap at 2^128-1)
+; plus two branchless correction steps. vn is the normalized 256-bit divisor.
+define private i128 @__digit_quot(i128 %uhi, i128 %ulo, i256 %vn, i128 %unext) #0 {
+entry:
+  %v1 = lshr i256 %vn, 128
+  %v2 = trunc i256 %v1 to i128
+  %v3 = trunc i256 %vn to i128
+  %v4 = call { i128, i128 } @__udiv_qrnnd_128(i128 %uhi, i128 %ulo, i128 %v2)
+  %v5 = extractvalue { i128, i128 } %v4, 0
+  %v6 = icmp uge i128 %uhi, %v2
+  %v7 = select i1 %v6, i128 340282366920938463463374607431768211455, i128 %v5
+  %v8 = zext i128 %uhi to i256
+  %v9 = zext i128 %ulo to i256
+  %v10 = shl i256 %v8, 128
+  %v11 = or i256 %v10, %v9
+  %v12 = zext i128 %v7 to i256
+  %v13 = mul i256 %v12, %v1
+  %v14 = sub i256 %v11, %v13
+  %v15 = zext i128 %v2 to i256
+  %v16 = zext i128 %unext to i384
+  %v17 = zext i128 %v7 to i256
+  %v18 = zext i128 %v3 to i256
+  %v19 = mul i256 %v17, %v18
+  %v20 = zext i256 %v19 to i384
+  %v21 = zext i256 %v14 to i384
+  %v22 = shl i384 %v21, 128
+  %v23 = add i384 %v22, %v16
+  %v24 = icmp ugt i384 %v20, %v23
+  %v25 = sub i128 %v7, 1
+  %v26 = add i256 %v14, %v15
+  %v27 = select i1 %v24, i128 %v25, i128 %v7
+  %v28 = select i1 %v24, i256 %v26, i256 %v14
+  %v29 = zext i128 %v27 to i256
+  %v30 = zext i128 %v3 to i256
+  %v31 = mul i256 %v29, %v30
+  %v32 = zext i256 %v31 to i384
+  %v33 = zext i256 %v28 to i384
+  %v34 = shl i384 %v33, 128
+  %v35 = add i384 %v34, %v16
+  %v36 = icmp ugt i384 %v32, %v35
+  %v37 = sub i128 %v27, 1
+  %v38 = add i256 %v28, %v15
+  %v39 = select i1 %v36, i128 %v37, i128 %v27
+  %v40 = select i1 %v36, i256 %v38, i256 %v28
+  ret i128 %v39
+}
 
-4:
-  %5 = tail call i256 @__clz(i256 %2)
-  %.not61 = icmp eq i256 %5, 0
-  br i1 %.not61, label %13, label %6
+; Full unsigned 256/256 -> { quotient, remainder }. Precondition: v != 0.
+define { i256, i256 } @__udivrem256(i256 %u, i256 %v) #0 {
+entry:
+  %v1 = lshr i256 %v, 128
+  %v2 = trunc i256 %v1 to i128
+  %v3 = trunc i256 %v to i128
+  %v4 = lshr i256 %u, 128
+  %v5 = trunc i256 %v4 to i128
+  %v6 = trunc i256 %u to i128
+  %v7 = icmp ne i128 %v2, 0
+  br i1 %v7, label %full, label %twoone
+twoone:
+  %v8 = udiv i128 %v5, %v3
+  %v9 = mul i128 %v8, %v3
+  %v10 = sub i128 %v5, %v9
+  %v11 = call { i128, i128 } @__udiv_qrnnd_128(i128 %v10, i128 %v6, i128 %v3)
+  %v12 = extractvalue { i128, i128 } %v11, 0
+  %v13 = extractvalue { i128, i128 } %v11, 1
+  %v14 = zext i128 %v8 to i256
+  %v15 = shl i256 %v14, 128
+  %v16 = zext i128 %v12 to i256
+  %v17 = or i256 %v15, %v16
+  %v18 = zext i128 %v13 to i256
+  %v19 = insertvalue { i256, i256 } undef, i256 %v17, 0
+  %v20 = insertvalue { i256, i256 } %v19, i256 %v18, 1
+  ret { i256, i256 } %v20
+full:
+  %v21 = call i128 @llvm.ctlz.i128(i128 %v2, i1 false)
+  %v22 = zext i128 %v21 to i256
+  %v23 = shl i256 %v, %v22
+  %v24 = zext i256 %u to i384
+  %v25 = zext i128 %v21 to i384
+  %v26 = shl i384 %v24, %v25
+  %v27 = lshr i384 %v26, 256
+  %v28 = trunc i384 %v27 to i128
+  %v29 = lshr i384 %v26, 128
+  %v30 = trunc i384 %v29 to i256
+  %v31 = trunc i256 %v30 to i128
+  %v32 = trunc i384 %v26 to i128
+  %v33 = call i128 @__digit_quot(i128 %v28, i128 %v31, i256 %v23, i128 %v32)
+  %v34 = zext i128 %v33 to i256
+  %v35 = zext i128 %v28 to i384
+  %v36 = zext i128 %v31 to i384
+  %v37 = zext i128 %v32 to i384
+  %v38 = shl i384 %v35, 256
+  %v39 = shl i384 %v36, 128
+  %v40 = add i384 %v38, %v39
+  %v41 = add i384 %v40, %v37
+  %v42 = zext i128 %v33 to i384
+  %v43 = zext i256 %v23 to i384
+  %v44 = mul i384 %v42, %v43
+  %v45 = sub i384 %v41, %v44
+  %v46 = lshr i384 %v45, %v25
+  %v47 = trunc i384 %v46 to i256
+  %v48 = insertvalue { i256, i256 } undef, i256 %v34, 0
+  %v49 = insertvalue { i256, i256 } %v48, i256 %v47, 1
+  ret { i256, i256 } %v49
+}
 
-6:
-  %7 = shl i256 %2, %5
-  %8 = shl i256 %1, %5
-  %9 = sub nuw nsw i256 256, %5
-  %10 = lshr i256 %0, %9
-  %11 = or i256 %10, %8
-  %12 = shl i256 %0, %5
-  br label %13
+; Remainder of (phi:plo) mod m. Precondition: phi < m, m != 0.
+define i256 @__urem512by256(i256 %plo, i256 %phi, i256 %m) #0 {
+entry:
+  %v1 = lshr i256 %m, 128
+  %v2 = trunc i256 %v1 to i128
+  %v3 = trunc i256 %m to i128
+  %v4 = icmp ne i128 %v2, 0
+  br i1 %v4, label %full, label %single
+single:
+  %v5 = lshr i256 %phi, 128
+  %v6 = trunc i256 %v5 to i128
+  %v7 = trunc i256 %phi to i128
+  %v8 = lshr i256 %plo, 128
+  %v9 = trunc i256 %v8 to i128
+  %v10 = trunc i256 %plo to i128
+  %v11 = call { i128, i128 } @__udiv_qrnnd_128(i128 0, i128 %v6, i128 %v3)
+  %v12 = extractvalue { i128, i128 } %v11, 1
+  %v13 = call { i128, i128 } @__udiv_qrnnd_128(i128 %v12, i128 %v7, i128 %v3)
+  %v14 = extractvalue { i128, i128 } %v13, 1
+  %v15 = call { i128, i128 } @__udiv_qrnnd_128(i128 %v14, i128 %v9, i128 %v3)
+  %v16 = extractvalue { i128, i128 } %v15, 1
+  %v17 = call { i128, i128 } @__udiv_qrnnd_128(i128 %v16, i128 %v10, i128 %v3)
+  %v18 = extractvalue { i128, i128 } %v17, 1
+  %v19 = zext i128 %v18 to i256
+  ret i256 %v19
+full:
+  %v20 = call i128 @llvm.ctlz.i128(i128 %v2, i1 false)
+  %v21 = zext i128 %v20 to i256
+  %v22 = shl i256 %m, %v21
+  %v23 = zext i256 %phi to i512
+  %v24 = zext i256 %plo to i512
+  %v25 = shl i512 %v23, 256
+  %v26 = or i512 %v25, %v24
+  %v27 = zext i128 %v20 to i512
+  %v28 = shl i512 %v26, %v27
+  %v29 = lshr i512 %v28, 384
+  %v30 = trunc i512 %v29 to i128
+  %v31 = lshr i512 %v28, 256
+  %v32 = and i512 %v31, 340282366920938463463374607431768211455
+  %v33 = trunc i512 %v32 to i128
+  %v34 = lshr i512 %v28, 128
+  %v35 = and i512 %v34, 340282366920938463463374607431768211455
+  %v36 = trunc i512 %v35 to i128
+  %v37 = and i512 %v28, 340282366920938463463374607431768211455
+  %v38 = trunc i512 %v37 to i128
+  %v39 = zext i256 %v22 to i384
+  %v40 = call i128 @__digit_quot(i128 %v30, i128 %v33, i256 %v22, i128 %v36)
+  %v41 = zext i128 %v30 to i384
+  %v42 = zext i128 %v33 to i384
+  %v43 = zext i128 %v36 to i384
+  %v44 = shl i384 %v41, 256
+  %v45 = shl i384 %v42, 128
+  %v46 = add i384 %v44, %v45
+  %v47 = add i384 %v46, %v43
+  %v48 = zext i128 %v40 to i384
+  %v49 = mul i384 %v48, %v39
+  %v50 = sub i384 %v47, %v49
+  %v51 = trunc i384 %v50 to i256
+  %v52 = lshr i256 %v51, 128
+  %v53 = trunc i256 %v52 to i128
+  %v54 = trunc i256 %v51 to i128
+  %v55 = call i128 @__digit_quot(i128 %v53, i128 %v54, i256 %v22, i128 %v38)
+  %v56 = zext i256 %v51 to i384
+  %v57 = shl i384 %v56, 128
+  %v58 = zext i128 %v38 to i384
+  %v59 = add i384 %v57, %v58
+  %v60 = zext i128 %v55 to i384
+  %v61 = mul i384 %v60, %v39
+  %v62 = sub i384 %v59, %v61
+  %v63 = trunc i384 %v62 to i256
+  %v64 = lshr i256 %v63, %v21
+  ret i256 %v64
+}
 
-13:
-  %.054 = phi i256 [ %7, %6 ], [ %2, %4 ]
-  %.053 = phi i256 [ %11, %6 ], [ %1, %4 ]
-  %.052 = phi i256 [ %12, %6 ], [ %0, %4 ]
-  %14 = lshr i256 %.054, 128
-  %15 = udiv i256 %.053, %14
-  %16 = urem i256 %.053, %14
-  %17 = and i256 %.054, 340282366920938463463374607431768211455
-  %18 = lshr i256 %.052, 128
-  br label %19
+; Thin drop-in wrappers. revive emits raw udiv/urem on i256. The
+; narrow_divrem_instructions pass rewrites the non-narrowable ones into calls
+; to these. Kept external so they survive optimization until that late pass.
+; Unused copies are dropped by the final linker --gc-sections.
+define i256 @__udiv256(i256 %u, i256 %v) #0 {
+  %qr = call { i256, i256 } @__udivrem256(i256 %u, i256 %v)
+  %q = extractvalue { i256, i256 } %qr, 0
+  ret i256 %q
+}
 
-19:
-  %.056 = phi i256 [ %15, %13 ], [ %25, %.critedge ]
-  %.055 = phi i256 [ %16, %13 ], [ %26, %.critedge ]
-  %.not62 = icmp ult i256 %.056, 340282366920938463463374607431768211456
-  br i1 %.not62, label %20, label %.critedge
-
-20:
-  %21 = mul nuw i256 %.056, %17
-  %22 = shl nuw i256 %.055, 128
-  %23 = or i256 %22, %18
-  %24 = icmp ugt i256 %21, %23
-  br i1 %24, label %.critedge, label %27
-
-.critedge:
-  %25 = add i256 %.056, -1
-  %26 = add i256 %.055, %14
-  %.not65 = icmp ult i256 %26, 340282366920938463463374607431768211456
-  br i1 %.not65, label %19, label %27
-
-27:
-  %.157 = phi i256 [ %25, %.critedge ], [ %.056, %20 ]
-  %28 = shl i256 %.053, 128
-  %29 = or i256 %18, %28
-  %30 = and i256 %.157, 340282366920938463463374607431768211455
-  %31 = mul i256 %30, %.054
-  %32 = sub i256 %29, %31
-  %33 = udiv i256 %32, %14
-  %34 = urem i256 %32, %14
-  %35 = and i256 %.052, 340282366920938463463374607431768211455
-  br label %36
-
-36:
-  %.2 = phi i256 [ %33, %27 ], [ %42, %.critedge1 ]
-  %.1 = phi i256 [ %34, %27 ], [ %43, %.critedge1 ]
-  %.not63 = icmp ult i256 %.2, 340282366920938463463374607431768211456
-  br i1 %.not63, label %37, label %.critedge1
-
-37:
-  %38 = mul nuw i256 %.2, %17
-  %39 = shl i256 %.1, 128
-  %40 = or i256 %39, %35
-  %41 = icmp ugt i256 %38, %40
-  br i1 %41, label %.critedge1, label %44
-
-.critedge1:
-  %42 = add i256 %.2, -1
-  %43 = add i256 %.1, %14
-  %.not64 = icmp ult i256 %43, 340282366920938463463374607431768211456
-  br i1 %.not64, label %36, label %44
-
-44:
-  %.3 = phi i256 [ %42, %.critedge1 ], [ %.2, %37 ]
-  %45 = shl i256 %32, 128
-  %46 = or i256 %45, %35
-  %47 = and i256 %.3, 340282366920938463463374607431768211455
-  %48 = mul i256 %47, %.054
-  %49 = sub i256 %46, %48
-  %50 = lshr i256 %49, %5
-  br label %51
-
-51:
-  %.0 = phi i256 [ %50, %44 ], [ -1, %3 ]
-  ret i256 %.0
+define i256 @__urem256(i256 %u, i256 %v) #0 {
+  %qr = call { i256, i256 } @__udivrem256(i256 %u, i256 %v)
+  %r = extractvalue { i256, i256 } %qr, 1
+  ret i256 %r
 }
 
 define i256 @__mulmod(i256 %arg1, i256 %arg2, i256 %modulo) #0 {
@@ -173,22 +332,22 @@ entry:
 ccret:
   ret i256 0
 entrycont:
-  %arg1m = urem i256 %arg1, %modulo
-  %arg2m = urem i256 %arg2, %modulo
-  %less_then_2_128 = icmp ult i256 %modulo, 340282366920938463463374607431768211456
-  br i1 %less_then_2_128, label %fast, label %slow
+  %arg1m = call i256 @__urem256(i256 %arg1, i256 %modulo)
+  %arg2m = call i256 @__urem256(i256 %arg2, i256 %modulo)
+  %less = icmp ult i256 %modulo, 340282366920938463463374607431768211456
+  br i1 %less, label %fast, label %slow
 fast:
   %prod = mul i256 %arg1m, %arg2m
-  %prodm = urem i256 %prod, %modulo
+  %prodm = call i256 @__urem256(i256 %prod, i256 %modulo)
   ret i256 %prodm
 slow:
-  %arg1e = zext i256 %arg1m to i512
-  %arg2e = zext i256 %arg2m to i512
-  %prode = mul i512 %arg1e, %arg2e
+  %a1e = zext i256 %arg1m to i512
+  %a2e = zext i256 %arg2m to i512
+  %prode = mul i512 %a1e, %a2e
   %prodl = trunc i512 %prode to i256
   %prodeh = lshr i512 %prode, 256
   %prodh = trunc i512 %prodeh to i256
-  %res = call i256 @__ulongrem(i256 %prodl, i256 %prodh, i256 %modulo)
+  %res = call i256 @__urem512by256(i256 %prodl, i256 %prodh, i256 %modulo)
   ret i256 %res
 }
 

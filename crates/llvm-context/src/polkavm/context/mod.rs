@@ -1777,9 +1777,18 @@ impl<'ctx> Context<'ctx> {
     /// observable across function boundaries after IPSCCP and inlining.
     fn narrow_divrem_instructions(&self) {
         let builder = self.llvm.create_builder();
+        let udiv256 = self
+            .module()
+            .get_function(LLVMRuntime::FUNCTION_UDIV256)
+            .expect("__udiv256 must be declared in the stdlib module");
+        let urem256 = self
+            .module()
+            .get_function(LLVMRuntime::FUNCTION_UREM256)
+            .expect("__urem256 must be declared in the stdlib module");
 
         for function in self.module().get_functions() {
             let mut to_narrow = Vec::new();
+            let mut to_route = Vec::new();
 
             for basic_block in function.get_basic_blocks() {
                 for instruction in basic_block.get_instructions() {
@@ -1793,13 +1802,15 @@ impl<'ctx> Context<'ctx> {
                     if !is_divrem {
                         continue;
                     }
-                    if instruction.get_type().into_int_type().get_bit_width() < 256 {
+                    let bit_width = instruction.get_type().into_int_type().get_bit_width();
+                    if bit_width < 256 {
                         continue;
                     }
 
                     let lhs = instruction.get_operand(0).and_then(|op| op.value());
                     let rhs = instruction.get_operand(1).and_then(|op| op.value());
 
+                    let mut narrowed = false;
                     if let (Some(lhs), Some(rhs)) = (lhs, rhs) {
                         let lhs_width = Self::provable_bit_width(lhs);
                         let rhs_width = Self::provable_bit_width(rhs);
@@ -1819,7 +1830,21 @@ impl<'ctx> Context<'ctx> {
                                 !is_signed || narrow_width > max_operand_width;
                             if narrow_width < 256 && signed_sign_bit_safe {
                                 to_narrow.push((instruction, narrow_width));
+                                narrowed = true;
                             }
+                        }
+                    }
+
+                    // An i256 unsigned div/rem we cannot prove narrowable would
+                    // otherwise be expanded by the backend into a ~500-instruction
+                    // bit-at-a-time loop. Route it to the efficient stdlib runtime
+                    // routine (128-bit-digit long division bottoming out at a
+                    // hardware-backed 128/64 divide via `__udivti3`) instead.
+                    if !narrowed && bit_width == 256 {
+                        match instruction.get_opcode() {
+                            InstructionOpcode::UDiv => to_route.push((instruction, udiv256)),
+                            InstructionOpcode::URem => to_route.push((instruction, urem256)),
+                            _ => {}
                         }
                     }
                 }
@@ -1882,6 +1907,32 @@ impl<'ctx> Context<'ctx> {
 
                 let wide_instruction = wide_result.as_instruction().unwrap();
                 instruction.replace_all_uses_with(&wide_instruction);
+                instruction.erase_from_basic_block();
+            }
+
+            for (instruction, target) in to_route {
+                let lhs = instruction
+                    .get_operand(0)
+                    .unwrap()
+                    .value()
+                    .unwrap()
+                    .into_int_value();
+                let rhs = instruction
+                    .get_operand(1)
+                    .unwrap()
+                    .value()
+                    .unwrap()
+                    .into_int_value();
+
+                builder.position_before(&instruction);
+
+                let call_value = builder
+                    .build_call(target, &[lhs.into(), rhs.into()], "")
+                    .unwrap()
+                    .try_as_basic_value()
+                    .unwrap_basic();
+                let call_instruction = call_value.into_int_value().as_instruction().unwrap();
+                instruction.replace_all_uses_with(&call_instruction);
                 instruction.erase_from_basic_block();
             }
         }

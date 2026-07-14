@@ -159,6 +159,73 @@ fn ulongrem_fuzz() {
     run_differential(actions);
 }
 
+/// Differential fuzz of the unsigned 256-bit `div`/`mod` routing. Non-provable
+/// i256 `udiv`/`urem` are rewritten by `narrow_divrem_instructions` into calls
+/// to the stdlib `__udivrem256` (128-bit-digit Knuth long division), via the
+/// `__udiv256`/`__urem256` wrappers. `__udivrem256` has two paths: `full`
+/// (divisor >= 2^128, exercising the qhat estimate and its correction steps)
+/// and `twoone` (divisor < 2^128, a single 128-bit digit). A divisor of zero
+/// is short-circuited to 0 by the caller's guard per EVM semantics. The
+/// keccak-derived stream feeds full-width dividends while alternating the two
+/// paths, and the fixed vectors pin the boundary cases the random stream never
+/// hits: dividend < / = / > divisor, divisors at 2^128 +/- 1, a power of two,
+/// and zero.
+#[test]
+fn div_mod_fuzz() {
+    use alloy_primitives::keccak256;
+
+    let one = U256::from(1u64);
+    let two_128 = one << 128;
+
+    let mut cases: Vec<(U256, U256)> = vec![
+        (U256::from(7u64), U256::MAX), // dividend < divisor: quotient 0
+        (U256::MAX, U256::MAX),        // dividend == divisor: quotient 1, remainder 0
+        (U256::MAX, two_128 - one),    // divisor just below 2^128: twoone boundary
+        (U256::MAX, two_128),          // divisor 2^128: full path, minimal high digit
+        (U256::MAX, two_128 + one),    // divisor just above 2^128: qhat correction
+        (U256::MAX, one << 200),       // power-of-two divisor in the full range
+        (U256::MAX, U256::ZERO),       // divisor zero: guarded, returns 0
+    ];
+
+    for i in 0u64..256 {
+        let derive = |tag: &[u8]| -> U256 {
+            let mut buf = Vec::with_capacity(8 + tag.len());
+            buf.extend_from_slice(&i.to_be_bytes());
+            buf.extend_from_slice(tag);
+            U256::from_be_bytes::<32>(keccak256(&buf).0)
+        };
+        let n = derive(b"n");
+        let d_raw = derive(b"d");
+        // Even i: divisor in [2^128, 2^256), the full multi-digit path.
+        // Odd i: divisor in [0, 2^128), the twoone single-digit path.
+        let d = if i % 2 == 0 {
+            d_raw | two_128
+        } else {
+            d_raw >> 128
+        };
+        cases.push((n, d));
+    }
+
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+    for (n, d) in cases {
+        for data in [
+            Contract::division_arithmetics_div(n, d).calldata,
+            Contract::division_arithmetics_mod(n, d).calldata,
+        ] {
+            actions.push(Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data,
+            });
+        }
+    }
+
+    run_differential(actions);
+}
+
 #[test]
 fn bitwise_byte() {
     let mut actions = instantiate("contracts/Bitwise.sol", "Bitwise");

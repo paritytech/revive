@@ -79,9 +79,7 @@ entry:
   %v38 = add i256 %v37, %v25
   %v39 = icmp ugt i256 %v36, %v38
   %v40 = sub i128 %v33, 1
-  %v41 = add i256 %v34, %v24
   %v42 = select i1 %v39, i128 %v40, i128 %v33
-  %v43 = select i1 %v39, i256 %v41, i256 %v34
   %v44 = shl i128 %v12, 64
   %v45 = add i128 %v44, %v15
   %v46 = mul i128 %v42, %v2
@@ -109,9 +107,7 @@ entry:
   %v68 = add i256 %v67, %v55
   %v69 = icmp ugt i256 %v66, %v68
   %v70 = sub i128 %v63, 1
-  %v71 = add i256 %v64, %v54
   %v72 = select i1 %v69, i128 %v70, i128 %v63
-  %v73 = select i1 %v69, i256 %v71, i256 %v64
   %v74 = zext i128 %v47 to i256
   %v75 = shl i256 %v74, 64
   %v76 = zext i128 %v17 to i256
@@ -170,9 +166,7 @@ entry:
   %v35 = add i384 %v34, %v16
   %v36 = icmp ugt i384 %v32, %v35
   %v37 = sub i128 %v27, 1
-  %v38 = add i256 %v28, %v15
   %v39 = select i1 %v36, i128 %v37, i128 %v27
-  %v40 = select i1 %v36, i256 %v38, i256 %v28
   ret i128 %v39
 }
 

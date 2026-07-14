@@ -259,11 +259,17 @@ fn sdiv_smod_fuzz() {
         let n = I256::from_raw(derive(b"n"));
         let d_raw = derive(b"d");
         // Even i: full-width signed divisor (|d| usually >= 2^128, the full
-        // path). Odd i: small-magnitude divisor (|d| < 2^128, the twoone path).
+        // path). Odd i: small-magnitude divisor (|d| < 2^127, the twoone path),
+        // sign taken from bit 0 so negative small divisors are covered.
         let d = if i % 2 == 0 {
             I256::from_raw(d_raw)
         } else {
-            I256::from_raw(d_raw >> 129)
+            let small = I256::from_raw(d_raw >> 129);
+            if d_raw.bit(0) {
+                -small
+            } else {
+                small
+            }
         };
         cases.push((n, d));
     }

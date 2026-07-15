@@ -36,7 +36,42 @@ return:
 ; bit-at-a-time loop). Algorithm: Knuth Algorithm D.
 ; Assumption at every entry: divisor / modulus != 0 (guarded by the caller).
 ;
-; (uh:ul) / v -> { quotient, remainder }. Precondition: uh < v, 0 < v < 2^128.
+; __udiv_qrnnd_128: divide the 256-bit value (uh:ul) by the 128-bit divisor v.
+; Returns { q, r } with q = (uh:ul) / v and r = (uh:ul) mod v, both 128 bits.
+;
+; Notation: b = 2^64 (this routine's digit base); (x:y) means x*2^w + y where
+; w is the bit width of y; / is floor division.
+; Preconditions: v != 0 and uh < v, so that q fits in 128 bits.
+;
+; Knuth TAOCP 4.3.1 Algorithm D / Hacker's Delight 9-4 divlu in base b: a
+; 4-digit dividend over a 2-digit divisor, unrolled into two digit steps.
+;
+;  1. Normalize: s = ctlz(v); vn = v << s (top bit set). Split vn = (vn1:vn0)
+;     into 64-bit digits.
+;  2. un = (uh:ul) << s, exact in 256-bit arithmetic (uh < v keeps the top s
+;     bits free). Take u2 = un >> 128 (the top two digits as one 128-bit
+;     value) and the 64-bit digits u1 = (un >> 64) mod b, u0 = un mod b.
+;
+; First digit step, q1 = (u2:u1) / vn (three digits over two):
+;  3. Estimate qhat = min(u2 / vn1, b-1) and rhat = u2 - qhat*vn1 (computed
+;     with the capped qhat; exact in 128 bits, may exceed b).
+;  4. Correct, exactly two branchless steps (Knuth Thm. 4.3.1B: a normalized
+;     divisor never needs more than two):
+;       if qhat*vn0 > (rhat:u1) { qhat -= 1; rhat += vn1 }
+;       if qhat*vn0 > (rhat:u1) { qhat -= 1 }      (rhat is dead afterwards)
+;     The qhat*vn0 products are exact in 128 bits; tests and rhat updates run
+;     in 256-bit arithmetic, so an oversized rhat correctly fails the test.
+;     q1 = qhat.
+;  5. Partial remainder: u21 = (u2:u1) - q1*vn, computed mod 2^128; exact
+;     because the true value is a remainder mod vn, hence < 2^128.
+;
+; Second digit step, q0 = (u21:u0) / vn, identical shape:
+;  6. Estimate qhat = min(u21 / vn1, b-1) and rhat = u21 - qhat*vn1.
+;  7. The same two branchless corrections, against (rhat:u0). q0 = qhat.
+;
+;  8. Remainder: r = ((u21:u0) - q0*vn) >> s, computed in 256-bit arithmetic;
+;     less than v after the shift, so it truncates to 128 bits losslessly.
+;  9. Return { (q1:q0), r }.
 define private { i128, i128 } @__udiv_qrnnd_128(i128 %uh, i128 %ul, i128 %v) noinline #0 {
 entry:
   %v1 = call i128 @llvm.ctlz.i128(i128 %v, i1 false)
@@ -125,8 +160,33 @@ entry:
   ret { i128, i128 } %v87
 }
 
-; One normalized 128-bit quotient digit: qhat estimate (guarded cap at 2^128-1)
-; plus two branchless correction steps. vn is the normalized 256-bit divisor.
+; One quotient-digit step of Knuth TAOCP 4.3.1 Algorithm D in base B = 2^128.
+; Returns q = (uhi:ulo:unext) / vn, the next 128-bit quotient digit of a
+; running division by the normalized 256-bit divisor vn.
+;
+; Notation: B = 2^128; (x:y) = x*B + y, (x:y:z) = x*B^2 + y*B + z; / is
+; floor division.
+; Preconditions: vn is normalized (bit 255 set) and (uhi:ulo) < vn, which
+; guarantees q <= B-1.
+; Result: the exact digit q; quotient only. Callers re-derive the partial
+; remainder as (uhi:ulo:unext) - q*vn themselves.
+;
+;  1. Split vn = (vn1:vn0) into 128-bit digits; vn1 has its top bit set.
+;  2. Estimate qhat = min((uhi:ulo) / vn1, B-1): __udiv_qrnnd_128 computes
+;     (uhi:ulo) / vn1; when uhi >= vn1 (only uhi == vn1 is possible under the
+;     precondition) that quotient would be >= B, so qhat is forced to B-1.
+;     Normalization bounds the estimate: qhat - 2 <= q <= qhat.
+;  3. rhat = (uhi:ulo) - qhat*vn1, exact in 256-bit arithmetic (below 2^129,
+;     below 2^130 even after the correction's rhat += vn1; may exceed B when
+;     qhat was capped).
+;  4. Correct, exactly two branchless steps (Knuth Thm. 4.3.1B: at most two
+;     are ever needed for a normalized divisor):
+;       if qhat*vn0 > (rhat:unext) { qhat -= 1; rhat += vn1 }
+;       if qhat*vn0 > (rhat:unext) { qhat -= 1 }   (rhat is dead afterwards)
+;     Each test compares qhat*vn0 (exact 256-bit product, zero-extended)
+;     against rhat*B + unext, exact in 384-bit arithmetic; an rhat >= B
+;     correctly fails the test.
+;  5. Return qhat.
 define private i128 @__digit_quot(i128 %uhi, i128 %ulo, i256 %vn, i128 %unext) noinline #0 {
 entry:
   %v1 = lshr i256 %vn, 128
@@ -170,7 +230,34 @@ entry:
   ret i128 %v39
 }
 
-; Full unsigned 256/256 -> { quotient, remainder }. Precondition: v != 0.
+; Unsigned 256-bit division. Returns { q, r } with q = u / v and r = u mod v.
+;
+; Notation: B = 2^128; (x:y) = x*B + y; / is floor division.
+; Precondition: v != 0.
+;
+;  1. Early exit: if u < v, return { 0, u }. Besides the trivial win, this
+;     makes __mulmod's argument pre-reductions nearly free when the
+;     arguments are already reduced (< modulus), the common case in
+;     modular-arithmetic-heavy code.
+;  2. Split u = (u1:u0) and v = (v1:v0) into 128-bit digits.
+;
+; "twoone" path, v1 == 0 (v < 2^128): two digits over one, schoolbook:
+;  3. High digit: q1 = u1 / v0, with carry k = u1 - q1*v0 = u1 mod v0
+;     (so k < v0).
+;  4. Low digit: (q0, r) = __udiv_qrnnd_128(k, u0, v0), dividing (k:u0) by
+;     v0; k < v0 satisfies its precondition.
+;  5. Return { (q1:q0), r }.
+;
+; "full" path, v1 != 0 (v >= 2^128): the quotient fits in a single digit
+; because u / v < 2^256 / 2^128 = B, so one Algorithm D digit step suffices:
+;  6. Normalize: s = ctlz(v1) (0..127); vn = v << s, exact in 256 bits.
+;  7. un = u << s, exact in 384-bit arithmetic; split into digits
+;     (un2:un1:un0). u < 2^256 <= v*B implies (un2:un1) < vn,
+;     __digit_quot's precondition.
+;  8. q = __digit_quot(un2, un1, vn, un0) = un / vn = u / v.
+;  9. r = (un - q*vn) >> s, exact in 384-bit arithmetic; the result is < v,
+;     so it truncates to 256 bits losslessly.
+; 10. Return { q, r }.
 define { i256, i256 } @__udivrem256(i256 %u, i256 %v) #0 {
 entry:
   ; Early exit: u < v yields quotient 0, remainder u. Makes the __mulmod
@@ -239,9 +326,33 @@ full:
   ret { i256, i256 } %v49
 }
 
-; Remainder of (phi:plo) mod m. Preconditions: phi < m, m >= 2^128. The sole
-; caller is __mulmod's 512-bit branch, which is only taken for m >= 2^128.
-; Smaller moduli take __mulmod's 256-bit fast path through __urem256.
+; Remainder of the 512-bit value (phi:plo) modulo m.
+; Remainder only: quotient digits are computed to reduce, never assembled.
+;
+; Notation: B = 2^128; (x:y) is concatenation at the operands' named widths;
+; / is floor division.
+; Preconditions: phi < m and m >= 2^128. There is deliberately NO
+; small-modulus path: the sole caller is __mulmod's 512-bit branch, taken
+; only for m >= 2^128 (smaller moduli use __mulmod's 256-bit fast path), and
+; it always passes phi < m because phi <= (m-1)^2 / 2^256 < m.
+; Result: (phi*2^256 + plo) mod m.
+;
+; Knuth TAOCP 4.3.1 Algorithm D in base B: a 4-digit dividend over a 2-digit
+; divisor, unrolled into two digit steps:
+;  1. Normalize: m1 = m >> 128 (nonzero since m >= 2^128); s = ctlz(m1);
+;     mn = m << s, exact in 256 bits.
+;  2. pn = (phi:plo) << s, exact in 512-bit arithmetic (phi < m keeps the top
+;     s bits free). Split into four digits (pn3:pn2:pn1:pn0).
+;  3. First digit step: q1 = __digit_quot(pn3, pn2, mn, pn1)
+;     = (pn3:pn2:pn1) / mn; its precondition (pn3:pn2) < mn follows from
+;     phi < m. Reduce: r1 = (pn3:pn2:pn1) - q1*mn, exact in 384-bit
+;     arithmetic; r1 < mn, so it truncates to 256 bits losslessly.
+;  4. Second digit step: split r1 = (r1hi:r1lo) into 128-bit digits;
+;     q0 = __digit_quot(r1hi, r1lo, mn, pn0) = (r1:pn0) / mn (its
+;     precondition r1 < mn holds by construction). Reduce:
+;     r2 = (r1:pn0) - q0*mn, exact in 384-bit arithmetic; r2 < mn, truncated
+;     to 256 bits.
+;  5. Return r2 >> s = (phi:plo) mod m.
 define i256 @__urem512by256(i256 %plo, i256 %phi, i256 %m) #0 {
 entry:
   %v1 = lshr i256 %m, 128
@@ -294,27 +405,45 @@ entry:
   ret i256 %v64
 }
 
-; Thin drop-in wrappers. revive emits raw udiv/urem on i256. The
-; narrow_divrem_instructions pass rewrites the non-narrowable ones into calls
-; to these. Kept external so they survive optimization until that late pass.
-; Unused copies are dropped by the final linker --gc-sections.
+; Unsigned 256-bit division, quotient only: returns u / v (floor).
+; Precondition: v != 0, inherited from the raw i256 udiv this replaces.
+; Thin wrapper: the quotient half of __udivrem256. revive emits raw i256
+; udiv/urem; the narrow_divrem_instructions pass rewrites the non-narrowable
+; ones into calls to these wrappers. Kept external so they survive
+; optimization until that late pass; unused copies are dropped by the final
+; linker --gc-sections.
 define i256 @__udiv256(i256 %u, i256 %v) #0 {
   %qr = call { i256, i256 } @__udivrem256(i256 %u, i256 %v)
   %q = extractvalue { i256, i256 } %qr, 0
   ret i256 %q
 }
 
+; Unsigned 256-bit remainder, remainder only: returns u mod v.
+; Precondition: v != 0, inherited from the raw i256 urem this replaces.
+; Thin wrapper: the remainder half of __udivrem256 (see __udiv256 for why
+; these wrappers exist).
 define i256 @__urem256(i256 %u, i256 %v) #0 {
   %qr = call { i256, i256 } @__udivrem256(i256 %u, i256 %v)
   %r = extractvalue { i256, i256 } %qr, 1
   ret i256 %r
 }
 
-; Signed 256-bit division via sign-magnitude over the unsigned wrapper. The
-; caller only reaches this for a safe operand set (the runtime div body guards
-; away divisor == 0 and the INT_MIN / -1 overflow pair), so the magnitude
-; divide is exact and the sign-adjusted quotient fits in i256. abs(x) is
-; (x ^ (x >>s 255)) - (x >>s 255). The sign mask x >>s 255 is 0 or -1.
+; Signed 256-bit division with EVM SDIV semantics -- the quotient truncates
+; toward zero. Sign-magnitude wrapper over the unsigned divider.
+;
+; Preconditions (established by the guard code emitted around the call):
+; b != 0, and not (a == -2^255 and b == -1), the two's complement overflow
+; pair. Result: q = a / b truncated toward zero.
+;
+;  1. Sign masks: sign_a = a >>s 255, sign_b = b >>s 255 (arithmetic shift:
+;     0 for a nonnegative operand, all-ones i.e. -1 for a negative one).
+;  2. Magnitudes: |x| = (x ^ sign_x) - sign_x, the branchless conditional
+;     negate (x^0 - 0 = x; x^-1 - (-1) = ~x + 1 = -x). Well defined for
+;     every input: |-2^255| = 2^255 fits unsigned.
+;  3. q_mag = |a| / |b| via __udiv256; flooring the magnitude quotient is
+;     what makes the signed result truncate toward zero.
+;  4. Reapply the sign: sign_q = sign_a ^ sign_b (negative iff exactly one
+;     operand was); q = (q_mag ^ sign_q) - sign_q.
 define i256 @__sdiv256(i256 %a, i256 %b) #0 {
   %sign_a = ashr i256 %a, 255
   %sign_b = ashr i256 %b, 255
@@ -329,8 +458,20 @@ define i256 @__sdiv256(i256 %a, i256 %b) #0 {
   ret i256 %q
 }
 
-; Signed 256-bit remainder via sign-magnitude. The remainder takes the sign of
-; the dividend, matching EVM SMOD.
+; Signed 256-bit remainder with EVM SMOD semantics. The remainder takes
+; the sign of the dividend, so a == b*(a sdiv b) + (a smod b).
+; Sign-magnitude wrapper over the unsigned remainder.
+;
+; Preconditions (established by the guard code emitted around the call):
+; b != 0, and not (a == -2^255 and b == -1) -- the non-UB envelope of the
+; raw srem this replaces (the emitted SMOD guard actually swaps a -1 divisor
+; for 1, so b == -1 never reaches here).
+; Result: r with |r| = |a| mod |b| and sign(r) = sign(a), or r == 0.
+;
+;  1. Sign masks: sign_a = a >>s 255, sign_b = b >>s 255 (0 or all-ones).
+;  2. Magnitudes: |a| = (a ^ sign_a) - sign_a, |b| = (b ^ sign_b) - sign_b.
+;  3. r_mag = |a| mod |b| via __urem256.
+;  4. Reapply the dividend's sign: r = (r_mag ^ sign_a) - sign_a.
 define i256 @__srem256(i256 %a, i256 %b) #0 {
   %sign_a = ashr i256 %a, 255
   %sign_b = ashr i256 %b, 255
@@ -344,6 +485,23 @@ define i256 @__srem256(i256 %a, i256 %b) #0 {
   ret i256 %r
 }
 
+; EVM MULMOD -- (a * b) mod m with the product taken at full width
+; (not mod 2^256), and MULMOD(a, b, 0) = 0.
+;
+; Preconditions: none (m == 0 is handled here).
+; Result: 0 if m == 0, otherwise (a*b) mod m with the exact 512-bit product.
+;
+;  1. If m == 0, return 0.
+;  2. Pre-reduce both arguments: am = a mod m, bm = b mod m via __urem256
+;     (its u < v early exit makes this nearly free when the arguments are
+;     already reduced, the common case). The residue is unchanged and the
+;     product bound shrinks to (m-1)^2.
+;  3. Fast path, m < 2^128: am*bm <= (m-1)^2 < 2^256 is exact in 256-bit
+;     arithmetic; return (am*bm) mod m via __urem256.
+;  4. Slow path, m >= 2^128: p = am*bm computed exactly in 512-bit
+;     arithmetic; split p = (phi:plo) into 256-bit halves and return
+;     __urem512by256(plo, phi, m). Its preconditions hold: m >= 2^128 from
+;     the branch, and phi <= (m-1)^2 / 2^256 < m.
 define i256 @__mulmod(i256 %arg1, i256 %arg2, i256 %modulo) #0 {
 entry:
   %cccond = icmp eq i256 %modulo, 0

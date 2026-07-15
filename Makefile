@@ -21,6 +21,8 @@
 	test-llvm-builder \
 	test-book \
 	fuzz-libfuzzer \
+	fuzz-libfuzzer-source \
+	llm-corpus \
 	bench \
 	bench-pvm \
 	bench-evm \
@@ -108,6 +110,25 @@ test-book:
 # `evm` in $PATH. Toolchain pinned via `fuzz/rust-toolchain.toml`.
 fuzz-libfuzzer:
 	cd fuzz && cargo +nightly fuzz run solidity_differential -- -fork=$(or $(JOBS),4) -ignore_crashes=0
+
+# Source-text differential fuzzer: corpus bytes ARE Solidity source. Seed it
+# with LLM-generated contracts via `make llm-corpus`. Same oracle as
+# `fuzz-libfuzzer`; `solidity.dict` guides text-level mutation. `JOBS=N`
+# shards across N forked workers.
+fuzz-libfuzzer-source:
+	cd fuzz && cargo +nightly fuzz run solidity_source_differential -- \
+		-dict=solidity.dict -fork=$(or $(JOBS),4) -ignore_crashes=0
+
+# Generate an LLM Solidity seed corpus and copy it into the source-text
+# fuzzer's corpus. `COUNT=N` = contracts per risk area (default 5). Default
+# provider is the Claude Code CLI — no API key, reuses `claude`'s auth (needs
+# Claude Code on $PATH). `solc` on $PATH validates each contract. `FOCUS="..."`
+# steers generation at a specific codepath.
+llm-corpus:
+	cargo run --release --manifest-path tools/llm-corpus-gen/Cargo.toml -- \
+		--out llm-corpus --count $(or $(COUNT),5) $(if $(FOCUS),--focus "$(FOCUS)",)
+	mkdir -p fuzz/corpus/solidity_source_differential
+	cp llm-corpus/*.sol fuzz/corpus/solidity_source_differential/ 2>/dev/null || true
 
 bench: install-bin
 	cargo criterion --all --all-features --message-format=json \

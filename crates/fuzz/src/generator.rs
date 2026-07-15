@@ -20,7 +20,7 @@ const INTERESTING_RATIO_DEN: u8 = 5;
 
 /// 256-bit big-endian `int256` sentinels: zero, ±1, ±2, INT_MIN,
 /// INT_MAX, powers of two at word-half boundaries, alternating bits.
-fn interesting_value(index: u8) -> [u8; 32] {
+pub(crate) fn interesting_value(index: u8) -> [u8; 32] {
     let mut v = [0u8; 32];
     match index {
         0 => {}

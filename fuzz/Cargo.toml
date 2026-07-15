@@ -22,3 +22,10 @@ path = "fuzz_targets/solidity_differential.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "solidity_source_differential"
+path = "fuzz_targets/solidity_source_differential.rs"
+test = false
+doc = false
+bench = false

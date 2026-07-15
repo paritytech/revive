@@ -1,8 +1,8 @@
 //! Run compiled bytes on EVM + PVM, capture observations.
 
 use alloy_primitives::{keccak256, Bytes};
-use revive_differential::Evm;
-use revive_runner::{Code, OptionalHex, Specs, SpecsAction, TestAddress, ALICE};
+use revive_differential::{Evm, RESOURCE_CAP_ERROR};
+use revive_runner::{CallResult, Code, OptionalHex, Specs, SpecsAction, TestAddress, ALICE};
 
 use crate::generator::{Action, SolidityCase};
 
@@ -43,7 +43,11 @@ pub fn action_calldata(action: &Action) -> Bytes {
 }
 
 /// Deploy + replay on geth's `evm`; state threaded via `from_genesis`.
-pub fn observe_evm(deploy_code: Vec<u8>, case: &SolidityCase) -> Outcome {
+///
+/// Returns `Err` when a run is killed for a runaway execution (the differential
+/// runner's output/time cap, e.g. an infinite loop): the EVM side can't be
+/// observed, so there is nothing meaningful to compare and the case is skipped.
+pub fn observe_evm(deploy_code: Vec<u8>, case: &SolidityCase) -> Result<Outcome, String> {
     let constructor = constructor_calldata(case);
     // geth `evm` expects deploy bytes as hex-ASCII on stdin.
     let deploy_blob = hex::encode(&deploy_code).into_bytes();
@@ -52,11 +56,14 @@ pub fn observe_evm(deploy_code: Vec<u8>, case: &SolidityCase) -> Outcome {
         builder = builder.input(constructor);
     }
     let deploy_log = builder.run();
+    if deploy_log.output.error.as_deref() == Some(RESOURCE_CAP_ERROR) {
+        return Err("EVM deploy exceeded resource cap".to_owned());
+    }
     if deploy_log.output.error.is_some() || deploy_log.account_deployed.is_none() {
-        return Outcome {
+        return Ok(Outcome {
             deploy_reverted: true,
-            actions: vec![],
-        };
+            actions: Vec::new(),
+        });
     }
     let address = deploy_log.account_deployed.expect("checked above");
     let mut state = deploy_log.state_dump;
@@ -67,6 +74,9 @@ pub fn observe_evm(deploy_code: Vec<u8>, case: &SolidityCase) -> Outcome {
             .receiver(address)
             .input(action_calldata(action))
             .run();
+        if log.output.error.as_deref() == Some(RESOURCE_CAP_ERROR) {
+            return Err("EVM call exceeded resource cap".to_owned());
+        }
         results.push(ActionResult {
             reverted: log.output.error.is_some(),
             return_data: log.output.output.to_vec(),
@@ -74,17 +84,32 @@ pub fn observe_evm(deploy_code: Vec<u8>, case: &SolidityCase) -> Outcome {
         state = log.state_dump;
     }
 
-    Outcome {
+    Ok(Outcome {
         deploy_reverted: false,
         actions: results,
-    }
+    })
 }
 
-/// Same on `revive-runner`'s pallet-revive sim. We orchestrate the
-/// EVM side ourselves, so `differential: false` here.
-pub fn observe_pvm(pvm_blob: Vec<u8>, case: &SolidityCase) -> Outcome {
-    let constructor = constructor_calldata(case).to_vec();
-    let mut actions = vec![SpecsAction::Instantiate {
+/// PVM-only resource limits with no EVM equivalent (PolkaVM structural limits +
+/// pallet-revive storage-deposit economics): skip, not a compiler divergence.
+const PVM_RESOURCE_LIMIT_MARKERS: &[&str] = &[
+    "BasicBlockTooLarge",
+    "BlobTooLarge",
+    "CodeTooLarge",
+    "StaticMemoryTooLarge",
+    "StorageDepositLimitExhausted",
+    "StorageDepositNotEnoughFunds",
+];
+
+/// Genesis balance for the origin account.
+const ORIGIN_BALANCE: u128 = 1_000_000_000_000;
+
+/// Build the constructor `Instantiate` action for a PVM blob. Uses the runner's
+/// default gas/weight (`None`) — runaway inputs are already caught EVM-side,
+/// which runs first, so no PVM cap is needed here (a tighter one would revert
+/// legit storage-heavy calls that EVM completes, causing false divergences).
+fn pvm_instantiate(pvm_blob: Vec<u8>, constructor: Vec<u8>) -> SpecsAction {
+    SpecsAction::Instantiate {
         origin: TestAddress::default(),
         value: 0,
         gas_limit: None,
@@ -92,7 +117,57 @@ pub fn observe_pvm(pvm_blob: Vec<u8>, case: &SolidityCase) -> Outcome {
         code: Code::Bytes(pvm_blob),
         data: constructor,
         salt: OptionalHex::default(),
-    }];
+    }
+}
+
+/// Run a PVM action batch on the pallet-revive sim.
+fn run_pvm(actions: Vec<SpecsAction>) -> Vec<CallResult> {
+    Specs {
+        balances: vec![(ALICE, ORIGIN_BALANCE)],
+        actions,
+        // Read revert flags from CallResult instead of aborting on each revert.
+        verify_each_call: false,
+        ..Default::default()
+    }
+    .run()
+}
+
+/// The PVM resource-limit marker in a call result, if any (deploy or call).
+fn pvm_resource_limit(result: &CallResult) -> Option<&'static str> {
+    let debug = format!("{result:?}");
+    PVM_RESOURCE_LIMIT_MARKERS
+        .iter()
+        .copied()
+        .find(|marker| debug.contains(marker))
+}
+
+/// PVM side of the differential.
+///
+/// Deploy runs on its own first: pallet-revive panics resolving `Instantiated(0)`
+/// for a later call when the deploy failed. Isolating it lets us skip PVM-only
+/// structural limits (`Err`) and observe genuine deploy reverts cleanly.
+pub fn observe_pvm(pvm_blob: Vec<u8>, case: &SolidityCase) -> Result<Outcome, String> {
+    let constructor = constructor_calldata(case).to_vec();
+
+    // Phase 1: deploy alone — a failure here can't hit the dependent-call panic.
+    let deploy = run_pvm(vec![pvm_instantiate(pvm_blob.clone(), constructor.clone())]);
+    let deploy_result = deploy
+        .into_iter()
+        .next()
+        .expect("instantiate produced no result");
+
+    if deploy_result.did_revert() {
+        if let Some(marker) = pvm_resource_limit(&deploy_result) {
+            return Err(format!("PVM structural limit at deploy: {marker}"));
+        }
+        return Ok(Outcome {
+            deploy_reverted: true,
+            actions: Vec::new(),
+        });
+    }
+
+    // Phase 2: deploy succeeded, so re-running it with the calls won't panic.
+    let mut actions = vec![pvm_instantiate(pvm_blob, constructor)];
     for action in &case.actions {
         actions.push(SpecsAction::Call {
             origin: TestAddress::default(),
@@ -104,34 +179,22 @@ pub fn observe_pvm(pvm_blob: Vec<u8>, case: &SolidityCase) -> Outcome {
         });
     }
 
-    let mut results = Specs {
-        balances: vec![(ALICE, 1_000_000_000_000)],
-        actions,
-        // Default VerifyCall(success: true) would abort on every
-        // revert; we read revert flags from CallResult directly.
-        verify_each_call: false,
-        ..Default::default()
-    }
-    .run()
-    .into_iter();
-
-    let deploy_result = results.next().expect("instantiate produced no result");
-    if deploy_result.did_revert() {
-        return Outcome {
-            deploy_reverted: true,
-            actions: vec![],
-        };
-    }
-
-    let action_results = results
-        .map(|call| ActionResult {
+    let mut results = run_pvm(actions).into_iter();
+    let _deploy = results.next(); // already validated in phase 1
+    let mut action_results = Vec::with_capacity(case.actions.len());
+    for call in results {
+        // PVM-only resource limit EVM lacks (e.g. StorageDepositLimitExhausted) — skip.
+        if let Some(marker) = pvm_resource_limit(&call) {
+            return Err(format!("PVM resource limit on call: {marker}"));
+        }
+        action_results.push(ActionResult {
             reverted: call.did_revert(),
             return_data: call.output(),
-        })
-        .collect();
+        });
+    }
 
-    Outcome {
+    Ok(Outcome {
         deploy_reverted: false,
         actions: action_results,
-    }
+    })
 }

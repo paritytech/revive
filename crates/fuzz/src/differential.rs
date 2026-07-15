@@ -16,6 +16,17 @@ pub enum Divergence {
     #[error("resolc PVM compile failed: {0}")]
     PvmCompile(String),
 
+    /// PVM blob hit a PolkaVM structural limit at deploy (e.g. `BasicBlockTooLarge`)
+    /// — a PVM-only constraint, not a divergence. Skipped by libFuzzer.
+    #[error("PVM structural limit: {0}")]
+    PvmResourceLimit(String),
+
+    /// EVM execution was killed for running away (output/time cap, e.g. an
+    /// infinite loop), so the EVM side can't be observed. Not a divergence;
+    /// skipped by libFuzzer.
+    #[error("EVM resource limit: {0}")]
+    EvmResourceLimit(String),
+
     #[error("deploy_reverted mismatch — evm={evm} pvm={pvm}")]
     DeployRevert { evm: bool, pvm: bool },
 
@@ -48,8 +59,8 @@ pub fn run_case_solc_evm(case: &SolidityCase) -> Result<CompareReport, Divergenc
     let pvm_blob = resolc_pvm(&case.contract_name, &case.source)
         .map_err(|error| Divergence::PvmCompile(error.to_string()))?;
 
-    let evm = observe_evm(evm_bytes, case);
-    let pvm = observe_pvm(pvm_blob, case);
+    let evm = observe_evm(evm_bytes, case).map_err(Divergence::EvmResourceLimit)?;
+    let pvm = observe_pvm(pvm_blob, case).map_err(Divergence::PvmResourceLimit)?;
 
     compare(&evm, &pvm)?;
 

@@ -1,11 +1,14 @@
 use core::str;
 use std::{
     collections::BTreeMap,
-    io::Write,
+    io::{Read, Write},
     path::PathBuf,
     process::{Command, Stdio},
     str::FromStr,
-    time::Duration,
+    sync::atomic::{AtomicBool, Ordering},
+    sync::Arc,
+    thread,
+    time::{Duration, Instant},
 };
 
 use alloy_genesis::{Genesis, GenesisAccount};
@@ -41,6 +44,51 @@ const EXECUTABLE_ARGS_BENCH: [&str; 6] = [
 ];
 const GAS_USED_MARKER: &str = "EVM gas used:";
 const REVERT_MARKER: &str = " error: ";
+
+/// [`EvmOutput::error`] value set when a run is killed for exceeding the output
+/// or time cap. Callers can match on it to tell a runaway execution apart from
+/// an ordinary revert.
+pub const RESOURCE_CAP_ERROR: &str = "evm run exceeded resource cap";
+
+/// Per-stream cap on captured `evm` output. A runaway execution (e.g. an
+/// infinite loop) streams an unbounded opcode trace; without a cap the parent
+/// reads it all into memory and OOMs. Real runs emit far less.
+const MAX_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
+/// Wall-clock cap on a single `evm` invocation — a backstop for a run that burns
+/// CPU without emitting much output. Real runs finish in well under a second.
+const RUN_TIMEOUT: Duration = Duration::from_secs(20);
+/// Poll interval while waiting for the subprocess to exit.
+const POLL_INTERVAL: Duration = Duration::from_millis(10);
+/// Read granularity for draining the subprocess pipes.
+const READ_CHUNK_BYTES: usize = 64 * 1024;
+
+/// Read a child pipe into memory, capped at [`MAX_OUTPUT_BYTES`]. Bytes past the
+/// cap are drained and discarded (so the child never blocks on a full pipe) and
+/// `over_cap` is set, signalling the caller to kill the subprocess.
+fn drain_capped<R: Read + Send + 'static>(
+    mut reader: R,
+    over_cap: Arc<AtomicBool>,
+) -> thread::JoinHandle<Vec<u8>> {
+    thread::spawn(move || {
+        let mut captured = Vec::new();
+        let mut chunk = [0u8; READ_CHUNK_BYTES];
+        loop {
+            match reader.read(&mut chunk) {
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    if captured.len() < MAX_OUTPUT_BYTES {
+                        let room = MAX_OUTPUT_BYTES - captured.len();
+                        captured.extend_from_slice(&chunk[..n.min(room)]);
+                        if captured.len() >= MAX_OUTPUT_BYTES {
+                            over_cap.store(true, Ordering::Relaxed);
+                        }
+                    }
+                }
+            }
+        }
+        captured
+    })
+}
 
 /// The geth EVM state dump structure
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -387,30 +435,87 @@ impl Evm {
             command.args(["--value", &format!("{value}")]);
         }
 
-        // Run the evm subprocess and assert success return value
-        let process = command.spawn().unwrap_or_else(|error| {
+        // Spawn the evm subprocess. Its output is read under a size + wall-clock
+        // cap: a runaway execution (e.g. an infinite loop) streams an unbounded
+        // opcode trace that would otherwise OOM the parent.
+        let mut process = command.spawn().unwrap_or_else(|error| {
             panic!("{EXECUTABLE_NAME} subprocess spawning error: {error:?}")
         });
-        let buf = vec![];
-        process
-            .stdin
-            .as_ref()
-            .unwrap_or_else(|| panic!("{EXECUTABLE_NAME} stdin getting error"))
-            .write_all(self.code.as_ref().unwrap_or(&buf))
-            .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} stdin writing error: {err:?}"));
 
-        let output = process
-            .wait_with_output()
-            .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} subprocess output error: {err}"));
-        assert!(
-            output.status.success(),
-            "{EXECUTABLE_NAME} command failed: {output:?}",
+        // Write the code to stdin, then drop it so the child sees EOF.
+        {
+            let buf = vec![];
+            let mut stdin = process
+                .stdin
+                .take()
+                .unwrap_or_else(|| panic!("{EXECUTABLE_NAME} stdin getting error"));
+            stdin
+                .write_all(self.code.as_ref().unwrap_or(&buf))
+                .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} stdin writing error: {err:?}"));
+        }
+
+        let over_cap = Arc::new(AtomicBool::new(false));
+        let stdout_reader = drain_capped(
+            process
+                .stdout
+                .take()
+                .unwrap_or_else(|| panic!("{EXECUTABLE_NAME} stdout getting error")),
+            Arc::clone(&over_cap),
         );
+        let stderr_reader = drain_capped(
+            process
+                .stderr
+                .take()
+                .unwrap_or_else(|| panic!("{EXECUTABLE_NAME} stderr getting error")),
+            Arc::clone(&over_cap),
+        );
+
+        // Wait for exit, killing the child if it blows the output or time cap.
+        let deadline = Instant::now() + RUN_TIMEOUT;
+        let mut exhausted = false;
+        let status = loop {
+            match process.try_wait() {
+                Ok(Some(status)) => break Some(status),
+                Ok(None) => {}
+                Err(err) => panic!("{EXECUTABLE_NAME} subprocess wait error: {err}"),
+            }
+            if over_cap.load(Ordering::Relaxed) || Instant::now() >= deadline {
+                exhausted = true;
+                let _ = process.kill();
+                let _ = process.wait();
+                break None;
+            }
+            thread::sleep(POLL_INTERVAL);
+        };
+
+        let stdout_bytes = stdout_reader.join().unwrap_or_default();
+        let stderr_bytes = stderr_reader.join().unwrap_or_default();
         drop(temp_path);
 
-        let stdout = str::from_utf8(output.stdout.as_slice())
+        if exhausted {
+            // Runaway execution: report an exhausted, reverted run so callers see
+            // a clean failure (like an out-of-gas revert) instead of OOMing.
+            return EvmLog {
+                account_deployed: None,
+                output: EvmOutput {
+                    output: Bytes::default(),
+                    gas_used: U256::from(1),
+                    error: Some(RESOURCE_CAP_ERROR.to_string()),
+                },
+                state_dump: StateDump::default(),
+                stderr: String::from_utf8_lossy(&stderr_bytes).into_owned(),
+            };
+        }
+
+        let status = status.expect("status is set unless exhausted");
+        assert!(
+            status.success(),
+            "{EXECUTABLE_NAME} command failed with {status:?}",
+        );
+
+        let stdout = str::from_utf8(&stdout_bytes)
             .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} stdout failed to parse: {err}"));
-        let stderr = str::from_utf8(output.stderr.as_slice())
+        let stderr = str::from_utf8(&stderr_bytes)
             .unwrap_or_else(|err| panic!("{EXECUTABLE_NAME} stderr failed to parse: {err}"));
 
         let mut log: EvmLog = format!("{stdout}{stderr}").as_str().into();

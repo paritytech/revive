@@ -8,7 +8,8 @@ use std::path::Path;
 use std::process::Command;
 
 /// The build options shared by all platforms.
-pub const SHARED_BUILD_OPTS: [&str; 21] = [
+/// `LLVM_ENABLE_ZLIB` is emitted by [`shared_build_opts_coverage`].
+pub const SHARED_BUILD_OPTS: [&str; 20] = [
     "-DPACKAGE_VENDOR='Parity Technologies'",
     "-DCMAKE_BUILD_WITH_INSTALL_RPATH=1",
     "-DLLVM_BUILD_DOCS='Off'",
@@ -18,7 +19,6 @@ pub const SHARED_BUILD_OPTS: [&str; 21] = [
     "-DLLVM_ENABLE_DOXYGEN='Off'",
     "-DLLVM_ENABLE_SPHINX='Off'",
     "-DLLVM_ENABLE_OCAMLDOC='Off'",
-    "-DLLVM_ENABLE_ZLIB='Off'",
     "-DLLVM_ENABLE_ZSTD='Off'",
     "-DLLVM_ENABLE_LIBXML2='Off'",
     "-DLLVM_ENABLE_BINDINGS='Off'",
@@ -188,10 +188,18 @@ pub fn shared_build_opts_tests(enabled: bool) -> Vec<String> {
 
 /// The code coverage build options shared by all platforms.
 pub fn shared_build_opts_coverage(enabled: bool) -> Vec<String> {
-    vec![format!(
-        "-DLLVM_BUILD_INSTRUMENTED_COVERAGE='{}'",
-        if enabled { "On" } else { "Off" },
-    )]
+    vec![
+        format!(
+            "-DLLVM_BUILD_INSTRUMENTED_COVERAGE='{}'",
+            if enabled { "On" } else { "Off" },
+        ),
+        // zlib is required to be able to read the compressed profiles that
+        // instrumented resolc binaries emit.
+        format!(
+            "-DLLVM_ENABLE_ZLIB='{}'",
+            if enabled { "FORCE_ON" } else { "Off" },
+        ),
+    ]
 }
 
 /// Use of compiler cache (ccache) to speed up the build process.

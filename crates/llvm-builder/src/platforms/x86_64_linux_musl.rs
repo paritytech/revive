@@ -70,6 +70,7 @@ pub fn build(
         musl_target.as_path(),
         llvm_target_crt.as_path(),
         ccache_variant,
+        enable_coverage,
     )?;
     build_target(
         build_type,
@@ -121,6 +122,7 @@ fn build_crt(
                 "-DCMAKE_C_COMPILER='clang'",
                 "-DCMAKE_CXX_COMPILER='clang++'",
                 "-DLLVM_ENABLE_PROJECTS='compiler-rt'",
+                "-DLLVM_ENABLE_ZLIB='Off'",
                 format!("-DLLVM_TARGETS_TO_BUILD='{}'", Platform::X86).as_str(),
                 "-DLLVM_DEFAULT_TARGET_TRIPLE='x86_64-pc-linux-musl'",
                 "-DLLVM_BUILD_TESTS='Off'",
@@ -166,69 +168,78 @@ fn build_host(
     musl_target_directory: &Path,
     crt_target_directory: &Path,
     ccache_variant: Option<CcacheVariant>,
+    enable_coverage: bool,
 ) -> anyhow::Result<()> {
-    crate::utils::command(
-        Command::new("cmake")
-            .args([
-                "-S",
-                source_directory.to_string_lossy().as_ref(),
-                "-B",
-                build_directory.to_string_lossy().as_ref(),
-                "-G",
-                "Ninja",
-                format!(
-                    "-DDEFAULT_SYSROOT='{}'",
-                    musl_target_directory.to_string_lossy()
-                )
-                .as_str(),
-                "-DLINKER_SUPPORTS_COLOR_DIAGNOSTICS=0",
-                format!(
-                    "-DCMAKE_INSTALL_PREFIX='{}'",
-                    target_directory.to_string_lossy()
-                )
-                .as_str(),
-                "-DCMAKE_BUILD_TYPE='Release'",
-                "-DCMAKE_C_COMPILER='clang'",
-                "-DCMAKE_CXX_COMPILER='clang++'",
-                "-DCLANG_DEFAULT_CXX_STDLIB='libc++'",
-                "-DCLANG_DEFAULT_RTLIB='compiler-rt'",
-                "-DLLVM_DEFAULT_TARGET_TRIPLE='x86_64-pc-linux-musl'",
-                "-DLLVM_TARGETS_TO_BUILD='X86'",
-                "-DLLVM_BUILD_TESTS='Off'",
-                "-DLLVM_BUILD_UTILS='Off'",
-                "-DLLVM_INCLUDE_TESTS='Off'",
-                "-DLLVM_INCLUDE_UTILS='Off'",
-                "-DLLVM_ENABLE_PROJECTS='clang;lld'",
-                "-DLLVM_ENABLE_RUNTIMES='compiler-rt;libcxx;libcxxabi;libunwind'",
-                "-DLIBCXX_CXX_ABI='libcxxabi'",
-                "-DLIBCXX_HAS_MUSL_LIBC='On'",
-                "-DLIBCXX_ENABLE_SHARED='Off'",
-                "-DLIBCXX_ENABLE_STATIC='On'",
-                "-DLIBCXX_ENABLE_STATIC_ABI_LIBRARY='On'",
-                "-DLIBCXXABI_ENABLE_SHARED='Off'",
-                "-DLIBCXXABI_ENABLE_STATIC='On'",
-                "-DLIBCXXABI_ENABLE_STATIC_UNWINDER='On'",
-                "-DLIBCXXABI_USE_LLVM_UNWINDER='On'",
-                "-DLIBCXXABI_USE_COMPILER_RT='On'",
-                "-DLIBUNWIND_ENABLE_STATIC='On'",
-                "-DLIBUNWIND_ENABLE_SHARED='Off'",
-                "-DCOMPILER_RT_BUILD_CRT='On'",
-                "-DCOMPILER_RT_BUILD_SANITIZERS='Off'",
-                "-DCOMPILER_RT_BUILD_XRAY='Off'",
-                "-DCOMPILER_RT_BUILD_LIBFUZZER='Off'",
-                "-DCOMPILER_RT_BUILD_PROFILE='On'",
-                "-DCOMPILER_RT_BUILD_MEMPROF='Off'",
-                "-DCOMPILER_RT_BUILD_ORC='Off'",
-                "-DCOMPILER_RT_DEFAULT_TARGET_ARCH='x86_64'",
-                "-DLIBCLANG_BUILD_STATIC='On'",
-                "-DBUILD_SHARED_LIBS='Off'",
-            ])
-            .args(crate::platforms::shared::SHARED_BUILD_OPTS)
-            .args(crate::platforms::shared::shared_build_opts_ccache(
-                ccache_variant,
-            )),
-        "LLVM host building cmake",
-    )?;
+    let mut cmake_command = Command::new("cmake");
+    cmake_command
+        .args([
+            "-S",
+            source_directory.to_string_lossy().as_ref(),
+            "-B",
+            build_directory.to_string_lossy().as_ref(),
+            "-G",
+            "Ninja",
+            format!(
+                "-DDEFAULT_SYSROOT='{}'",
+                musl_target_directory.to_string_lossy()
+            )
+            .as_str(),
+            "-DLINKER_SUPPORTS_COLOR_DIAGNOSTICS=0",
+            format!(
+                "-DCMAKE_INSTALL_PREFIX='{}'",
+                target_directory.to_string_lossy()
+            )
+            .as_str(),
+            "-DCMAKE_BUILD_TYPE='Release'",
+            "-DCMAKE_C_COMPILER='clang'",
+            "-DCMAKE_CXX_COMPILER='clang++'",
+            "-DCLANG_DEFAULT_CXX_STDLIB='libc++'",
+            "-DCLANG_DEFAULT_RTLIB='compiler-rt'",
+            "-DLLVM_DEFAULT_TARGET_TRIPLE='x86_64-pc-linux-musl'",
+            "-DLLVM_TARGETS_TO_BUILD='X86'",
+            "-DLLVM_BUILD_TESTS='Off'",
+            "-DLLVM_BUILD_UTILS='Off'",
+            "-DLLVM_INCLUDE_TESTS='Off'",
+            "-DLLVM_INCLUDE_UTILS='Off'",
+            "-DLLVM_ENABLE_PROJECTS='clang;lld'",
+            "-DLLVM_ENABLE_RUNTIMES='compiler-rt;libcxx;libcxxabi;libunwind'",
+            "-DLLVM_ENABLE_ZLIB='Off'",
+            "-DLIBCXX_CXX_ABI='libcxxabi'",
+            "-DLIBCXX_HAS_MUSL_LIBC='On'",
+            "-DLIBCXX_ENABLE_SHARED='Off'",
+            "-DLIBCXX_ENABLE_STATIC='On'",
+            "-DLIBCXX_ENABLE_STATIC_ABI_LIBRARY='On'",
+            "-DLIBCXXABI_ENABLE_SHARED='Off'",
+            "-DLIBCXXABI_ENABLE_STATIC='On'",
+            "-DLIBCXXABI_ENABLE_STATIC_UNWINDER='On'",
+            "-DLIBCXXABI_USE_LLVM_UNWINDER='On'",
+            "-DLIBCXXABI_USE_COMPILER_RT='On'",
+            "-DLIBUNWIND_ENABLE_STATIC='On'",
+            "-DLIBUNWIND_ENABLE_SHARED='Off'",
+            "-DCOMPILER_RT_BUILD_CRT='On'",
+            "-DCOMPILER_RT_BUILD_SANITIZERS='Off'",
+            "-DCOMPILER_RT_BUILD_XRAY='Off'",
+            "-DCOMPILER_RT_BUILD_LIBFUZZER='Off'",
+            "-DCOMPILER_RT_BUILD_PROFILE='On'",
+            "-DCOMPILER_RT_BUILD_MEMPROF='Off'",
+            "-DCOMPILER_RT_BUILD_ORC='Off'",
+            "-DCOMPILER_RT_DEFAULT_TARGET_ARCH='x86_64'",
+            "-DLIBCLANG_BUILD_STATIC='On'",
+            "-DBUILD_SHARED_LIBS='Off'",
+        ])
+        .args(crate::platforms::shared::SHARED_BUILD_OPTS)
+        .args(crate::platforms::shared::shared_build_opts_ccache(
+            ccache_variant,
+        ));
+    if enable_coverage {
+        cmake_command.args([
+            "-DCOMPILER_RT_BUILD_CTX_PROFILE='Off'",
+            // Skip the link-based target probe; libc++ isn't built yet so
+            // the probe fails and silently disables `libclang_rt.profile.a`.
+            "-DCOMPILER_RT_DEFAULT_TARGET_ONLY='On'",
+        ]);
+    }
+    crate::utils::command(&mut cmake_command, "LLVM host building cmake")?;
 
     let mut crt_lib_directory = crt_target_directory.to_path_buf();
     crt_lib_directory.push("lib/");

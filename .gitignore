@@ -23,4 +23,5 @@ playwright-report
 .cache
 emsdk
 docs-tmp
+coverage-reports
 workdir

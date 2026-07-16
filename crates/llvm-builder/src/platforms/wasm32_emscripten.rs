@@ -98,6 +98,7 @@ fn build_host(
                     crate::Platform::PolkaVM
                 ),
                 "-DLLVM_ENABLE_PROJECTS='clang;lld'",
+                "-DLLVM_ENABLE_ZLIB='Off'",
             ])
             .args(crate::platforms::shared::SHARED_BUILD_OPTS)
             .args(crate::platforms::shared::SHARED_BUILD_OPTS_NOT_MUSL)

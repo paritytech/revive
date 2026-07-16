@@ -1,0 +1,165 @@
+# Label-gated coverage workflow (`measure code coverage`).
+#
+# The only trigger type is `labeled`: applying the label approves
+# exactly the head commit present at that moment. Later pushes do NOT
+# re-fire the workflow. The label is removed automatically at the end
+# of every run, so re-applying it retriggers the workflow.
+
+name: Code coverage
+
+on:
+  pull_request:
+    branches: [main]
+    types: [labeled]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  coverage:
+    name: Measure coverage
+    if: ${{ github.event.label.name == 'measure code coverage' }}
+    runs-on: parity-large
+    timeout-minutes: 30
+    outputs:
+      artifact-url: ${{ steps.upload.outputs.artifact-url }}
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          rustflags: ""
+          components: llvm-tools-preview
+
+      - name: Install solc
+        uses: ./.github/actions/get-solc
+
+      - name: Install Geth
+        run: |
+          sudo add-apt-repository -y ppa:ethereum/ethereum
+          sudo apt update
+          sudo apt install -y ethereum
+
+      - name: Download LLVM
+        uses: ./.github/actions/get-llvm
+        with:
+          target: x86_64-unknown-linux-gnu
+
+      - name: Set LLVM environment variables
+        run: |
+          echo "LLVM_SYS_221_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+
+      - name: Run coverage and generate revive HTML report
+        id: coverage
+        run: |
+          make coverage
+          echo "report_dir=coverage-reports/$(cat target/llvm-cov-target/coverage-stamp)/revive" >> "$GITHUB_OUTPUT"
+
+      - name: Upload coverage report
+        id: upload
+        uses: actions/upload-artifact@v6
+        with:
+          name: coverage-report-pr-${{ github.event.pull_request.number }}
+          path: ${{ steps.coverage.outputs.report_dir }}
+          retention-days: 30
+
+  comment:
+    name: Comment coverage on PR
+    needs: coverage
+    # Use `always()` so the trigger label is consumed even when measurement
+    # fails or is cancelled. Skipped for fork PRs since their token is
+    # read-only, so commenting and label removal would fail.
+    if: >-
+      always() && github.event.label.name == 'measure code coverage'
+      && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download coverage artifact
+        if: ${{ !cancelled() && needs.coverage.result == 'success' }}
+        uses: actions/download-artifact@v7
+        with:
+          name: coverage-report-pr-${{ github.event.pull_request.number }}
+          path: coverage
+
+      - name: Comment coverage report on PR
+        if: ${{ !cancelled() && needs.coverage.result == 'success' }}
+        uses: actions/github-script@v7
+        env:
+          ARTIFACT_URL: ${{ needs.coverage.outputs.artifact-url }}
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('coverage/summary.txt', 'utf8').trim();
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.issue.number;
+            const sha = context.payload.pull_request.head.sha.substring(0, 8);
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+            const artifactUrl = process.env.ARTIFACT_URL || runUrl;
+            const marker = '<!-- code-coverage-bot -->';
+            const body = [
+              marker,
+              `### Code coverage`,
+              ``,
+              `Report for commit \`${sha}\`: [click here to download the report](${artifactUrl}) and open \`html/index.html\` in a browser.`,
+              ``,
+              `<details open><summary>Summary</summary>`,
+              ``,
+              summary,
+              ``,
+              `</details>`,
+              ``,
+              `_Workflow run: [#${context.runId}](${runUrl})_`,
+            ].join('\n');
+
+            // Update the prior bot comment in place rather than spamming.
+            // Paginate so the marker is found on PRs with >100 comments.
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number: prNumber, per_page: 100 },
+            );
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: prNumber, body,
+              });
+            }
+
+      - name: Remove trigger label
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: 'measure code coverage',
+              });
+            } catch (error) {
+              // 404: label already removed (e.g. by a human mid-run).
+              if (error.status !== 404) {
+                core.setFailed(`Failed to remove label: ${error.message}`);
+              }
+            }

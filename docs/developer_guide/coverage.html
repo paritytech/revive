@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Roadmap and Vision - revive compiler book</title>
+        <title>Code coverage - revive compiler book</title>
 
 
         <!-- Custom HTML head -->
@@ -12,33 +12,33 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
 
-        <link rel="icon" href="favicon-de23e50b.svg">
-        <link rel="shortcut icon" href="favicon-8114d1fc.png">
-        <link rel="stylesheet" href="css/variables-8adf115d.css">
-        <link rel="stylesheet" href="css/general-2459343d.css">
-        <link rel="stylesheet" href="css/chrome-ae938929.css">
-        <link rel="stylesheet" href="css/print-9e4910d8.css" media="print">
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="fonts/fonts-9644e21d.css">
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" id="mdbook-highlight-css" href="highlight-493f70e1.css">
-        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="tomorrow-night-4c0ae647.css">
-        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="ayu-highlight-3fdfc3ac.css">
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
 
         <!-- Custom theme stylesheets -->
 
 
         <!-- Provide site root and default themes to javascript -->
         <script>
-            const path_to_root = "";
+            const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-03fbe930.js";
+            window.path_to_searchindex_js = "../searchindex-03fbe930.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-6a3d5174.js"></script>
+        <script src="../toc-6a3d5174.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -105,7 +105,7 @@
             <!-- populated by js -->
             <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
             <noscript>
-                <iframe class="sidebar-iframe-outer" src="toc.html"></iframe>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
             </noscript>
             <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -140,7 +140,7 @@
                     <h1 class="menu-title">revive compiler book</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
                         </a>
 
@@ -174,23 +174,79 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="vision-and-roadmap"><a class="header" href="#vision-and-roadmap">Vision and Roadmap</a></h1>
-<p>The <code>revive</code> compiler speeds up Solidity contracts significantly. <code>revive</code> provides a decisive edge over other contract platforms. Notably, the compiler eliminates the need of rewriting Solidity dApps in Rust or even as single dApp parachains for scaling reasons. Retaining as high compatibility with Ethereum Solidity as possible keeps entry barriers low.</p>
-<p>We believe in Dr. Gavin Wood’s <a href="https://gavwood.com/dappsweb3.html">ĐApps: What Web 3.0 Looks Like</a> manifesto and the ecosystem of the Solidity programming language. Our motivation lies in the realization that for a <em>true</em> web3 revolution, significant scaling efforts, like the ones provided by the PVM and this project, are necessary to unfold.</p>
-<h2 id="roadmap"><a class="header" href="#roadmap">Roadmap</a></h2>
-<p>The first major release, <code>resolc</code> v1.0.0, emits functional PVM code from given Solidity sources. It relies on <code>solc</code> and LLVM for optimizations. The main priority of this release was delivering a mostly feature complete and safe Solidity v0.8.0 compiler.</p>
-<p>Focus for the second major release is on the custom optimization pipeline, which aims to significantly improve emitted code blob sizes.</p>
-<p>The below roadmap gives a rough overview of the project’s development timeline.</p>
-<p><img src="images/roadmap.svg" alt="Roadmap"></p>
+                        <h1 id="code-coverage"><a class="header" href="#code-coverage">Code coverage</a></h1>
+<p>Revive measures Rust and LLVM C++ line and region coverage with <a href="https://github.com/taiki-e/cargo-llvm-cov"><code>cargo-llvm-cov</code></a> over the same tests as <code>make test-workspace</code>.</p>
+<p>Two ways to obtain a report:</p>
+<ol>
+<li><strong>Locally:</strong> <code>make coverage</code> and <code>make coverage-llvm-report</code> (described below).</li>
+<li><strong>Per PR:</strong> apply the <code>measure code coverage</code> label and read the bot-generated PR comment once the triggered workflow completes.</li>
+</ol>
+<h2 id="running-locally"><a class="header" href="#running-locally">Running locally</a></h2>
+<pre><code class="language-bash"># Install LLVM.
+make install-llvm
+
+# Or install instrumented LLVM.
+make install-llvm-coverage
+
+# ..set LLVM_SYS_221_PREFIX to a compatible LLVM build..
+
+# Run coverage and generate revive Rust report.
+make coverage
+
+# Generate a separate LLVM C++ report if needed, if
+# instrumented LLVM was used for `make coverage`.
+make coverage-llvm-report
+
+# Print clickable links to all accumulated HTML reports detected
+# (they're grouped by timestamps) to easily view them in the browser.
+make coverage-browse
+</code></pre>
+<p>The target:</p>
+<ol>
+<li>Builds and tests the workspace under cargo-llvm-cov with <code>--ignore-run-fail</code> so partial coverage lands even when test binaries exit non-zero.</li>
+<li>Writes a browsable HTML report into a timestamped run directory (<code>coverage-reports/&lt;stamp&gt;/revive/</code> or <code>coverage-reports/&lt;stamp&gt;/llvm/</code>).</li>
+</ol>
+<h2 id="resource-requirements-and-troubleshooting"><a class="header" href="#resource-requirements-and-troubleshooting">Resource requirements and troubleshooting</a></h2>
+<p><code>make coverage</code> bakes in two defaults that keep instrumented runs tractable:</p>
+<ul>
+<li>It drops DWARF with <code>CARGO_PROFILE_DEV_DEBUG=0</code> since coverage line data lives in the binaries’ <code>__llvm_covmap</code> sections.</li>
+<li>It bounds profile output with <code>LLVM_PROFILE_FILE_NAME=revive-%4m.profraw</code>. The default pattern contains <code>%p</code>, writing one raw profile per process. With an instrumented LLVM this could exceed tens of gigabytes of raw profiles in a full run. The <code>%4m</code> merge pool makes processes merge their counters into a handful of files instead.</li>
+</ul>
+<p>Even with those defaults, plan for:</p>
+<ul>
+<li>Disk space:
+<ul>
+<li>Building instrumented LLVM and running an instrumented <code>make coverage</code> still needs tens of gigabytes of disk space.</li>
+</ul>
+</li>
+<li>LLVM link memory (<code>make install-llvm-coverage</code>):
+<ul>
+<li>If a link step gets OOM-killed, rerun with capped parallelism (e.g. <code>JOBS=1</code>) to serialize the links. The rerun resumes incrementally.</li>
+</ul>
+</li>
+<li>Test-binary link memory (<code>make coverage</code>):
+<ul>
+<li>If a link gets OOM-killed, rerun with <code>RUSTFLAGS="-C link-arg=-fuse-ld=lld"</code> (or <em>additionally</em> with capped parallelism, e.g. <code>CARGO_BUILD_JOBS=1</code>). GNU ld holds every input object and the coverage mapping of the entire dependency closure in memory at once. lld links with a smaller peak.</li>
+</ul>
+</li>
+<li>Test-run memory (<code>make coverage</code>):
+<ul>
+<li>Each concurrently running test spawns an instrumented resolc. On memory-constrained machines cap it with <code>RUST_TEST_THREADS=4</code>. This throttles test execution only, not compilation.</li>
+</ul>
+</li>
+</ul>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="faq.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../developer_guide/fuzzing.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
+                            <a rel="next prefetch" href="../developer_guide/cross_compilation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -198,10 +254,13 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="faq.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../developer_guide/fuzzing.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
+                    <a rel="next prefetch" href="../developer_guide/cross_compilation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
             </nav>
 
         </div>
@@ -219,13 +278,13 @@
         </script>
 
 
-        <script src="elasticlunr-ef4e11c1.min.js"></script>
-        <script src="mark-09e88c2c.min.js"></script>
-        <script src="searcher-c2a407aa.js"></script>
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
 
-        <script src="clipboard-1626706a.min.js"></script>
-        <script src="highlight-abc7f01d.js"></script>
-        <script src="book-a0b12cfe.js"></script>
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
 
         <!-- Custom JS scripts -->
 

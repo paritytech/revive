@@ -18,6 +18,7 @@
   - [PVM and the pallet-revive runtime target](./developer_guide/target.md)
   - [Testing strategy](./developer_guide/testing.md)
   - [Differential fuzzing](./developer_guide/fuzzing.md)
+  - [Code coverage](./developer_guide/coverage.md)
   - [Cross compilation](./developer_guide/cross_compilation.md)
 - [FAQ](./faq.md)
 - [Roadmap and Vision](./roadmap.md)

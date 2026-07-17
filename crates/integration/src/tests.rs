@@ -160,7 +160,7 @@ fn ulongrem_fuzz() {
 }
 
 /// Differential fuzz of the unsigned 256-bit `div`/`mod` routing. Non-provable
-/// i256 `udiv`/`urem` are rewritten by `narrow_divrem_instructions` into calls
+/// i256 `udiv`/`urem` are rewritten by `lower_wide_division` into calls
 /// to the stdlib `__udivrem256` (128-bit-digit Knuth long division), via the
 /// `__udiv256`/`__urem256` wrappers. `__udivrem256` has two paths: `full`
 /// (divisor >= 2^128, exercising the qhat estimate and its correction steps)
@@ -287,6 +287,82 @@ fn sdiv_smod_fuzz() {
                 gas_limit: None,
                 storage_deposit_limit: None,
                 data,
+            });
+        }
+    }
+
+    run_differential(actions);
+}
+
+/// Differential coverage of division, remainder, and mulmod by the SAME
+/// compile-time constant inside one contract, across constant magnitudes the
+/// suite otherwise never exercises. Guards the bug class where a constant-
+/// specialization pass reuses a per-constant helper across optimization phases
+/// (e.g. if `x % C` was to be compiled into an unconditional trap whenever
+/// `mulmod(x, y, C)` shares the constant), and pins the sharp eligibility
+/// boundaries of the in-tree Barrett rung: 2**255 (power of two: div/rem fold
+/// to shifts, mulmod takes the inline mask rewrite) and 2**255 - 1 (255 bits:
+/// div/rem Barrett-eligible, mulmod is not Barrett-rewritten). Fixed
+/// operands pin 0, 1, C - 1, C, C + 1, and 2^256 - 1 per constant, plus the
+/// largest multiple M = C * floor(MAX / C) and M +/- 1 (M deterministically
+/// fires the division helpers' single correction); a keccak stream adds
+/// full-width pairs.
+#[test]
+fn div_mod_mulmod_const_mix() {
+    use alloy_primitives::keccak256;
+
+    /// One helper contract under test: its calldata constructor and the
+    /// compile-time constant it divides by.
+    type ConstMixHelper = (fn(U256, U256) -> Contract, U256);
+
+    let one = U256::from(1u64);
+    let helpers: [ConstMixHelper; 9] = [
+        (Contract::const_mix_three, U256::from(3u64)),
+        (Contract::const_mix_two_pow64_plus_one, (one << 64) + one),
+        (Contract::const_mix_two_pow128_minus_one, (one << 128) - one),
+        (Contract::const_mix_two_pow128_plus_one, (one << 128) + one),
+        (Contract::const_mix_two_pow200, one << 200),
+        (Contract::const_mix_two_pow255, one << 255),
+        (Contract::const_mix_two_pow255_minus_one, (one << 255) - one),
+        (
+            Contract::const_mix_two_pow255_plus_three,
+            (one << 255) + U256::from(3u64),
+        ),
+        (Contract::const_mix_max, U256::MAX),
+    ];
+
+    let mut actions = instantiate("contracts/DivModMulmodConst.sol", "DivModMulmodConst");
+    for (index, (helper, constant)) in helpers.iter().enumerate() {
+        let largest_multiple = *constant * (U256::MAX / *constant);
+        let mut operands = vec![
+            (U256::ZERO, U256::MAX),
+            (one, one),
+            (constant.wrapping_sub(one), U256::MAX),
+            (*constant, *constant),
+            (constant.wrapping_add(one), constant.wrapping_sub(one)),
+            (U256::MAX, U256::MAX),
+            (largest_multiple, U256::MAX),
+            (largest_multiple.wrapping_sub(one), U256::MAX),
+            (largest_multiple.wrapping_add(one), U256::MAX),
+        ];
+        for i in 0u64..8 {
+            let derive = |tag: &[u8]| -> U256 {
+                let mut buf = Vec::with_capacity(16 + tag.len());
+                buf.extend_from_slice(&(index as u64).to_be_bytes());
+                buf.extend_from_slice(&i.to_be_bytes());
+                buf.extend_from_slice(tag);
+                U256::from_be_bytes::<32>(keccak256(&buf).0)
+            };
+            operands.push((derive(b"x"), derive(b"y")));
+        }
+        for (x, y) in operands {
+            actions.push(Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: helper(x, y).calldata,
             });
         }
     }
@@ -1166,6 +1242,9 @@ fn unsigned_division_half_const() {
         (U256::ZERO, U256::MAX),
         (five, two),
         (one, U256::ZERO),
+        // 2^256 - 1 over a small constant drives the Barrett quotient
+        // estimate to q - 1, firing the helper's single correction.
+        (U256::MAX, five),
     ];
     for (n, d) in pairs {
         push_call(
@@ -2071,7 +2150,7 @@ fn invalid_opcode_works() {
 /// holds the only `sdiv i256` we emit, and InstCombine rewrites it to
 /// `udiv i256` (then to `udiv i64`) once it sees the AND-masks prove the
 /// operands non-negative. The latent risk: revive's
-/// `narrow_divrem_instructions` (crates/llvm-context/src/polkavm/context/mod.rs)
+/// `lower_wide_division` (crates/llvm-context/src/polkavm/context/mod.rs)
 /// would, given a surviving `sdiv i256 (and a, M), (and b, M)`, rewrite it
 /// to `sext (sdiv i64 (trunc..), (trunc..))`, which flips sign for any
 /// operand whose bit (n-1) is set. If LLVM ever stops folding sdiv → udiv

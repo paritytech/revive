@@ -408,7 +408,7 @@ entry:
 ; Unsigned 256-bit division, quotient only: returns u / v (floor).
 ; Precondition: v != 0, inherited from the raw i256 udiv this replaces.
 ; Thin wrapper: the quotient half of __udivrem256. revive emits raw i256
-; udiv/urem; the narrow_divrem_instructions pass rewrites the non-narrowable
+; udiv/urem; the lower_wide_division pass rewrites the non-narrowable
 ; ones into calls to these wrappers. Kept external so they survive
 ; optimization until that late pass; unused copies are dropped by the final
 ; linker --gc-sections.
@@ -525,6 +525,62 @@ slow:
   %prodeh = lshr i512 %prode, 256
   %prodh = trunc i512 %prodeh to i256
   %res = call i256 @__urem512by256(i256 %prodl, i256 %prodh, i256 %modulo)
+  ret i256 %res
+}
+
+; (a*b) mod m via Barrett reduction (HAC 14.42 with b=2, k=t=256), for
+; compile-time-constant 256-bit moduli. The compiler rewrites eligible
+; __mulmod call sites to this and supplies the reciprocal -- before the
+; optimization pipeline for moduli that are already constant (the common
+; case), after it for moduli the pipeline exposes as constant.
+;
+; Preconditions (guaranteed at every rewritten call site; violations return
+; garbage but never trap -- the body is straight-line, no udiv/urem/br):
+;   2^255 < m < 2^256, m not a power of two,
+;   mu_lo = floor(2^512/m) - 2^256, so mu = 2^256 + mu_lo with
+;   2^256 < mu < 2^257 (m <= 2^256-1 => mu >= 2^256+1 since
+;   (2^256-1)(2^256+1) < 2^512; m > 2^255 => mu < 2^257).
+;
+; a and b need NOT be pre-reduced: a*b <= (2^256-1)^2 < 2^512 = b^(2k) is
+; exactly HAC's operand bound at t = 256, which is why only 256-bit moduli
+; are eligible (smaller moduli stay on __mulmod).
+;
+; Quotient bound: upper -- q3 <= (x/2^255)(2^512/m)/2^257 = x/m, so q3 <= q
+; and r0 >= 0; lower -- q1 > x/2^255 - 1 and mu > 2^512/m - 1 give
+; q1*mu/2^257 > x/m - x/2^512 - 2^255/m + 2^-257 > x/m - 2, so q3 >= q - 2.
+define i256 @__mulmod_barrett(i256 %a, i256 %b, i256 %m, i256 %mu_lo) #0 {
+entry:
+  %aw  = zext i256 %a to i512
+  %bw  = zext i256 %b to i512
+  %x   = mul i512 %aw, %bw               ; x < 2^512: no wrap
+  %q1  = lshr i512 %x, 255               ; q1 = floor(x/2^255) < 2^257
+  ; q2 = q1*mu reconstructed as (q1 << 256) + q1*mu_lo in i576:
+  ;   q1 << 256 < 2^513, q1*mu_lo < 2^513, q2 < 2^514 < 2^576: no wrap.
+  %q1w = zext i512 %q1 to i576
+  %muw = zext i256 %mu_lo to i576
+  %hi  = shl i576 %q1w, 256
+  %lo  = mul i576 %q1w, %muw
+  %q2  = add i576 %hi, %lo
+  %q3w = lshr i576 %q2, 257              ; q3 <= floor(x/m), q3 < 2^257
+  %q3  = trunc i576 %q3w to i320         ; lossless
+  ; r0 = x - q3*m computed mod 2^320: the true value lies in [0, 3m) with
+  ; 3m < 2^258, so 320-bit wrapping arithmetic reproduces it exactly.
+  %m3  = zext i256 %m to i320
+  %x3  = trunc i512 %x to i320
+  %q3m = mul i320 %q3, %m3
+  %r0  = sub i320 %x3, %q3m
+  ; Exactly two conditional corrections (HAC note 14.44: 0 <= q - q3 <= 2):
+  ; r0 in [0,3m) -> r1 in [0,2m) -> r2 in [0,m). The bound is tight for this
+  ; parameterization (the two deficit terms x/2^512 and 2^255/m each approach
+  ; 1), so two is required and sufficient -- do not harmonize with the
+  ; division helpers' single correction; these are different theorems.
+  %c1  = icmp uge i320 %r0, %m3
+  %s1  = sub i320 %r0, %m3
+  %r1  = select i1 %c1, i320 %s1, i320 %r0
+  %c2  = icmp uge i320 %r1, %m3
+  %s2  = sub i320 %r1, %m3
+  %r2  = select i1 %c2, i320 %s2, i320 %r1
+  %res = trunc i320 %r2 to i256          ; r2 < m < 2^256: lossless
   ret i256 %res
 }
 

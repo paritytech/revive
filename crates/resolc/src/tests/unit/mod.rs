@@ -1,5 +1,6 @@
 //! The Solidity compiler unit tests.
 
+mod debug_info;
 mod factory_dependency;
 mod ir_artifacts;
 mod libraries;

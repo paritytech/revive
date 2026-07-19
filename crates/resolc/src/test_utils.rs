@@ -56,6 +56,8 @@ struct CachedBlob {
 }
 
 /// Builds the Solidity project and returns the standard JSON output.
+/// [`OptimizerSettings::cycles`] will be used. Debug info is emitted
+/// at every optimization level except `-Oz`.
 pub fn build_solidity(
     sources: BTreeMap<String, SolcStandardJsonInputSource>,
 ) -> anyhow::Result<SolcStandardJsonOutput> {
@@ -70,6 +72,7 @@ pub fn build_solidity(
 }
 
 /// Builds the Solidity project and returns the standard JSON output.
+/// Debug info is emitted at every optimization level except `-Oz`.
 pub fn build_solidity_with_options(
     sources: BTreeMap<String, SolcStandardJsonInputSource>,
     libraries: SolcStandardJsonInputSettingsLibraries,

@@ -31,6 +31,41 @@ impl<'ctx> LLVMRuntime<'ctx> {
     /// The corresponding runtime function name.
     pub const FUNCTION_SIGNEXTEND: &'static str = "__signextend";
 
+    /// Name of the unsigned 256-bit division helper in `stdlib.ll`
+    /// It is not a registered runtime function. It must keep external
+    /// linkage so it survives optimization until `lower_wide_division`
+    /// reroutes non-narrowable i256 `udiv` to it, so only its name lives here.
+    pub const FUNCTION_UDIV256: &'static str = "__udiv256";
+
+    /// Name of the unsigned 256-bit remainder helper in `stdlib.ll`
+    /// It is not a registered runtime function. It must keep external
+    /// linkage so it survives optimization until `lower_wide_division`
+    /// reroutes non-narrowable i256 `urem` to it, so only its name lives here.
+    pub const FUNCTION_UREM256: &'static str = "__urem256";
+
+    /// Name of the signed 256-bit division helper in `stdlib.ll`
+    /// It is not a registered runtime function. It must keep external
+    /// linkage so it survives optimization until `lower_wide_division`
+    /// reroutes non-narrowable i256 `sdiv` to it, so only its name lives here.
+    pub const FUNCTION_SDIV256: &'static str = "__sdiv256";
+
+    /// Name of the signed 256-bit remainder helper in `stdlib.ll`
+    /// It is not a registered runtime function. It must keep external
+    /// linkage so it survives optimization until `lower_wide_division`
+    /// reroutes non-narrowable i256 `srem` to it, so only its name lives here.
+    pub const FUNCTION_SREM256: &'static str = "__srem256";
+
+    /// Name of the Barrett constant-modulus mulmod helper in `stdlib.ll`
+    /// It is not a registered runtime function (registration would flip it to
+    /// private linkage). It must keep external linkage for both rewrite
+    /// phases: call sites created by `specialize_constant_modulus_mulmod`
+    /// BEFORE the optimization pipeline must target a function the pipeline
+    /// can neither erase, argument-strip, nor calling-convention-promote,
+    /// and the function must still exist when `lower_wide_division`
+    /// rewrites late-exposed constant-modulus `__mulmod` call sites AFTER
+    /// the pipeline. Only its name lives here.
+    pub const FUNCTION_MULMOD_BARRETT: &'static str = "__mulmod_barrett";
+
     /// A shortcut constructor.
     pub fn new(
         llvm: &'ctx inkwell::context::Context,

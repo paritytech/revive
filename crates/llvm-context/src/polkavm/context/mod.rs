@@ -51,6 +51,7 @@ pub mod argument;
 pub mod attribute;
 pub mod build;
 pub mod code_type;
+mod constant_division;
 pub mod debug_info;
 pub mod function;
 pub mod global;
@@ -348,6 +349,19 @@ impl<'ctx> Context<'ctx> {
             )
         })?;
 
+        // Rewrite constant-modulus `__mulmod` calls into Barrett form BEFORE
+        // the pipeline inlines `__mulmod`'s long-division body into callers,
+        // after which the mulmod-level structure (and with it the chance to
+        // skip its operand pre-reductions entirely) is unrecoverable.
+        self.specialize_constant_modulus_mulmod(&target_machine)
+            .map_err(|error| {
+                anyhow::anyhow!(
+                    "The contract `{}` mulmod specialization error: {}",
+                    contract_path,
+                    error
+                )
+            })?;
+
         self.optimizer
             .run(&target_machine, self.module())
             .map_err(|error| {
@@ -358,11 +372,12 @@ impl<'ctx> Context<'ctx> {
                 )
             })?;
 
-        // Narrow large integer div/rem where operands provably fit in a smaller
-        // type. LLVM's i256 div/rem backend expansion produces enormous basic
-        // blocks that pallet-revive rejects as `BasicBlockTooLarge`; narrowing
-        // here keeps the expansion compact.
-        self.narrow_divrem_instructions();
+        // Lower wide integer division that LLVM's i256 div/rem backend would otherwise
+        // expand into enormous basic blocks that pallet-revive rejects as `BasicBlockTooLarge`:
+        // - Narrow large integer div/rem where operands provably fit a smaller type.
+        // - Specialize constant divisors and constant `__mulmod` moduli into Barrett reductions
+        // - Route the rest to the stdlib runtime routines.
+        self.lower_wide_division();
 
         self.debug_config
             .dump_llvm_ir_optimized(contract_path, self.module())?;
@@ -1765,8 +1780,13 @@ impl<'ctx> Context<'ctx> {
         )
     }
 
-    /// Narrows large integer div/rem instructions whose operands provably fit
-    /// in a smaller type.
+    /// Lowers wide integer division after the LLVM optimization pipeline:
+    /// narrows large div/rem whose operands provably fit a smaller type,
+    /// specializes constant-divisor div/rem into Barrett reductions, routes
+    /// the remaining i256 div/rem to the stdlib runtime routines, and
+    /// repeats the constant-modulus `__mulmod` sweep for moduli that only
+    /// became constant during the pipeline (the primary `__mulmod` rewrite
+    /// runs beforehand in [`Self::specialize_constant_modulus_mulmod`]).
     ///
     /// LLVM's i256 div/rem backend expansion produces enormous basic blocks
     /// that pallet-revive rejects as `BasicBlockTooLarge`. LLVM's own
@@ -1774,12 +1794,44 @@ impl<'ctx> Context<'ctx> {
     /// functions after inlining. This runs as a safety net after the full
     /// LLVM optimization pipeline so we operate on the final form where the
     /// proof sources we accept (LLVM constants, `and` masks, `zext`) are
-    /// observable across function boundaries after IPSCCP and inlining.
-    fn narrow_divrem_instructions(&self) {
+    /// observable across function boundaries after IPSCCP and inlining. The
+    /// Barrett helpers are generated here, after the pipeline, so they are
+    /// never calling-convention-promoted between creation and use (see
+    /// [`constant_division`] for the full argument).
+    fn lower_wide_division(&self) {
         let builder = self.llvm.create_builder();
+        let stdlib_function = |name: &str| {
+            self.module()
+                .get_function(name)
+                .unwrap_or_else(|| panic!("{name} must be declared in the stdlib module"))
+        };
+        let udiv256 = stdlib_function(LLVMRuntime::FUNCTION_UDIV256);
+        let urem256 = stdlib_function(LLVMRuntime::FUNCTION_UREM256);
+        let sdiv256 = stdlib_function(LLVMRuntime::FUNCTION_SDIV256);
+        let srem256 = stdlib_function(LLVMRuntime::FUNCTION_SREM256);
+
+        // Catch `__mulmod` call sites whose modulus only became a constant
+        // during the main pipeline; sites already constant beforehand were
+        // rewritten by `specialize_constant_modulus_mulmod`.
+        self.rewrite_constant_modulus_mulmod_calls();
 
         for function in self.module().get_functions() {
+            // Generated Barrett helpers are never candidates for rewriting:
+            // their bodies contain no eligible operations, and skipping them
+            // removes any reliance on the module function list tolerating
+            // appends during iteration (defense in depth).
+            if function
+                .get_name()
+                .to_string_lossy()
+                .starts_with(constant_division::HELPER_PREFIX)
+            {
+                continue;
+            }
+
             let mut to_narrow = Vec::new();
+            let mut to_barrett_divrem: Vec<(inkwell::values::InstructionValue, num::BigUint)> =
+                Vec::new();
+            let mut to_route = Vec::new();
 
             for basic_block in function.get_basic_blocks() {
                 for instruction in basic_block.get_instructions() {
@@ -1793,13 +1845,15 @@ impl<'ctx> Context<'ctx> {
                     if !is_divrem {
                         continue;
                     }
-                    if instruction.get_type().into_int_type().get_bit_width() < 256 {
+                    let bit_width = instruction.get_type().into_int_type().get_bit_width();
+                    if bit_width < 256 {
                         continue;
                     }
 
                     let lhs = instruction.get_operand(0).and_then(|op| op.value());
                     let rhs = instruction.get_operand(1).and_then(|op| op.value());
 
+                    let mut narrowed = false;
                     if let (Some(lhs), Some(rhs)) = (lhs, rhs) {
                         let lhs_width = Self::provable_bit_width(lhs);
                         let rhs_width = Self::provable_bit_width(rhs);
@@ -1819,7 +1873,36 @@ impl<'ctx> Context<'ctx> {
                                 !is_signed || narrow_width > max_operand_width;
                             if narrow_width < 256 && signed_sign_bit_safe {
                                 to_narrow.push((instruction, narrow_width));
+                                narrowed = true;
                             }
+                        }
+                    }
+
+                    // Second rung: an i256 udiv/urem by a compile-time constant that cannot
+                    // be narrowed is rewritten into a call to a generated Barrett helper
+                    // (multiplication by a precomputed reciprocal), measurably ~1.5x faster
+                    // per call than the routed long-division runtime routine.
+                    if !narrowed && bit_width == 256 {
+                        if let Some(divisor) =
+                            Self::barrett_eligible_divisor(&builder, &instruction)
+                        {
+                            to_barrett_divrem.push((instruction, divisor));
+                            continue;
+                        }
+                    }
+
+                    // An i256 div/rem we cannot prove narrowable would otherwise be expanded by
+                    // the backend into a ~500-instruction bit-at-a-time loop. Route it to the
+                    // efficient stdlib routines instead: unsigned ops use 128-bit-digit long
+                    // division bottoming out at a hardware-backed 128/64 divide via `__udivti3`.
+                    // Signed ops wrap those with sign-magnitude.
+                    if !narrowed && bit_width == 256 {
+                        match instruction.get_opcode() {
+                            InstructionOpcode::UDiv => to_route.push((instruction, udiv256)),
+                            InstructionOpcode::URem => to_route.push((instruction, urem256)),
+                            InstructionOpcode::SDiv => to_route.push((instruction, sdiv256)),
+                            InstructionOpcode::SRem => to_route.push((instruction, srem256)),
+                            _ => {}
                         }
                     }
                 }
@@ -1883,6 +1966,245 @@ impl<'ctx> Context<'ctx> {
                 let wide_instruction = wide_result.as_instruction().unwrap();
                 instruction.replace_all_uses_with(&wide_instruction);
                 instruction.erase_from_basic_block();
+            }
+
+            for (instruction, divisor) in to_barrett_divrem {
+                let dividend = instruction
+                    .get_operand(0)
+                    .unwrap()
+                    .value()
+                    .unwrap()
+                    .into_int_value();
+                let helper = self.barrett_divrem_helper(instruction.get_opcode(), &divisor);
+
+                builder.position_before(&instruction);
+
+                let call_site = builder.build_call(helper, &[dividend.into()], "").unwrap();
+                // One-line insurance: a freshly generated helper is default-CC
+                // by construction, but a helper reused by name must never be
+                // called with a mismatched convention.
+                call_site.set_call_convention(helper.get_call_conventions());
+                let call_instruction = call_site
+                    .try_as_basic_value()
+                    .unwrap_basic()
+                    .into_int_value()
+                    .as_instruction()
+                    .unwrap();
+                instruction.replace_all_uses_with(&call_instruction);
+                instruction.erase_from_basic_block();
+            }
+
+            for (instruction, target) in to_route {
+                let lhs = instruction
+                    .get_operand(0)
+                    .unwrap()
+                    .value()
+                    .unwrap()
+                    .into_int_value();
+                let rhs = instruction
+                    .get_operand(1)
+                    .unwrap()
+                    .value()
+                    .unwrap()
+                    .into_int_value();
+
+                builder.position_before(&instruction);
+
+                let call_value = builder
+                    .build_call(target, &[lhs.into(), rhs.into()], "")
+                    .unwrap()
+                    .try_as_basic_value()
+                    .unwrap_basic();
+                let call_instruction = call_value.into_int_value().as_instruction().unwrap();
+                instruction.replace_all_uses_with(&call_instruction);
+                instruction.erase_from_basic_block();
+            }
+        }
+    }
+
+    /// Rewrites `__mulmod` calls with a compile-time-constant modulus into
+    /// Barrett form ahead of the main optimization pipeline.
+    ///
+    /// Constant moduli usually reach `__mulmod` in composed form (solc's code
+    /// generator emits large literals as `not`/`shl`/`sub` expressions and
+    /// may hold them in stack variables), so a cheap constant-folding
+    /// pre-pass runs first to expose them as plain constants. The rewrite
+    /// must happen before the main pipeline: once the inliner dissolves
+    /// `__mulmod`'s body into callers, an eligible site decays into two
+    /// operand pre-reductions plus a 512-by-256 long division, and the
+    /// Barrett form — which needs no pre-reduction at all, since its operand
+    /// bound `a*b < 2^512` holds for arbitrary 256-bit factors — is no
+    /// longer recoverable. Sites whose modulus only becomes constant during
+    /// the main pipeline are still caught by the sweep in
+    /// [`Self::lower_wide_division`].
+    ///
+    /// The rewritten calls target the external `__mulmod_barrett`, which the
+    /// pipeline can neither calling-convention-promote nor argument-strip,
+    /// so running before optimization is safe (the post-pipeline `fastcc`
+    /// hazard documented in [`constant_division`] concerns helpers generated after the
+    /// pipeline, not pre-existing external stdlib routines).
+    ///
+    /// Skipped entirely when the module contains no `__mulmod` call or at
+    /// `-O0` (the pre-pass would violate the no-optimization contract), so
+    /// the compile-time cost and any phase-ordering influence are confined
+    /// to modules that actually use `mulmod`.
+    fn specialize_constant_modulus_mulmod(
+        &self,
+        target_machine: &TargetMachine,
+    ) -> anyhow::Result<()> {
+        if self.optimizer.settings().level_middle_end == inkwell::OptimizationLevel::None {
+            return Ok(());
+        }
+        let has_mulmod_calls = self
+            .module()
+            .get_function(LLVMRuntime::FUNCTION_MULMOD)
+            .map(|function| {
+                function
+                    .as_global_value()
+                    .as_pointer_value()
+                    .get_first_use()
+                    .is_some()
+            })
+            .unwrap_or(false);
+        if !has_mulmod_calls {
+            return Ok(());
+        }
+        target_machine
+            .run_optimization_passes(self.module(), Self::MULMOD_CONSTANT_FOLD_PASSES)
+            .map_err(|error| {
+                anyhow::anyhow!("the mulmod constant-fold pre-pass failed: {error}")
+            })?;
+        self.rewrite_constant_modulus_mulmod_calls();
+        Ok(())
+    }
+
+    /// The constant-folding pre-pass run by
+    /// [`Self::specialize_constant_modulus_mulmod`]: `mem2reg` surfaces
+    /// moduli held in stack slots, `sccp` folds constants across the
+    /// branches solc emits around composed literals, and `instcombine`
+    /// canonicalizes the remainder into plain `ConstantInt` operands.
+    /// A single `instcombine` iteration suffices for that job, so the
+    /// fixpoint verification a standalone `instcombine` performs by default
+    /// is disabled (the main pipeline reruns `instcombine` to fixpoint
+    /// afterwards anyway).
+    const MULMOD_CONSTANT_FOLD_PASSES: &'static str =
+        "function(mem2reg,sccp,instcombine<no-verify-fixpoint>)";
+
+    /// Rewrites every eligible constant-modulus `__mulmod` call site in the
+    /// module: 256-bit moduli into `__mulmod_barrett` calls carrying the
+    /// precomputed reciprocal, power-of-two moduli into inline `mul` + mask.
+    ///
+    /// Runs both before the main optimization pipeline (from
+    /// [`Self::specialize_constant_modulus_mulmod`]) and after it (from
+    /// [`Self::lower_wide_division`], for moduli the pipeline only then
+    /// exposed as constants); the classification is idempotent, and sites
+    /// rewritten by the first sweep no longer call `__mulmod`, so the second
+    /// sweep cannot see them again.
+    fn rewrite_constant_modulus_mulmod_calls(&self) {
+        // `__mulmod` is a registered runtime function with private linkage:
+        // it always exists at the pre-pipeline sweep, but the pipeline erases
+        // it from modules that never call mulmod, so the post-pipeline sweep
+        // must tolerate its absence; without the function there can be no
+        // eligible call sites.
+        let Some(mulmod_callee) = self
+            .module()
+            .get_function(LLVMRuntime::FUNCTION_MULMOD)
+            .map(|function| function.as_global_value().as_pointer_value())
+        else {
+            return;
+        };
+        let mulmod_barrett = self
+            .module()
+            .get_function(LLVMRuntime::FUNCTION_MULMOD_BARRETT)
+            .unwrap_or_else(|| {
+                panic!(
+                    "{} must be declared in the stdlib module",
+                    LLVMRuntime::FUNCTION_MULMOD_BARRETT
+                )
+            });
+        let builder = self.llvm.create_builder();
+
+        for function in self.module().get_functions() {
+            let mut to_mulmod_rewrite: Vec<(
+                inkwell::values::InstructionValue,
+                constant_division::MulModRewrite,
+            )> = Vec::new();
+
+            for basic_block in function.get_basic_blocks() {
+                for instruction in basic_block.get_instructions() {
+                    if instruction.get_opcode() != InstructionOpcode::Call {
+                        continue;
+                    }
+                    if let Some(rewrite) =
+                        Self::mulmod_rewrite(&builder, &instruction, mulmod_callee)
+                    {
+                        to_mulmod_rewrite.push((instruction, rewrite));
+                    }
+                }
+            }
+
+            for (instruction, rewrite) in to_mulmod_rewrite {
+                let call_operand = |index: u32| {
+                    instruction
+                        .get_operand(index)
+                        .unwrap()
+                        .value()
+                        .unwrap()
+                        .into_int_value()
+                };
+                let factor_one = call_operand(0);
+                let factor_two = call_operand(1);
+                let modulus = call_operand(2);
+
+                builder.position_before(&instruction);
+
+                match rewrite {
+                    constant_division::MulModRewrite::BarrettCall(reciprocal_low) => {
+                        let reciprocal_low_constant =
+                            Self::biguint_constant(self.word_type(), &reciprocal_low);
+                        let call_site = builder
+                            .build_call(
+                                mulmod_barrett,
+                                &[
+                                    factor_one.into(),
+                                    factor_two.into(),
+                                    modulus.into(),
+                                    reciprocal_low_constant.into(),
+                                ],
+                                "",
+                            )
+                            .unwrap();
+                        // The callee is external with default CC; keep the
+                        // fresh call site in lockstep regardless.
+                        call_site.set_call_convention(mulmod_barrett.get_call_conventions());
+                        let call_instruction = call_site
+                            .try_as_basic_value()
+                            .unwrap_basic()
+                            .into_int_value()
+                            .as_instruction()
+                            .unwrap();
+                        instruction.replace_all_uses_with(&call_instruction);
+                        instruction.erase_from_basic_block();
+                    }
+                    constant_division::MulModRewrite::PowerOfTwoMask(exponent) => {
+                        let mask = (num::BigUint::from(1u32) << exponent) - 1u32;
+                        let mask_constant = Self::biguint_constant(self.word_type(), &mask);
+                        let product = builder.build_int_mul(factor_one, factor_two, "").unwrap();
+                        let masked = builder.build_and(product, mask_constant, "").unwrap();
+                        match masked.as_instruction() {
+                            Some(masked_instruction) => {
+                                instruction.replace_all_uses_with(&masked_instruction)
+                            }
+                            // Both factors were constants and the rewrite
+                            // folded away entirely; replace the call's uses
+                            // with the folded constant directly.
+                            None => inkwell::values::IntValue::try_from(instruction)
+                                .expect("the __mulmod call returns an integer")
+                                .replace_all_uses_with(masked),
+                        }
+                        instruction.erase_from_basic_block();
+                    }
+                }
             }
         }
     }

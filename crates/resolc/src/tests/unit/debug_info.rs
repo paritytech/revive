@@ -4,13 +4,13 @@ use revive_llvm_context::OptimizerSettings;
 
 use crate::test_utils::{build_solidity_with_options, sources};
 
-/// Regression test for a PolkaVM debug line-program with too many instructions.
+/// Test for a PolkaVM debug line-program with too many instructions.
 ///
 /// At `-O1` through `-O3` and `-Os`, LLVM merges the identical code of many repeated
 /// calls. With debug info enabled the merged instruction is attributed to every
 /// original call site at once, so the PolkaVM linker reconstructs a very deep
-/// inline-frame stack for a single instruction. `resolc` invoked with `-g` panicked
-/// when there were more line-program ops than the runtime parser read per region.
+/// inline-frame stack for a single instruction. A debug `resolc` build invoked with `-g`
+/// panicked when there were more line-program ops than the runtime parser read per region.
 #[test]
 fn many_repeated_calls_do_not_overflow_the_line_program() {
     let code = r#"

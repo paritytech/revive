@@ -548,7 +548,7 @@ slow:
 ; Quotient bound: upper -- q3 <= (x/2^255)(2^512/m)/2^257 = x/m, so q3 <= q
 ; and r0 >= 0; lower -- q1 > x/2^255 - 1 and mu > 2^512/m - 1 give
 ; q1*mu/2^257 > x/m - x/2^512 - 2^255/m + 2^-257 > x/m - 2, so q3 >= q - 2.
-define i256 @__mulmod_barrett(i256 %a, i256 %b, i256 %m, i256 %mu_lo) #0 {
+define i256 @__mulmod_barrett(i256 %a, i256 %b, i256 %m, i256 %mu_lo) noinline #0 {
 entry:
   %aw  = zext i256 %a to i512
   %bw  = zext i256 %b to i512

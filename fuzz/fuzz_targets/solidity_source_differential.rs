@@ -17,6 +17,7 @@ use libfuzzer_sys::fuzz_target;
 use revive_fuzz::panic_on_divergence::run_source_case_panic;
 
 fuzz_target!(|data: &[u8]| {
+    revive_fuzz::stats::record_input();
     let Ok(source) = std::str::from_utf8(data) else {
         return;
     };

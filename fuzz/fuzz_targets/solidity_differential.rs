@@ -20,6 +20,7 @@ use revive_fuzz::panic_on_divergence::run_solidity_case_panic;
 use revive_fuzz::SolidityCase;
 
 fuzz_target!(|data: &[u8]| {
+    revive_fuzz::stats::record_input();
     let mut unstructured = Unstructured::new(data);
     let Ok(case) = SolidityCase::arbitrary(&mut unstructured) else {
         return;

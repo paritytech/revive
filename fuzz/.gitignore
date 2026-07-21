@@ -1,4 +1,6 @@
 target
 corpus
+corpus-archive
 artifacts
 coverage
+findings

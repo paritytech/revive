@@ -1,0 +1,18 @@
+[package]
+name = "llm-corpus-gen"
+version = "0.0.0"
+edition = "2021"
+publish = false
+description = "LLM-driven Solidity seed-corpus generator for the revive differential fuzzer"
+
+# Standalone crate — deliberately NOT part of the revive workspace, so its
+# HTTP/TLS dependencies stay out of the instrumented fuzzer build graph.
+[workspace]
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+ureq = { version = "2", features = ["json"] }

@@ -24,6 +24,7 @@
 	test-book \
 	fuzz-libfuzzer \
 	fuzz-libfuzzer-source \
+	fuzz-cmin \
 	llm-corpus \
 	coverage \
 	coverage-llvm-report \
@@ -125,15 +126,24 @@ test-book:
 # `JOBS=N` shards across N forked workers. Requires `solc` and geth's
 # `evm` in $PATH. Toolchain pinned via `fuzz/rust-toolchain.toml`.
 fuzz-libfuzzer:
-	cd fuzz && cargo +nightly fuzz run solidity_differential -- -fork=$(or $(JOBS),4) -ignore_crashes=0
+	cd fuzz && REVIVE_FUZZ_FINDINGS_DIR=$(CURDIR)/fuzz/findings \
+		cargo +nightly fuzz run solidity_differential -- \
+		-fork=$(or $(JOBS),4) -ignore_crashes=0 -timeout=$(or $(TIMEOUT),30)
 
 # Source-text differential fuzzer: corpus bytes ARE Solidity source. Seed it
 # with LLM-generated contracts via `make llm-corpus`. Same oracle as
 # `fuzz-libfuzzer`; `solidity.dict` guides text-level mutation. `JOBS=N`
 # shards across N forked workers.
 fuzz-libfuzzer-source:
-	cd fuzz && cargo +nightly fuzz run solidity_source_differential -- \
-		-dict=solidity.dict -fork=$(or $(JOBS),4) -ignore_crashes=0
+	cd fuzz && REVIVE_FUZZ_FINDINGS_DIR=$(CURDIR)/fuzz/findings \
+		cargo +nightly fuzz run solidity_source_differential -- \
+		-dict=solidity.dict -fork=$(or $(JOBS),4) -ignore_crashes=0 -timeout=$(or $(TIMEOUT),30)
+
+# Coverage-minimize the source-text fuzzer corpus (drops redundant-coverage
+# inputs so each run's merge is fast). `-timeout` bounds each unit so one
+# pathological seed can't stall the minimization.
+fuzz-cmin:
+	cd fuzz && cargo +nightly fuzz cmin solidity_source_differential -- -timeout=$(or $(TIMEOUT),30)
 
 # Generate an LLM Solidity seed corpus and copy it into the source-text
 # fuzzer's corpus. `COUNT=N` = contracts per risk area (default 5). Default

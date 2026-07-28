@@ -568,14 +568,15 @@ impl HeapAnalysis {
                 let range = end.saturating_sub(first_word);
                 let num_words =
                     range.saturating_add(BYTE_LENGTH_WORD as u64 - 1) / BYTE_LENGTH_WORD as u64;
+                // Records each covered word; same range walk and corner cases as `taint_range`.
                 if num_words > MAX_RANGE_WORDS {
                     self.escaping_regions.insert(first_word);
                     self.has_dynamic_escapes = true;
                 } else {
                     let mut word = first_word;
-                    while word < end {
+                    for _ in 0..num_words {
                         self.escaping_regions.insert(word);
-                        word += BYTE_LENGTH_WORD as u64;
+                        word = word.saturating_add(BYTE_LENGTH_WORD as u64);
                     }
                 }
             }
@@ -714,14 +715,26 @@ impl HeapAnalysis {
                     .saturating_sub(first_word)
                     .saturating_add(BYTE_LENGTH_WORD as u64 - 1)
                     / BYTE_LENGTH_WORD as u64;
+                // `[address, address + size)` spans `num_words` 32-byte words starting at
+                // the word-aligned `first_word` (`address` rounded down, so a partial leading
+                // word is included). Record each covered word.
+                //
+                // Corner cases:
+                // - Huge ranges (`num_words > MAX_RANGE_WORDS`) would iterate too long, so they
+                //   collapse to the first word plus a dynamic-access flag instead.
+                // - An access near the top of memory saturates `end` at `u64::MAX` (e.g. an
+                //   unaligned store through a corrupted free-memory pointer). Stepping the
+                //   bounded `num_words` count with a saturating add keeps the final increment
+                //   from overflowing `u64` — a plain `word += 32` panics here.
+                // - `size == 0` is excluded by the match guard (an empty range taints nothing).
                 if num_words > MAX_RANGE_WORDS {
                     self.tainted_regions.insert(first_word);
                     self.has_dynamic_accesses = true;
                 } else {
                     let mut word = first_word;
-                    while word < end {
+                    for _ in 0..num_words {
                         self.tainted_regions.insert(word);
-                        word += BYTE_LENGTH_WORD as u64;
+                        word = word.saturating_add(BYTE_LENGTH_WORD as u64);
                     }
                 }
             }
@@ -1043,16 +1056,17 @@ impl HeapAnalysis {
                     .saturating_sub(first_word)
                     .saturating_add(BYTE_LENGTH_WORD as u64 - 1)
                     / BYTE_LENGTH_WORD as u64;
+                // Records each covered word; same range walk and corner cases as `taint_range`.
                 if num_words > MAX_RANGE_WORDS {
                     self.escaping_regions.insert(first_word);
                     self.tainted_regions.insert(first_word);
                     self.has_dynamic_escapes = true;
                 } else {
                     let mut word = first_word;
-                    while word < end {
+                    for _ in 0..num_words {
                         self.escaping_regions.insert(word);
                         self.tainted_regions.insert(word);
-                        word += BYTE_LENGTH_WORD as u64;
+                        word = word.saturating_add(BYTE_LENGTH_WORD as u64);
                     }
                 }
             }
@@ -2107,6 +2121,51 @@ mod tests {
         assert!(
             !after.can_use_native(0x80),
             "post-dedup native mode must be disabled for the now-variable offset word"
+        );
+    }
+
+    /// `taint_range` taints exactly the word-aligned words a static range covers,
+    /// including the partial leading word when the start is unaligned.
+    #[test]
+    fn taint_range_covers_spanned_words() {
+        // Aligned two-word range [0, 64).
+        let mut analysis = HeapAnalysis::new();
+        analysis.taint_range(Some(0), Some(2 * BYTE_LENGTH_WORD as u64));
+        assert_eq!(
+            analysis.tainted_regions,
+            BTreeSet::from([0, BYTE_LENGTH_WORD as u64])
+        );
+        assert!(!analysis.has_dynamic_accesses);
+
+        // A 32-byte access at the unaligned 0x30 spans words 0x20 and 0x40.
+        let mut analysis = HeapAnalysis::new();
+        analysis.taint_range(Some(0x30), Some(BYTE_LENGTH_WORD as u64));
+        assert_eq!(analysis.tainted_regions, BTreeSet::from([0x20, 0x40]));
+    }
+
+    /// A range wider than `MAX_RANGE_WORDS` collapses to the first word plus a
+    /// dynamic-access flag rather than iterating every word.
+    #[test]
+    fn taint_range_huge_range_is_treated_as_dynamic() {
+        let mut analysis = HeapAnalysis::new();
+        let huge = (MAX_RANGE_WORDS + 1) * BYTE_LENGTH_WORD as u64;
+        analysis.taint_range(Some(0), Some(huge));
+        assert_eq!(analysis.tainted_regions, BTreeSet::from([0]));
+        assert!(analysis.has_dynamic_accesses);
+    }
+
+    /// a static access near the top of the address space
+    /// saturates `end` at `u64::MAX`; the word walk must not overflow `u64`.
+    #[test]
+    fn taint_range_top_of_memory_does_not_overflow() {
+        let mut analysis = HeapAnalysis::new();
+        // Unaligned (u64::MAX % 32 == 31) full-word store at the very top of memory —
+        // the shape mem_opt forwards from a corrupted free-memory pointer.
+        analysis.taint_range(Some(u64::MAX), Some(BYTE_LENGTH_WORD as u64));
+        assert_eq!(
+            analysis.tainted_regions,
+            BTreeSet::from([word_align(u64::MAX)]),
+            "only the single covered leading word is tainted"
         );
     }
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+Supported `polkadot-sdk` rev: `2604.2.0`
+
+### Fixed
+- `--newyork`: A bug in dead call value analysis.
+
 ## v1.4.0
 
 Supported `polkadot-sdk` rev: `2604.2.0`

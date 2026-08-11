@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- `--newyork`: an ICE ("attempt to add with overflow") while analyzing a static memory access at the top of the address space, reachable from valid Yul where an `mstore` corrupts the free-memory-pointer word and a later store is forwarded to `u64::MAX`. [#582](https://github.com/paritytech/revive/pull/582)
+
 ## v1.4.0
 
 Supported `polkadot-sdk` rev: `2604.2.0`

@@ -3178,14 +3178,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(())
     }
 
-    /// Find callvalue ValueIds whose every use is an `If` condition.
+    /// Find callvalue [`ValueId`]s whose every use is a [`Statement::If`] condition.
     /// Their `let vN = callvalue()` bindings can be skipped during codegen
     /// because `__revive_callvalue_check()` and `__revive_callvalue_nonzero()`
     /// read callvalue internally when emitting those conditions.
     ///
     /// Uses are counted with [`Statement::for_each_value_id`] — the canonical
     /// walker, which visits every operand position including region yields —
-    /// and compared against the count of `If`-condition uses gathered over the
+    /// and compared against the count of [`Statement::If`]-condition uses gathered over the
     /// same statements. The two walks cover the identical statement set, so a
     /// binding is skippable exactly when the counts match. Any other use — a
     /// region yield, a call argument, a store operand — reads the materialized

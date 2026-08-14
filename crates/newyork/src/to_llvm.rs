@@ -15,8 +15,9 @@ use revive_llvm_context::{
 
 use crate::heap_opt::HeapOptResults;
 use crate::ir::{
-    BinaryOperation, BitWidth, Block, CallKind, CreateKind, Expression, Function, FunctionId,
-    MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value, ValueId,
+    for_each_statement, BinaryOperation, BitWidth, Block, CallKind, CreateKind, Expression,
+    Function, FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type,
+    UnaryOperation, Value, ValueId,
 };
 use crate::type_inference::TypeInference;
 
@@ -3177,284 +3178,85 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(())
     }
 
-    /// Find callvalue ValueIds that are ONLY used as conditions in
-    /// `if callvalue() { revert(0,0) }` or If condition patterns.
-    /// These can be skipped during codegen because __revive_callvalue_check()
-    /// and __revive_callvalue_nonzero() handle reading callvalue internally.
+    /// Find callvalue [`ValueId`]s whose every use is a [`Statement::If`] condition.
+    /// Their `let vN = callvalue()` bindings can be skipped during codegen
+    /// because `__revive_callvalue_check()` and `__revive_callvalue_nonzero()`
+    /// read callvalue internally when emitting those conditions.
+    ///
+    /// Uses are counted with [`Statement::for_each_value_id`] — the canonical
+    /// walker, which visits every operand position including region yields —
+    /// and compared against the count of [`Statement::If`]-condition uses gathered over the
+    /// same statements. The two walks cover the identical statement set, so a
+    /// binding is skippable exactly when the counts match. Any other use — a
+    /// region yield, a call argument, a store operand — reads the materialized
+    /// value, so the binding must stay (see paritytech/revive#588, where a
+    /// switch case yielding a bare callvalue binding was skipped and codegen
+    /// hit an undefined value).
+    ///
+    /// [`Function::return_values`] is counted on top of the statement walk: a return
+    /// variable is recorded on the function itself rather than in its body, yet
+    /// [`Self::generate_function`] reads it back when writing the return slot. A binding
+    /// reaching the slot on the fall-through path has no statement use at all, so without
+    /// this the counts match trivially and the binding is skipped, leaving the function to
+    /// hand back the zero its return slot was seeded with. Explicit `leave`s need no such
+    /// handling because [`Statement::Leave`] carries its values as operands.
     fn find_dead_callvalue_ids(object: &Object) -> BTreeSet<u32> {
         let mut callvalue_ids = BTreeSet::new();
-        let mut used_ids = BTreeSet::new();
-
         Self::find_callvalue_bindings(&object.code.statements, &mut callvalue_ids);
         for function in object.functions.values() {
             Self::find_callvalue_bindings(&function.body.statements, &mut callvalue_ids);
         }
 
-        Self::find_value_uses(&object.code.statements, &callvalue_ids, &mut used_ids);
+        let mut use_counts: BTreeMap<u32, usize> = BTreeMap::new();
+        let mut condition_counts: BTreeMap<u32, usize> = BTreeMap::new();
+        let mut count_uses = |statements: &[Statement]| {
+            for statement in statements {
+                statement.for_each_value_id(&mut |id| {
+                    if callvalue_ids.contains(&id.0) {
+                        *use_counts.entry(id.0).or_default() += 1;
+                    }
+                });
+            }
+            for_each_statement(statements, &mut |statement| {
+                if let Statement::If { condition, .. } = statement {
+                    if callvalue_ids.contains(&condition.id.0) {
+                        *condition_counts.entry(condition.id.0).or_default() += 1;
+                    }
+                }
+            });
+        };
+        count_uses(&object.code.statements);
         for function in object.functions.values() {
-            Self::find_value_uses(&function.body.statements, &callvalue_ids, &mut used_ids);
+            count_uses(&function.body.statements);
         }
 
-        callvalue_ids.difference(&used_ids).copied().collect()
+        for function in object.functions.values() {
+            for return_value_id in &function.return_values {
+                if callvalue_ids.contains(&return_value_id.0) {
+                    *use_counts.entry(return_value_id.0).or_default() += 1;
+                }
+            }
+        }
+
+        callvalue_ids
+            .iter()
+            .filter(|id| {
+                use_counts.get(id).copied().unwrap_or(0)
+                    == condition_counts.get(id).copied().unwrap_or(0)
+            })
+            .copied()
+            .collect()
     }
 
+    /// Collects the ValueIds bound by `let vN = callvalue()` statements.
     fn find_callvalue_bindings(statements: &[Statement], ids: &mut BTreeSet<u32>) {
-        for statement in statements {
+        for_each_statement(statements, &mut |statement| {
             if let Statement::Let { bindings, value } = statement {
                 if bindings.len() == 1 && matches!(value, Expression::CallValue) {
                     ids.insert(bindings[0].0);
                 }
             }
-            Self::for_each_nested_region(statement, |region_statements| {
-                Self::find_callvalue_bindings(region_statements, ids);
-            });
-        }
-    }
-
-    /// Find uses of callvalue IDs in non-condition positions.
-    /// If conditions are OK (handled by callvalue_nonzero); everything else is "used".
-    fn find_value_uses(
-        statements: &[Statement],
-        callvalue_ids: &BTreeSet<u32>,
-        used: &mut BTreeSet<u32>,
-    ) {
-        for statement in statements {
-            match statement {
-                Statement::Let { value, .. } | Statement::Expression(value) => {
-                    Self::collect_expr_value_refs(value, callvalue_ids, used);
-                }
-                Statement::MStore { offset, value, .. }
-                | Statement::MStore8 { offset, value, .. } => {
-                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
-                }
-                Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
-                    Self::mark_if_callvalue(key.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
-                }
-                Statement::If { inputs, .. } => {
-                    for operand in inputs {
-                        Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::Switch {
-                    scrutinee, inputs, ..
-                } => {
-                    Self::mark_if_callvalue(scrutinee.id.0, callvalue_ids, used);
-                    for operand in inputs {
-                        Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::Revert { offset, length } | Statement::Return { offset, length } => {
-                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-                }
-                Statement::Log {
-                    offset,
-                    length,
-                    topics,
-                } => {
-                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-                    for topic in topics {
-                        Self::mark_if_callvalue(topic.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::ExternalCall {
-                    gas,
-                    address,
-                    value,
-                    args_offset,
-                    args_length,
-                    ret_offset,
-                    ret_length,
-                    ..
-                } => {
-                    Self::mark_if_callvalue(gas.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(address.id.0, callvalue_ids, used);
-                    if let Some(operand) = value {
-                        Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-                    }
-                    Self::mark_if_callvalue(args_offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(args_length.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(ret_offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(ret_length.id.0, callvalue_ids, used);
-                }
-                Statement::Create {
-                    value,
-                    offset,
-                    length,
-                    salt,
-                    ..
-                } => {
-                    Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-                    if let Some(salt_value) = salt {
-                        Self::mark_if_callvalue(salt_value.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::CustomErrorRevert { arguments, .. } => {
-                    for argument in arguments {
-                        Self::mark_if_callvalue(argument.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::Leave { return_values } => {
-                    for operand in return_values {
-                        Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::Break { values } | Statement::Continue { values } => {
-                    for operand in values {
-                        Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::For {
-                    initial_values,
-                    condition,
-                    ..
-                } => {
-                    for operand in initial_values {
-                        Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-                    }
-                    Self::collect_expr_value_refs(condition, callvalue_ids, used);
-                }
-                Statement::MCopy {
-                    destination,
-                    source,
-                    length,
-                } => {
-                    Self::mark_if_callvalue(destination.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(source.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-                }
-                Statement::SelfDestruct { address } => {
-                    Self::mark_if_callvalue(address.id.0, callvalue_ids, used);
-                }
-                Statement::CodeCopy {
-                    destination,
-                    offset,
-                    length,
-                } => {
-                    Self::mark_if_callvalue(destination.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-                }
-                Statement::ExtCodeCopy {
-                    address,
-                    destination,
-                    offset,
-                    length,
-                } => {
-                    Self::mark_if_callvalue(address.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(destination.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-                }
-                Statement::MappingSStore { key, slot, value } => {
-                    Self::mark_if_callvalue(key.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(slot.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
-                }
-                _ => {}
-            }
-            Self::for_each_nested_region(statement, |region_statements| {
-                Self::find_value_uses(region_statements, callvalue_ids, used);
-            });
-        }
-    }
-
-    fn mark_if_callvalue(id: u32, callvalue_ids: &BTreeSet<u32>, used: &mut BTreeSet<u32>) {
-        if callvalue_ids.contains(&id) {
-            used.insert(id);
-        }
-    }
-
-    fn collect_expr_value_refs(
-        expression: &Expression,
-        callvalue_ids: &BTreeSet<u32>,
-        used: &mut BTreeSet<u32>,
-    ) {
-        match expression {
-            Expression::Var(variable_id) => {
-                Self::mark_if_callvalue(variable_id.0, callvalue_ids, used)
-            }
-            Expression::Binary { lhs, rhs, .. } => {
-                Self::mark_if_callvalue(lhs.id.0, callvalue_ids, used);
-                Self::mark_if_callvalue(rhs.id.0, callvalue_ids, used);
-            }
-            Expression::Unary { operand, .. }
-            | Expression::Truncate { value: operand, .. }
-            | Expression::ZeroExtend { value: operand, .. }
-            | Expression::SignExtendTo { value: operand, .. } => {
-                Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-            }
-            Expression::Call { arguments, .. } => {
-                for argument in arguments {
-                    Self::mark_if_callvalue(argument.id.0, callvalue_ids, used);
-                }
-            }
-            Expression::Keccak256 { offset, length }
-            | Expression::Keccak256Pair {
-                word0: offset,
-                word1: length,
-            }
-            | Expression::MappingSLoad {
-                key: offset,
-                slot: length,
-            } => {
-                Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-            }
-            Expression::Keccak256Single { word0 } => {
-                Self::mark_if_callvalue(word0.id.0, callvalue_ids, used);
-            }
-            Expression::CallDataLoad { offset } => {
-                Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-            }
-            Expression::MLoad { offset, .. } => {
-                Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-            }
-            _ => {}
-        }
-    }
-
-    /// Call a closure for each nested region's statements in a statement.
-    fn for_each_nested_region<F: FnMut(&[Statement])>(statement: &Statement, mut callback: F) {
-        match statement {
-            Statement::If {
-                then_region,
-                else_region,
-                ..
-            } => {
-                callback(&then_region.statements);
-                if let Some(region) = else_region {
-                    callback(&region.statements);
-                }
-            }
-            Statement::Switch { cases, default, .. } => {
-                for case in cases {
-                    callback(&case.body.statements);
-                }
-                if let Some(default_region) = default {
-                    callback(&default_region.statements);
-                }
-            }
-            Statement::For {
-                condition_statements,
-                body,
-                post,
-                ..
-            } => {
-                callback(condition_statements);
-                callback(&body.statements);
-                callback(&post.statements);
-            }
-            Statement::Block(region) => {
-                callback(&region.statements);
-            }
-            _ => {}
-        }
+        });
     }
 
     /// Counts MappingSLoad and MappingSStore operations separately in an object.
@@ -3547,7 +3349,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// bytes in body overhead, so we only emit it when there are enough
     /// call sites to amortise that cost (per-site savings are ~3 inst).
     fn count_constant_mstore_patterns(object: &Object) -> (usize, usize) {
-        use crate::ir::for_each_statement;
         use num::Zero;
 
         let mut literals: BTreeMap<u32, num::BigUint> = BTreeMap::new();

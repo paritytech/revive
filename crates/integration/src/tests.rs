@@ -2867,6 +2867,52 @@ fn switch_callvalue_cse_dangling() {
     run_differential(actions);
 }
 
+/// A switch case whose region yields a bare `let cv = callvalue()` binding
+/// (the yield being its only use) must keep the binding at codegen. With three or more
+/// callvalue sites the outlined-callvalue path is enabled and its dead-callvalue analysis
+/// skips bindings whose every use is an If condition. Region yields were not counted as
+/// uses, so the binding was skipped and the yield referenced an undefined value, failing
+/// compilation. Compiling and running at all exercises the fix. See SwitchCvYieldOnly.yul
+/// (paritytech/revive#588).
+#[test]
+fn switch_callvalue_yield_only() {
+    let mut actions = instantiate_yul("contracts/SwitchCvYieldOnly.yul", "SwitchCvYieldOnly");
+    for (sel, value) in [(1u64, 0u128), (1, 5), (2, 3), (99, 7)] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: U256::from(sel).to_be_bytes::<32>().to_vec(),
+        });
+    }
+    run_differential(actions);
+}
+
+/// A function returning a bare `let cv = callvalue()` binding through its return variable
+/// must keep the binding at codegen. The dead-callvalue analysis counted uses over the
+/// statement tree only, but a return variable is recorded in `Function::return_values`,
+/// a field outside that tree, so a binding reaching the return slot on the fall-through
+/// path looked unused and was skipped. Codegen seeds return values with zero before the
+/// body runs, so the function silently returned zero instead of the transferred value.
+/// See FunctionCvReturnOnly.yul (paritytech/revive#589).
+#[test]
+fn function_callvalue_return_only() {
+    let mut actions = instantiate_yul("contracts/FunctionCvReturnOnly.yul", "FunctionCvReturnOnly");
+    for (sel, value) in [(1u64, 7u128), (2, 11), (3, 13), (99, 17)] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data: U256::from(sel).to_be_bytes::<32>().to_vec(),
+        });
+    }
+    run_differential(actions);
+}
+
 /// The one-armed `if` lowering must materialize its fall-through `inputs`
 /// before the conditional branch terminates the entry block: a narrow (i1) input needs a `zext` to
 /// reach the join phi, and emitting it after the branch leaves the block without a trailing

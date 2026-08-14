@@ -1,7 +1,7 @@
 [submodule "llvm"]
 	path = llvm
-	url = https://github.com/llvm/llvm-project.git
-	branch = release/21.x
+	url = https://github.com/paritytech/llvm-project.git
+	branch = kvpanch/vec_ext_custom_inst
 [submodule "revive-differential-tests"]
 	path = revive-differential-tests
 	url = https://github.com/paritytech/revive-differential-tests.git

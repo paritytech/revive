@@ -342,6 +342,18 @@ case!(
 );
 
 sol!(
+    contract KeccakConstFoldScratchBug {
+        function run() external returns (uint256);
+    }
+);
+case!(
+    "KeccakConstFoldScratchBug.sol",
+    KeccakConstFoldScratchBug,
+    runCall,
+    keccak_const_fold_scratch_bug,
+);
+
+sol!(
     contract LinkerI32BoundaryFoldBug {
         function test(int256 a0, int256 a2) external pure returns (int256);
     }

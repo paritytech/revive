@@ -156,6 +156,14 @@ pub struct HeapAnalysis {
     /// the corruption site (see the `word_store_overlaps_free_pointer_slot` branch in `mem_opt`'s
     /// `FmpPropagation`).
     fmp_could_be_unbounded: bool,
+    /// Whether a free-memory-pointer corruption by a static misaligned
+    /// overlap store was *observed* — reached by a later `mload(0x40)` or an
+    /// FMP-reading construct (see [`Self::detect_observed_fmp_corruption`]).
+    /// This is the corruption-only component of `fmp_could_be_unbounded`:
+    /// consumers that prove FMP-slot store sanity themselves (the
+    /// scratch-liveness gate in `keccak_fold`) need exactly this bit without
+    /// the value-boundedness causes.
+    fmp_corruption_observed: bool,
     /// Per-`Let`-binding source expression, used by
     /// `is_trusted_fmp_source` to decide whether an mstore's value
     /// comes from a sbrk-style allocator pattern. Only populated for
@@ -255,6 +263,7 @@ impl HeapAnalysis {
             fmp_word_escapes: false,
             variable_accessed_offsets: BTreeSet::new(),
             fmp_could_be_unbounded: false,
+            fmp_corruption_observed: false,
             value_expressions: BTreeMap::new(),
             fmp_corrupting_functions: BTreeSet::new(),
         }
@@ -895,6 +904,7 @@ impl HeapAnalysis {
                 Statement::ErrorStringRevert { .. } => {
                     if corrupt {
                         self.fmp_could_be_unbounded = true;
+                        self.fmp_corruption_observed = true;
                     }
                     exit.terminates = true;
                     return exit;
@@ -936,6 +946,7 @@ impl HeapAnalysis {
     fn scan_expression_fmp_corruption(&mut self, expression: &Expression, corrupt: bool) -> bool {
         if corrupt && self.expression_observes_fmp(expression) {
             self.fmp_could_be_unbounded = true;
+            self.fmp_corruption_observed = true;
         }
         if let Expression::Call { function, .. } = expression {
             if self.fmp_corrupting_functions.contains(function) {
@@ -1273,6 +1284,13 @@ impl HeapAnalysis {
     /// sbrk-bounded. See `fmp_could_be_unbounded` field doc.
     pub fn fmp_could_be_unbounded(&self) -> bool {
         self.fmp_could_be_unbounded
+    }
+
+    /// Returns whether a free-memory-pointer corruption by a static misaligned
+    /// overlap store is observed by a later FMP read. See the
+    /// `fmp_corruption_observed` field documentation.
+    pub fn fmp_corruption_observed(&self) -> bool {
+        self.fmp_corruption_observed
     }
 
     /// Walks the (possibly transitive) `Let` chain for `value_id` and

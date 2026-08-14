@@ -517,6 +517,30 @@ fn const_return_offset_overflow_traps() {
     run_differential(actions);
 }
 
+/// Regression (newyork keccak lowering): folding a constant-operand
+/// `keccak256(0, 0x40)` to a literal hash dropped the fused helper that
+/// writes the hash inputs back to scratch `[0, 0x40)`, while the memory
+/// optimizer had already dead-eliminated the staging `mstore`s on the
+/// strength of that write-back. A later `mload(0)` across a load-forwarding
+/// barrier (the `staticcall`) read unwritten memory: 0 instead of the
+/// hashed mapping key 7. Compared newyork-PVM vs solc-EVM.
+#[test]
+fn keccak_const_fold_scratch_write_back() {
+    let mut actions = instantiate(
+        "contracts/KeccakConstFoldScratchBug.sol",
+        "KeccakConstFoldScratchBug",
+    );
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data: Contract::keccak_const_fold_scratch_bug().calldata,
+    });
+    run_differential(actions);
+}
+
 /// Regression: at `-O3` LLVM proves the low 64 bits of
 /// `(a2 + (a0 << 64)) ^ a2` cancel and narrows the trailing
 /// `| 0x80000000 | 0x80000001` down to native i32 lane operations,

@@ -24,6 +24,7 @@ pub mod guard_narrow;
 pub mod heap_opt;
 pub mod inline;
 pub mod ir;
+pub mod keccak_fold;
 pub mod mapping_access_outlining;
 pub mod mem_opt;
 pub mod printer;
@@ -45,14 +46,14 @@ pub use ir::{
     FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value,
     ValueId,
 };
+pub use keccak_fold::fold_constant_keccak;
 pub use mem_opt::{MemOptResults, MemoryOptimizer};
 pub use printer::{
     print_expression, print_function, print_object, print_object_with_types, print_statement,
     Printer, PrinterConfig,
 };
 pub use simplify::{
-    deduplicate_functions, deduplicate_functions_fuzzy, fold_constant_keccak, Simplifier,
-    SimplifyResults,
+    deduplicate_functions, deduplicate_functions_fuzzy, Simplifier, SimplifyResults,
 };
 pub use ssa::SsaBuilder;
 pub use to_llvm::{CodegenError, LlvmCodegen};
@@ -177,11 +178,16 @@ fn run_late_inline_loop(
 
         let mut simplifier = Simplifier::new();
         simplifier.simplify_object(ir_object);
+        // Late inlining exposes fused keccaks whose operands became constant;
+        // fold them (with the scratch-liveness guard) before outlining turns
+        // them into runtime compound helpers.
+        keccak_fold::fold_constant_keccak(ir_object);
 
         mapping_access_outlining::outline_mapping_accesses_in_object(ir_object);
         guard_narrow::narrow_guards_in_object(ir_object);
         let mut simplifier_post = Simplifier::new();
         simplifier_post.simplify_object(ir_object);
+        keccak_fold::fold_constant_keccak(ir_object);
 
         let _ = deduplicate_functions(ir_object);
         let _ = simplify::deduplicate_functions_fuzzy(ir_object);
@@ -247,27 +253,34 @@ fn optimize_object_tree(object: &mut ir::Object) -> (InlineResults, MemOptResult
     fmp_prop.propagate_object(object);
     mem_opt_results.fmp_loads_eliminated += fmp_prop.loads_eliminated;
 
-    simplify::fold_constant_keccak(object);
+    keccak_fold::fold_constant_keccak(object);
 
+    // The simplifier no longer folds fused keccaks itself (the fold needs the
+    // scratch-liveness guard), so the guarded pass re-runs after every
+    // simplify/inline round that can surface new constant operands.
     let mut simplifier2 = Simplifier::new();
     simplifier2.simplify_object(object);
+    keccak_fold::fold_constant_keccak(object);
 
     mapping_access_outlining::outline_mapping_accesses_in_object(object);
     guard_narrow::narrow_guards_in_object(object);
 
     let mut simplifier3 = Simplifier::new();
     simplifier3.simplify_object(object);
+    keccak_fold::fold_constant_keccak(object);
 
     let _eliminated = inline::eliminate_constant_parameters(object);
     if _eliminated > 0 {
         let mut simplifier_post_const = Simplifier::new();
         simplifier_post_const.simplify_object(object);
+        keccak_fold::fold_constant_keccak(object);
     }
 
     let _predicted = inline::inline_by_shrink_prediction(object);
     if _predicted > 0 {
         let mut simplifier_post_predict = Simplifier::new();
         simplifier_post_predict.simplify_object(object);
+        keccak_fold::fold_constant_keccak(object);
     }
 
     let _dedup_count2 = deduplicate_functions(object);

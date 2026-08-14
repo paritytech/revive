@@ -687,9 +687,10 @@ impl MemoryOptimizer {
     /// dead-eliminated here — a later `mload`, even one mem_opt's forwarding cannot reach (an
     /// intervening clearing event), reads the helper's write-back and sees the value EVM would.
     ///
-    /// Caveat: that write-back is lost if the fused node is later constant-folded to a literal (the
-    /// helper disappears). That is a deliberate, solc-unreachable gap — see the `fold_constant_keccak`
-    /// doc comment in `simplify`.
+    /// Caveat: constant-folding the fused node to a literal removes the helper and with it the
+    /// write-back. The fold in `keccak_fold` therefore only folds bare when scratch is provably
+    /// dead afterwards, and otherwise re-emits explicit write-back `mstore`s for the live words —
+    /// see the `keccak_fold` module documentation.
     fn try_fuse_keccak256(&mut self, offset: Value, length: Value) -> Expression {
         let static_offset = self.try_get_static_offset(&offset);
         let static_length = self.try_get_static_offset(&length);

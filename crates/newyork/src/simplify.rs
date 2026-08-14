@@ -818,36 +818,20 @@ impl Simplifier {
             Expression::Origin => self.cse_env_read(EnvRead::Origin, expression),
             Expression::Timestamp => self.cse_env_read(EnvRead::Timestamp, expression),
 
-            Expression::Keccak256Single { word0 } => {
-                let word0 = self.resolve_value(word0);
-                if let Some(constant) = self.try_get_const(&word0) {
-                    let result = fold_keccak256_single(&constant);
-                    self.statistics.constants_folded += 1;
-                    Expression::Literal {
-                        value: result,
-                        value_type: Type::Int(BitWidth::I256),
-                    }
-                } else {
-                    Expression::Keccak256Single { word0 }
-                }
-            }
+            // Constant-operand fused keccaks are NOT folded here: dropping the
+            // helper also drops its scratch write-back, which is only sound
+            // when scratch `[0, 0x40)` is provably dead afterwards. The
+            // liveness-guarded fold lives in `keccak_fold` and runs after each
+            // simplify round; resolving the operands here keeps candidates
+            // canonical (literal-bound) for that pass.
+            Expression::Keccak256Single { word0 } => Expression::Keccak256Single {
+                word0: self.resolve_value(word0),
+            },
 
-            Expression::Keccak256Pair { word0, word1 } => {
-                let word0 = self.resolve_value(word0);
-                let word1 = self.resolve_value(word1);
-                if let (Some(constant0), Some(constant1)) =
-                    (self.try_get_const(&word0), self.try_get_const(&word1))
-                {
-                    let result = fold_keccak256_pair(&constant0, &constant1);
-                    self.statistics.constants_folded += 1;
-                    Expression::Literal {
-                        value: result,
-                        value_type: Type::Int(BitWidth::I256),
-                    }
-                } else {
-                    Expression::Keccak256Pair { word0, word1 }
-                }
-            }
+            Expression::Keccak256Pair { word0, word1 } => Expression::Keccak256Pair {
+                word0: self.resolve_value(word0),
+                word1: self.resolve_value(word1),
+            },
 
             Expression::MappingSLoad { key, slot } => Expression::MappingSLoad {
                 key: self.resolve_value(key),
@@ -1576,31 +1560,6 @@ fn fold_ternary(
         BinaryOperation::MulMod => (a * b) % n,
         _ => return None,
     })
-}
-
-/// Encodes a BigUint as a 32-byte big-endian buffer (left-padded with zeros).
-fn biguint_to_be32(value: &BigUint) -> [u8; 32] {
-    let bytes = value.to_bytes_be();
-    let mut buffer = [0u8; 32];
-    let start = 32usize.saturating_sub(bytes.len());
-    buffer[start..].copy_from_slice(&bytes[bytes.len().saturating_sub(32)..]);
-    buffer
-}
-
-/// Computes keccak256 of a single 256-bit word at compile time.
-fn fold_keccak256_single(word0: &BigUint) -> BigUint {
-    let buffer = biguint_to_be32(word0);
-    let hash = revive_common::Keccak256::from_slice(&buffer);
-    BigUint::from_bytes_be(hash.as_bytes())
-}
-
-/// Computes keccak256 of two 256-bit words at compile time.
-fn fold_keccak256_pair(word0: &BigUint, word1: &BigUint) -> BigUint {
-    let mut buffer = [0u8; 64];
-    buffer[..32].copy_from_slice(&biguint_to_be32(word0));
-    buffer[32..].copy_from_slice(&biguint_to_be32(word1));
-    let hash = revive_common::Keccak256::from_slice(&buffer);
-    BigUint::from_bytes_be(hash.as_bytes())
 }
 
 /// Returns the power-of-2 exponent if the value is a power of 2.
@@ -3754,125 +3713,6 @@ fn redirect_calls_in_block(block: &mut Block, redirects: &BTreeMap<FunctionId, F
             }
         });
     });
-}
-
-/// Folds constant `Keccak256Single` and `Keccak256Pair` expressions in an object.
-///
-/// This is a targeted pass designed to run after the mem_opt pass, which creates
-/// `Keccak256Single`/`Keccak256Pair` nodes from `mstore + keccak256` patterns.
-/// When the argument(s) are compile-time constants, the hash is precomputed.
-///
-/// **Known gap (deliberate).** The fused `Keccak256Pair`/`Keccak256Single` helper writes its inputs
-/// back to scratch `heap[0..0x40)`/`[0..0x20)`, and the mem_opt fusion *dead-eliminates the original
-/// `mstore`s on the strength of that write-back* (see the fusion comment in `mem_opt`). Folding the
-/// fused node to a literal removes the helper — and with it the write-back — so the scratch is left
-/// unwritten. A later `mload` from `[0, 0x40)` that mem_opt's forwarding cannot reach (across a
-/// region/call boundary) would then read stale memory instead of the hashed inputs.
-///
-/// This gap is NOT closed because every sound fix is a regression — the missing write means the
-/// fold's current output is already short the `mstore`s, so re-emitting them necessarily adds code
-/// (or disabling the fold falls back to the runtime keccak helper: +2.6 KB / +0.78 % on the OZ
-/// corpus), and there is no mem_opt run after the fold to dead-store-eliminate re-emitted writes. It
-/// is solc-unreachable: solc treats scratch as volatile and never re-reads `[0, 0x40)` as data after
-/// a keccak, so the dropped write-back is always dead in compiler-generated code. Only hand-written
-/// Yul that reads scratch after a constant-operand keccak across a boundary can observe it.
-pub fn fold_constant_keccak(object: &mut Object) {
-    fold_keccak_in_block(&mut object.code);
-    for function in object.functions.values_mut() {
-        fold_keccak_in_block(&mut function.body);
-    }
-}
-
-/// Walks a block's statements and folds constant keccak256 expressions.
-fn fold_keccak_in_block(block: &mut Block) {
-    let mut constants: BTreeMap<u32, BigUint> = BTreeMap::new();
-    fold_keccak_in_statements(&mut block.statements, &mut constants);
-}
-
-/// Processes statements, tracking constants and folding keccak expressions.
-fn fold_keccak_in_statements(statements: &mut [Statement], constants: &mut BTreeMap<u32, BigUint>) {
-    for statement in statements.iter_mut() {
-        match statement {
-            Statement::Let {
-                bindings,
-                value: expression,
-            } => {
-                if bindings.len() == 1 {
-                    if let Expression::Literal { value, .. } = expression {
-                        constants.insert(bindings[0].0, value.clone());
-                    }
-                }
-
-                match expression {
-                    Expression::Keccak256Single { word0 } => {
-                        if let Some(constant) = constants.get(&word0.id.0) {
-                            *expression = Expression::Literal {
-                                value: fold_keccak256_single(constant),
-                                value_type: Type::Int(BitWidth::I256),
-                            };
-                        }
-                    }
-                    Expression::Keccak256Pair { word0, word1 } => {
-                        if let (Some(constant0), Some(constant1)) =
-                            (constants.get(&word0.id.0), constants.get(&word1.id.0))
-                        {
-                            let constant0 = constant0.clone();
-                            let constant1 = constant1.clone();
-                            *expression = Expression::Literal {
-                                value: fold_keccak256_pair(&constant0, &constant1),
-                                value_type: Type::Int(BitWidth::I256),
-                            };
-                        }
-                    }
-                    _ => {}
-                }
-
-                if bindings.len() == 1 {
-                    if let Expression::Literal { value, .. } = expression {
-                        constants.insert(bindings[0].0, value.clone());
-                    }
-                }
-            }
-            Statement::If {
-                then_region,
-                else_region,
-                ..
-            } => {
-                fold_keccak_in_statements(&mut then_region.statements, &mut constants.clone());
-                if let Some(else_region_body) = else_region {
-                    fold_keccak_in_statements(
-                        &mut else_region_body.statements,
-                        &mut constants.clone(),
-                    );
-                }
-            }
-            Statement::Switch { cases, default, .. } => {
-                for case in cases.iter_mut() {
-                    fold_keccak_in_statements(&mut case.body.statements, &mut constants.clone());
-                }
-                if let Some(default_region) = default {
-                    fold_keccak_in_statements(
-                        &mut default_region.statements,
-                        &mut constants.clone(),
-                    );
-                }
-            }
-            Statement::For {
-                condition_statements,
-                body,
-                post,
-                ..
-            } => {
-                fold_keccak_in_statements(condition_statements, constants);
-                fold_keccak_in_statements(&mut body.statements, &mut constants.clone());
-                fold_keccak_in_statements(&mut post.statements, &mut constants.clone());
-            }
-            Statement::Block(region) => {
-                fold_keccak_in_statements(&mut region.statements, &mut constants.clone());
-            }
-            _ => {}
-        }
-    }
 }
 
 #[cfg(test)]

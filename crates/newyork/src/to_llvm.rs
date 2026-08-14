@@ -3192,6 +3192,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// value, so the binding must stay (see paritytech/revive#588, where a
     /// switch case yielding a bare callvalue binding was skipped and codegen
     /// hit an undefined value).
+    ///
+    /// [`Function::return_values`] is counted on top of the statement walk: a return
+    /// variable is recorded on the function itself rather than in its body, yet
+    /// [`Self::generate_function`] reads it back when writing the return slot. A binding
+    /// reaching the slot on the fall-through path has no statement use at all, so without
+    /// this the counts match trivially and the binding is skipped, leaving the function to
+    /// hand back the zero its return slot was seeded with. Explicit `leave`s need no such
+    /// handling because [`Statement::Leave`] carries its values as operands.
     fn find_dead_callvalue_ids(object: &Object) -> BTreeSet<u32> {
         let mut callvalue_ids = BTreeSet::new();
         Self::find_callvalue_bindings(&object.code.statements, &mut callvalue_ids);
@@ -3220,6 +3228,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
         count_uses(&object.code.statements);
         for function in object.functions.values() {
             count_uses(&function.body.statements);
+        }
+
+        for function in object.functions.values() {
+            for return_value_id in &function.return_values {
+                if callvalue_ids.contains(&return_value_id.0) {
+                    *use_counts.entry(return_value_id.0).or_default() += 1;
+                }
+            }
         }
 
         callvalue_ids

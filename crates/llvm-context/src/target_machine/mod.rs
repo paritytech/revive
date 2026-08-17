@@ -29,9 +29,10 @@ impl TargetMachine {
 
     /// LLVM target features.
     ///
-    /// `xrevivevec` makes `i256` a machine type held in a file of sixteen 256-bit registers, so
-    /// each wide operation selects to one instruction instead of an i64 limb chain, and wide
-    /// arguments are passed in registers rather than by reference.
+    /// `xrevivevec` makes `i256` a machine type held in a pair of vector registers, so each wide
+    /// operation selects to one instruction instead of an i64 limb chain, and wide arguments are
+    /// passed in registers rather than by reference. It implies the vector extensions that supply
+    /// the registers, so a module may also contain ordinary vector code.
     pub const VM_FEATURES: &'static str = "+e,+m,+a,+c,+zbb,+auipc-addi-fusion,+ld-add-fusion,\
          +lui-addi-fusion,+xtheadcondmov,+relax,+xrevivevec";
 

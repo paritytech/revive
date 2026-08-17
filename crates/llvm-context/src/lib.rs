@@ -121,6 +121,21 @@ const SIZE_LEVEL_Z_ARGUMENTS: &[&str] = &[
     "--hoist-common-insts=true",
 ];
 
+/// Turns off a workaround the vector code generator applies that PolkaVM does not need.
+///
+/// The workaround exists for hardware that mishandles a whole-register move while `vtype`
+/// holds an unsupported configuration. The specification makes those moves independent of
+/// `vtype`, and PolkaVM implements them that way, so the `vsetvli` the workaround inserts
+/// ahead of the first one in a function buys nothing. It costs a kilobyte across the
+/// openzeppelin contracts.
+///
+/// The vector length itself needs no argument: `xrevivevec` is defined for a machine whose
+/// length is exactly the 128 bits `Zvl128b` states, and the backend takes it from there. A
+/// source-level toolchain targeting PolkaVM without the extension says the same thing with
+/// `-mrvv-vector-bits=zvl`.
+const VECTOR_ARGUMENTS: &[&str] =
+    &["--riscv-insert-vsetvli-whole-vector-register-move-valid-vtype=false"];
+
 /// Initializes the LLVM compiler backend.
 ///
 /// This is a no-op if called subsequentially.
@@ -150,6 +165,7 @@ pub fn initialize_llvm(
         &[]
     };
     let argv = std::iter::once(name)
+        .chain(VECTOR_ARGUMENTS.iter().copied())
         .chain(size_arguments.iter().copied())
         .chain(llvm_arguments.iter().map(String::as_str))
         .map(|arg| CString::new(arg.as_bytes()).unwrap())

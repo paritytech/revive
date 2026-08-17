@@ -8917,8 +8917,8 @@ dependencies = [
  "pallet-transaction-payment",
  "parity-scale-codec",
  "paste",
- "polkavm",
- "polkavm-common",
+ "polkavm 0.37.0",
+ "polkavm-common 0.37.0",
  "rand 0.8.6",
  "revm",
  "ripemd",
@@ -8949,7 +8949,7 @@ dependencies = [
  "cargo_metadata",
  "hex",
  "pallet-revive-uapi",
- "polkavm-linker",
+ "polkavm-linker 0.37.0",
  "serde_json",
  "sp-core",
  "sp-io",
@@ -10444,14 +10444,35 @@ dependencies = [
  "libc",
  "log",
  "picosimd",
- "polkavm-assembler",
- "polkavm-common",
- "polkavm-linux-raw",
+ "polkavm-assembler 0.37.0",
+ "polkavm-common 0.37.0",
+ "polkavm-linux-raw 0.37.0",
+]
+
+[[package]]
+name = "polkavm"
+version = "0.37.0"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#75672a4c0cce310759d38e40d99eee8812fa5aed"
+dependencies = [
+ "libc",
+ "log",
+ "picosimd",
+ "polkavm-assembler 0.37.0 (git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr)",
+ "polkavm-common 0.37.0 (git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr)",
+ "polkavm-linux-raw 0.37.0 (git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr)",
 ]
 
 [[package]]
 name = "polkavm-assembler"
 version = "0.37.0"
+dependencies = [
+ "log",
+]
+
+[[package]]
+name = "polkavm-assembler"
+version = "0.37.0"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#75672a4c0cce310759d38e40d99eee8812fa5aed"
 dependencies = [
  "log",
 ]
@@ -10463,7 +10484,17 @@ dependencies = [
  "blake3",
  "log",
  "picosimd",
- "polkavm-assembler",
+ "polkavm-assembler 0.37.0",
+]
+
+[[package]]
+name = "polkavm-common"
+version = "0.37.0"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#75672a4c0cce310759d38e40d99eee8812fa5aed"
+dependencies = [
+ "log",
+ "picosimd",
+ "polkavm-assembler 0.37.0 (git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr)",
 ]
 
 [[package]]
@@ -10477,7 +10508,7 @@ dependencies = [
 name = "polkavm-derive-impl"
 version = "0.37.0"
 dependencies = [
- "polkavm-common",
+ "polkavm-common 0.37.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -10494,12 +10525,13 @@ dependencies = [
 [[package]]
 name = "polkavm-disassembler"
 version = "0.37.0"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#75672a4c0cce310759d38e40d99eee8812fa5aed"
 dependencies = [
  "clap",
  "iced-x86",
- "polkavm",
- "polkavm-common",
- "polkavm-linker",
+ "polkavm 0.37.0 (git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr)",
+ "polkavm-common 0.37.0 (git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr)",
+ "polkavm-linker 0.37.0 (git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr)",
 ]
 
 [[package]]
@@ -10511,7 +10543,22 @@ dependencies = [
  "hashbrown 0.14.5",
  "log",
  "object 0.36.7",
- "polkavm-common",
+ "polkavm-common 0.37.0",
+ "regalloc2 0.9.3",
+ "rustc-demangle",
+]
+
+[[package]]
+name = "polkavm-linker"
+version = "0.37.0"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#75672a4c0cce310759d38e40d99eee8812fa5aed"
+dependencies = [
+ "dirs",
+ "gimli 0.31.1",
+ "hashbrown 0.14.5",
+ "log",
+ "object 0.36.7",
+ "polkavm-common 0.37.0 (git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr)",
  "regalloc2 0.9.3",
  "rustc-demangle",
 ]
@@ -10519,6 +10566,11 @@ dependencies = [
 [[package]]
 name = "polkavm-linux-raw"
 version = "0.37.0"
+
+[[package]]
+name = "polkavm-linux-raw"
+version = "0.37.0"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#75672a4c0cce310759d38e40d99eee8812fa5aed"
 
 [[package]]
 name = "polling"
@@ -11487,7 +11539,7 @@ dependencies = [
  "anyhow",
  "libc",
  "lld-sys",
- "polkavm-linker",
+ "polkavm-linker 0.37.0 (git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr)",
  "revive-builtins",
  "tempfile",
 ]
@@ -11522,7 +11574,7 @@ dependencies = [
  "itertools 0.14.0",
  "libc",
  "num",
- "polkavm-common",
+ "polkavm-common 0.37.0 (git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr)",
  "polkavm-disassembler",
  "revive-common",
  "revive-linker",
@@ -12386,7 +12438,7 @@ dependencies = [
 name = "sc-executor-common"
 version = "0.29.0"
 dependencies = [
- "polkavm",
+ "polkavm 0.37.0",
  "sc-allocator",
  "sp-maybe-compressed-blob",
  "sp-wasm-interface",
@@ -12399,7 +12451,7 @@ name = "sc-executor-polkavm"
 version = "0.29.0"
 dependencies = [
  "log",
- "polkavm",
+ "polkavm 0.37.0",
  "sc-executor-common",
  "sp-runtime-interface",
  "sp-wasm-interface",

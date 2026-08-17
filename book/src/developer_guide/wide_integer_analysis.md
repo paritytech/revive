@@ -49,41 +49,41 @@ written, because the polkavm linker could not yet decode the new encodings; they
 
 ## 1. Result
 
-**−689,538 bytes, −25.96%** across the 15 benchmark contracts (103 modules). Fourteen of the fifteen
+**-689,538 bytes, -25.96%** across the 15 benchmark contracts (103 modules). Fourteen of the fifteen
 improve. Code and read-only data move in opposite directions and are reported separately:
 
 | | baseline | XReviveVec | delta |
 |---|--:|--:|--:|
-| **code** (`.text`) | 2,582,358 | **1,806,612** | **−775,746 (−30.04%)** |
+| **code** (`.text`) | 2,582,358 | **1,806,612** | **-775,746 (-30.04%)** |
 | constant pool (`.rodata`) | 74,023 | 160,231 | +86,208 (+116.46%) |
-| **combined** | **2,656,381** | **1,966,843** | **−689,538 (−25.96%)** |
+| **combined** | **2,656,381** | **1,966,843** | **-689,538 (-25.96%)** |
 
 Wide values live in the vector registers -- `i256` is a type `VRM2` holds, so at VLEN=128 a wide
 value is an LMUL=2 register pair. All 103 modules compile, with no timeouts.
 
-For scale, the carry extension measured −8.64% on this corpus, and it did not change the argument
+For scale, the carry extension measured -8.64% on this corpus, and it did not change the argument
 ABI at all.
 
 ### Per benchmark
 
 | benchmark | modules | baseline | XReviveVec | code only |
 |---|--:|--:|--:|--:|
-| V5QuoteVerifier | 18 | 575,524 | 442,362 (−23.1%) | −26.7% |
-| XENCrypto | 10 | 479,234 | 282,072 (**−41.1%**) | −44.8% |
-| FiatTokenV1 | 16 | 373,746 | 308,768 (−17.4%) | −22.7% |
-| SnapshotPCCSRouter | 13 | 306,187 | 243,915 (−20.3%) | −25.2% |
-| AutomataDcapAttestationFee | 17 | 290,231 | 233,851 (−19.4%) | −23.9% |
-| Festival | 14 | 189,194 | 147,862 (−21.8%) | −26.3% |
-| P2PMarket | 1 | 136,095 | 87,525 (−35.7%) | −37.8% |
-| T3rminalDriver | 3 | 134,985 | 87,061 (−35.5%) | −37.8% |
-| TetherToken | 3 | 52,163 | 39,047 (−25.1%) | −28.8% |
-| ERC20Factory | 2 | 25,486 | 19,662 (−22.9%) | −26.3% |
-| DaimoP256Verifier | 1 | 22,045 | 13,815 (**−37.3%**) | −42.7% |
-| ERC20 | 1 | 21,629 | 15,655 (−27.6%) | −30.8% |
-| Multicall3 | 1 | 21,367 | 18,457 (−13.6%) | −15.8% |
-| WETH9 | 2 | 20,436 | 17,420 (−14.8%) | −18.1% |
+| V5QuoteVerifier | 18 | 575,524 | 442,362 (-23.1%) | -26.7% |
+| XENCrypto | 10 | 479,234 | 282,072 (**-41.1%**) | -44.8% |
+| FiatTokenV1 | 16 | 373,746 | 308,768 (-17.4%) | -22.7% |
+| SnapshotPCCSRouter | 13 | 306,187 | 243,915 (-20.3%) | -25.2% |
+| AutomataDcapAttestationFee | 17 | 290,231 | 233,851 (-19.4%) | -23.9% |
+| Festival | 14 | 189,194 | 147,862 (-21.8%) | -26.3% |
+| P2PMarket | 1 | 136,095 | 87,525 (-35.7%) | -37.8% |
+| T3rminalDriver | 3 | 134,985 | 87,061 (-35.5%) | -37.8% |
+| TetherToken | 3 | 52,163 | 39,047 (-25.1%) | -28.8% |
+| ERC20Factory | 2 | 25,486 | 19,662 (-22.9%) | -26.3% |
+| DaimoP256Verifier | 1 | 22,045 | 13,815 (**-37.3%**) | -42.7% |
+| ERC20 | 1 | 21,629 | 15,655 (-27.6%) | -30.8% |
+| Multicall3 | 1 | 21,367 | 18,457 (-13.6%) | -15.8% |
+| WETH9 | 2 | 20,436 | 17,420 (-14.8%) | -18.1% |
 | Sha256 | 1 | 8,059 | 9,371 (**+16.3%**) | +10.9% |
-| **TOTAL** | **103** | **2,656,381** | **1,966,843** | **−30.04%** |
+| **TOTAL** | **103** | **2,656,381** | **1,966,843** | **-30.04%** |
 
 Sha256 is the one regression and the one contract that is a 32-bit algorithm written in 256-bit
 words; see the constant-materialization discussion in §2 and the narrowing work in §7.
@@ -174,22 +174,22 @@ Measured on its own -- wide constants still coming from the pool, which step 2 f
 
 | benchmark | baseline | step 1 | delta |
 |---|--:|--:|--:|
-| V5QuoteVerifier | 575,524 | 553,100 | −3.90% |
-| XENCrypto | 479,234 | 340,772 | **−28.89%** |
+| V5QuoteVerifier | 575,524 | 553,100 | -3.90% |
+| XENCrypto | 479,234 | 340,772 | **-28.89%** |
 | FiatTokenV1 | 373,746 | 375,660 | +0.51% |
-| SnapshotPCCSRouter | 306,187 | 302,263 | −1.28% |
-| AutomataDcapAttestationFee | 290,231 | 286,901 | −1.15% |
-| Festival | 189,194 | 171,942 | −9.12% |
-| P2PMarket | 136,095 | 101,139 | −25.68% |
-| T3rminalDriver | 134,985 | 102,883 | −23.78% |
-| TetherToken | 52,163 | 44,699 | −14.31% |
-| ERC20Factory | 25,486 | 22,862 | −10.30% |
-| DaimoP256Verifier | 22,045 | 15,609 | **−29.19%** |
-| ERC20 | 21,629 | 18,461 | −14.65% |
+| SnapshotPCCSRouter | 306,187 | 302,263 | -1.28% |
+| AutomataDcapAttestationFee | 290,231 | 286,901 | -1.15% |
+| Festival | 189,194 | 171,942 | -9.12% |
+| P2PMarket | 136,095 | 101,139 | -25.68% |
+| T3rminalDriver | 134,985 | 102,883 | -23.78% |
+| TetherToken | 52,163 | 44,699 | -14.31% |
+| ERC20Factory | 25,486 | 22,862 | -10.30% |
+| DaimoP256Verifier | 22,045 | 15,609 | **-29.19%** |
+| ERC20 | 21,629 | 18,461 | -14.65% |
 | Multicall3 | 21,367 | 21,717 | +1.64% |
-| WETH9 | 20,436 | 19,816 | −3.03% |
+| WETH9 | 20,436 | 19,816 | -3.03% |
 | Sha256 | 8,059 | 11,195 | **+38.91%** |
-| **TOTAL** | **2,656,381** | **2,389,019** | **−10.06%** |
+| **TOTAL** | **2,656,381** | **2,389,019** | **-10.06%** |
 
 **Code falls 26.79% at this step, but the constant pool grows 573%**, so only 10 points survive into
 the combined figure. Three benchmarks come out worse. That is not a property of the instruction set;
@@ -223,22 +223,22 @@ either -- LegalizeDAG then falls back to its default constant expansion, which *
 
 | benchmark | step 1 | step 2 | gain |
 |---|--:|--:|--:|
-| V5QuoteVerifier | −3.90% | **−23.14%** | +19.2 pts |
-| XENCrypto | −28.89% | **−41.14%** | +12.3 pts |
-| FiatTokenV1 | +0.51% | **−17.39%** | +17.9 pts |
-| SnapshotPCCSRouter | −1.28% | **−20.34%** | +19.1 pts |
-| AutomataDcapAttestationFee | −1.15% | **−19.43%** | +18.3 pts |
-| Festival | −9.12% | **−21.85%** | +12.7 pts |
-| P2PMarket | −25.68% | **−35.69%** | +10.0 pts |
-| T3rminalDriver | −23.78% | **−35.50%** | +11.7 pts |
-| TetherToken | −14.31% | **−25.14%** | +10.8 pts |
-| ERC20Factory | −10.30% | **−22.85%** | +12.6 pts |
-| DaimoP256Verifier | −29.19% | **−37.33%** | +8.1 pts |
-| ERC20 | −14.65% | **−27.62%** | +13.0 pts |
-| Multicall3 | +1.64% | **−13.62%** | +15.3 pts |
-| WETH9 | −3.03% | **−14.76%** | +11.7 pts |
+| V5QuoteVerifier | -3.90% | **-23.14%** | +19.2 pts |
+| XENCrypto | -28.89% | **-41.14%** | +12.3 pts |
+| FiatTokenV1 | +0.51% | **-17.39%** | +17.9 pts |
+| SnapshotPCCSRouter | -1.28% | **-20.34%** | +19.1 pts |
+| AutomataDcapAttestationFee | -1.15% | **-19.43%** | +18.3 pts |
+| Festival | -9.12% | **-21.85%** | +12.7 pts |
+| P2PMarket | -25.68% | **-35.69%** | +10.0 pts |
+| T3rminalDriver | -23.78% | **-35.50%** | +11.7 pts |
+| TetherToken | -14.31% | **-25.14%** | +10.8 pts |
+| ERC20Factory | -10.30% | **-22.85%** | +12.6 pts |
+| DaimoP256Verifier | -29.19% | **-37.33%** | +8.1 pts |
+| ERC20 | -14.65% | **-27.62%** | +13.0 pts |
+| Multicall3 | +1.64% | **-13.62%** | +15.3 pts |
+| WETH9 | -3.03% | **-14.76%** | +11.7 pts |
 | Sha256 | +38.91% | **+16.28%** | +22.6 pts |
-| **TOTAL** | **−10.06%** | **−25.96%** | **+15.9 pts** |
+| **TOTAL** | **-10.06%** | **-25.96%** | **+15.9 pts** |
 
 The constant pool drops from +573.53% to +116.46%, and every benchmark improves by 8 to 23 points.
 The three that step 1 made worse are all recovered; Sha256 is still a regression but less than half
@@ -269,27 +269,27 @@ with fixed-size spill slots. It is **15.6 percentage points smaller**:
 
 | | code | constant pool | combined |
 |---|--:|--:|--:|
-| vector registers (current) | 1,806,612 | 160,231 | **1,966,843 (−25.96%)** |
-| separate `W` file | 1,392,900 | 160,231 | **1,553,131 (−41.53%)** |
+| vector registers (current) | 1,806,612 | 160,231 | **1,966,843 (-25.96%)** |
+| separate `W` file | 1,392,900 | 160,231 | **1,553,131 (-41.53%)** |
 
 | benchmark | vector regs | `W` file | gap |
 |---|--:|--:|--:|
-| V5QuoteVerifier | −23.1% | −43.3% | 35.7% |
-| XENCrypto | −41.1% | −50.3% | 18.3% |
-| FiatTokenV1 | −17.4% | −31.8% | 21.0% |
-| SnapshotPCCSRouter | −20.3% | −40.0% | 32.9% |
-| AutomataDcapAttestationFee | −19.4% | −39.5% | 33.2% |
-| Festival | −21.8% | −32.9% | 16.5% |
-| P2PMarket | −35.7% | −47.6% | 22.8% |
-| T3rminalDriver | −35.5% | −48.2% | 24.6% |
-| TetherToken | −25.1% | −37.7% | 20.1% |
-| ERC20Factory | −22.9% | −35.9% | 20.4% |
-| DaimoP256Verifier | −37.3% | −55.2% | 39.8% |
-| ERC20 | −27.6% | −41.2% | 23.0% |
-| Multicall3 | −13.6% | −38.8% | 41.1% |
-| WETH9 | −14.8% | −27.9% | 18.3% |
-| Sha256 | +16.3% | −12.5% | 32.9% |
-| **TOTAL** | **−26.0%** | **−41.5%** | **26.6%** |
+| V5QuoteVerifier | -23.1% | -43.3% | 35.7% |
+| XENCrypto | -41.1% | -50.3% | 18.3% |
+| FiatTokenV1 | -17.4% | -31.8% | 21.0% |
+| SnapshotPCCSRouter | -20.3% | -40.0% | 32.9% |
+| AutomataDcapAttestationFee | -19.4% | -39.5% | 33.2% |
+| Festival | -21.8% | -32.9% | 16.5% |
+| P2PMarket | -35.7% | -47.6% | 22.8% |
+| T3rminalDriver | -35.5% | -48.2% | 24.6% |
+| TetherToken | -25.1% | -37.7% | 20.1% |
+| ERC20Factory | -22.9% | -35.9% | 20.4% |
+| DaimoP256Verifier | -37.3% | -55.2% | 39.8% |
+| ERC20 | -27.6% | -41.2% | 23.0% |
+| Multicall3 | -13.6% | -38.8% | 41.1% |
+| WETH9 | -14.8% | -27.9% | 18.3% |
+| Sha256 | +16.3% | -12.5% | 32.9% |
+| **TOTAL** | **-26.0%** | **-41.5%** | **26.6%** |
 
 Almost all of the 413,712-byte gap is the scalable spill slots: `csrr vlenb` sequences that a
 fixed-size class does not need.
@@ -310,7 +310,7 @@ length-agnostic; the other three raise VLEN or pin it with `-riscv-v-vector-bits
 
 | configuration | code | constant pool | combined | vs Zvl128 VLA |
 |---|--:|--:|--:|--:|
-| `Zvl128`, VLA | 1,806,612 | 160,231 | 1,966,843 | — |
+| `Zvl128`, VLA | 1,806,612 | 160,231 | 1,966,843 | baseline |
 | `Zvl128`, VLS | 1,806,612 | 160,231 | 1,966,843 | **+0 (0.00%)** |
 | `Zvl256`, VLA | 1,806,656 | 160,231 | 1,966,887 | +44 (0.00%) |
 | `Zvl256`, VLS | 1,806,656 | 160,231 | 1,966,887 | +44 (0.00%) |
@@ -420,7 +420,7 @@ calls, more than every wide arithmetic operation in the corpus except `icmp ult`
 exactly 256 bits at VLEN=128. Copies, spills and reloads reuse RVV's own `VMV2R_V`, `VS2R_V` and
 `VL2RE8_V`, and arguments use the existing `ArgVRM2s`. An earlier revision used a parallel register
 file for this; see the future-improvement note at the end of §2. A decoder reading the ELF sees vector
-register numbers. `w4`–`w11` (encoding `v8`–`v22`) are the argument registers, mirroring `ArgVRM2s`.
+register numbers. `w4` to `w11` (encoding `v8` to `v22`) are the argument registers, mirroring `ArgVRM2s`.
 
 **Instructions**, all in the custom-2 opcode space, `funct3` selecting operand shape:
 
@@ -433,11 +433,11 @@ register numbers. `w4`–`w11` (encoding `v8`–`v22`) are the argument register
 | memory | `wld` `wst` |
 | EVM-specific | `waddmod` `wmulmod` `wexp` `wsignextend` |
 
-`ugt`/`sgt` need no encoding — they are the same instruction with operands swapped. `le`/`ge` forms
+`ugt`/`sgt` need no encoding: they are the same instruction with operands swapped. `le`/`ge` forms
 are reached by inverting, via `setCondCodeAction(..., Expand)`.
 
-**Calling convention.** Wide values pass in wide registers in both `CC_RISCV` and `CC_RISCV_FastCC`
-— the latter matters because revive gives its internal functions `fastcc`, so that is the path most
+**Calling convention.** Wide values pass in wide registers in both `CC_RISCV` and `CC_RISCV_FastCC`;
+the latter matters because revive gives its internal functions `fastcc`, so that is the path most
 `i256` arguments actually take. A three-argument wide call now marshals nothing at all:
 
 ```text
@@ -495,7 +495,7 @@ no scalar type could be wider than an XLen register**.
 1. **`riscv_seteq` is a C++ `ComplexPattern`**, not a TableGen pattern, so it never type-checked its
    operands. It matched `setcc` on `i256` and emitted a GPR `XOR`, silently inserting a cross-class
    copy. Guarded on the operand being XLen-sized. The same trap was hit by the earlier `w256`
-   prototype — a C++ matcher is invisible to TableGen's type inference.
+   prototype: a C++ matcher is invisible to TableGen's type inference.
 
 2. **`DAGCombiner` merged adjacent constant stores into a 256-bit store, then re-widened its own
    result forever.** This hung the largest module. Fixed by overriding `canMergeStoresTo`, which is
@@ -506,7 +506,7 @@ no scalar type could be wider than an XLen register**.
    because `MaxDivRemBitWidthSupported` was 128. Raised to 256 when the extension is on.
 
 4. **The calling-convention fast path desynchronised `PendingLocs`** for split aggregates, and the
-   rejection surfaced as `llvm_unreachable(nullptr)` — an abort with no message at all. Guarded on
+   rejection surfaced as `llvm_unreachable(nullptr)`, an abort with no message at all. Guarded on
    `!ArgFlags.isSplit() && PendingLocs.empty()`.
 
 5. **Wide spill slots requested 32-byte alignment**, which exceeds the 8-byte stack alignment of
@@ -518,7 +518,7 @@ no scalar type could be wider than an XLen register**.
 6. **Missing patterns surfaced one at a time** as the corpus exercised them: `bswap` (no generic
    expansion exists at this width, and EVM byte-swaps constantly for big-endian calldata),
    extending loads from `i8`/`i16`/`i32`/`i64`, and truncating stores. `EXTLOAD` cannot be marked
-   `Expand` — LegalizeDAG asserts it is always supported — so it needs real patterns. The missing
+   `Expand`, because LegalizeDAG asserts it is always supported, so it needs real patterns. The missing
    `extloadi64` pattern was what made the largest module pathologically slow.
 
 7. **Every wide immediate went to the constant pool**, because the first version only built values
@@ -605,7 +605,7 @@ and its operands with the scalar instruction. That is where the residual Sha256 
 ## 8. What is not done
 
 **The EVM-specific instructions work, but nothing emits them yet.** `waddmod`, `wmulmod`, `wexp` and
-`wsignextend` have encodings, intrinsics and patterns, and each selects to a single instruction —
+`wsignextend` have encodings, intrinsics and patterns, and each selects to a single instruction,
 verified:
 
 ```text
@@ -617,7 +617,7 @@ What is missing is the resolc side: it still calls the hand-written routines in 
 measurement above **excludes** this win entirely. The corpus has 57 `__mulmod`, 22 `__addmod` and
 18 `__exp` call sites; `__mulmod` is 4,534 bytes and drags in `__ulongrem` at 5,710 for the slow
 path that every modulus near 2²⁵⁶ takes, and the production routines plus helpers come to 15,688
-bytes. Note this win cannot be measured through the `llc` harness at all — the saving comes from the
+bytes. Note this win cannot be measured through the `llc` harness at all: the saving comes from the
 routine bodies becoming unreferenced, and only the PVM linker garbage-collects them.
 
 Getting there needed one piece of LLVM plumbing worth calling out: **intrinsics could not take a
@@ -626,8 +626,8 @@ because no in-tree target has a scalar that wide, so the declarations verified a
 type". Adding `IIT_I256` and its decoder case fixed it.
 
 **PVM cannot consume the output**, which is the agreed boundary for this phase. `resolc` now runs
-end-to-end against this LLVM — `VM_FEATURES` requests `+xrevivevec`, and Solidity → Yul → LLVM IR →
-RISC-V object all succeed — and then the polkavm linker rejects the encodings:
+end-to-end against this LLVM (`VM_FEATURES` requests `+xrevivevec`, and Solidity to Yul to LLVM IR
+to RISC-V object all succeed) and then the polkavm linker rejects the encodings:
 
 ```text
 polkavm linker failed: unsupported instruction in <section #0+726> ('.text') at address 0x2d6: 0x0005445b
@@ -639,7 +639,7 @@ polkavm linker failed: unsupported instruction in <section #0+726> ('.text') at 
 a blob for *any* contract, so the branch is an experiment, not something to merge as-is.
 
 What has been demonstrated through `resolc` itself is ERC20 (complete object) and
-AutomataDcapAttestationFee (all 16 modules emitted) — the rest of the corpus is covered at the
+AutomataDcapAttestationFee (all 16 modules emitted); the rest of the corpus is covered at the
 codegen level by the 103-module measurement above, which is the same compiler and the same IR, but
 driven through `llc` rather than the `resolc` front end.
 

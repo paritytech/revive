@@ -50,9 +50,9 @@ bytes rather than four; a general vector instruction names a register in a byte.
 
 ## The calling convention
 
-Wide arguments and returns travel in `v8`–`v23`, eight pairs, which is where the standard
-vector calling convention puts vector arguments. The one departure is that `v0`–`v7` and
-`v24`–`v31` are callee saved, where the standard convention has no callee-saved vector
+Wide arguments and returns travel in `v8` to `v23`, eight pairs, which is where the standard
+vector calling convention puts vector arguments. The one departure is that `v0` to `v7` and
+`v24` to `v31` are callee saved, where the standard convention has no callee-saved vector
 register at all: wide values are what revive keeps live across calls, and without this the
 caller spilled and reloaded every one of them at every call site.
 
@@ -85,9 +85,16 @@ that set is refused at link time rather than at run time.
 
 The wide instructions' semantics are the EVM's rather than Rust's: division and remainder by
 zero produce zero, shift amounts of 256 or more clear the value, and `addmod`/`mulmod` keep
-the untruncated intermediate. The interpreter implements everything above; the recompiler
-implements none of it, and refuses to compile a module that uses any of it rather than
-producing one that traps.
+the untruncated intermediate.
+
+The interpreter and the recompiler both execute everything above, out of one implementation:
+every operation on the register file lives in `polkavm-common`, the interpreter calls it
+directly, and recompiled code reaches it through a native helper that receives the
+instruction's operands packed at translation time. A recompiled memory access is answered
+rather than performed by the helper, with a source, a destination and a length; the bytes
+move in recompiled code, so that a page fault lands where the signal handler can attribute
+it to the guest address the call site recorded. The execution tests run each backend and,
+in the tracing configuration, run both in lockstep.
 
 ## Encoding
 
@@ -106,26 +113,29 @@ enough in practice that the extra byte does not matter.
 
 ## Status
 
-Experimental, and behind the `+xrevivevec` target feature.
+Experimental, and behind the `+xrevivevec` target feature, which resolc requests by
+default. Setting `RESOLC_DISABLE_WIDE_INTEGERS` in the environment compiles without the
+extension, which is how the baseline column below is produced, and what a bisection or a
+blob for a PolkaVM without the instructions uses.
 
 Over the openzeppelin contracts in `oz-tests`, PVM blobs are **50% smaller**: 301,262 bytes
 become 148,847.
 
 | contract | without | with | delta |
 |---|--:|--:|--:|
-| erc1155 | 30,649 | 16,243 | −47.0% |
-| erc20 | 42,893 | 21,907 | −48.9% |
-| erc721 | 49,423 | 23,981 | −51.5% |
-| oz_gov | 81,159 | 40,147 | −50.5% |
-| oz_rwa | 37,975 | 18,303 | −51.8% |
-| oz_simple_erc20 | 16,554 | 7,806 | −52.8% |
-| oz_stable | 39,032 | 17,733 | −54.6% |
-| proxy | 3,577 | 2,727 | −23.8% |
-| **total** | **301,262** | **148,847** | **−50.6%** |
+| erc1155 | 30,649 | 16,243 | -47.0% |
+| erc20 | 42,893 | 21,907 | -48.9% |
+| erc721 | 49,423 | 23,981 | -51.5% |
+| oz_gov | 81,159 | 40,147 | -50.5% |
+| oz_rwa | 37,975 | 18,303 | -51.8% |
+| oz_simple_erc20 | 16,554 | 7,806 | -52.8% |
+| oz_stable | 39,032 | 17,733 | -54.6% |
+| proxy | 3,577 | 2,727 | -23.8% |
+| **total** | **301,262** | **148,847** | **-50.6%** |
 
 The Phase 1 report measured an earlier arrangement of the same idea and answered the width
 and addressing questions on it: `Zvl128b` against `Zvl256b` was 44 bytes, and pinning the
 vector length made no difference at all, leaving the spill slots scalable and the `csrr
-vlenb` sequences in place. The second of those no longer holds — pinning the length is now
+vlenb` sequences in place. The second of those no longer holds: pinning the length is now
 what removes them, because the backend was taught to act on it. It is in
 [Measurements](./wide_integer_analysis.md).

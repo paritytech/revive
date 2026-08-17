@@ -47,6 +47,7 @@ install-llvm-builder:
 	cargo install --force --locked --path crates/llvm-builder
 
 install-llvm: install-llvm-builder
+	git submodule sync --recursive
 	git submodule update --init --recursive --depth 1
 	revive-llvm build --llvm-projects lld --llvm-projects clang
 
@@ -54,6 +55,7 @@ install-llvm: install-llvm-builder
 # Shares the `target-llvm/<env>/` tree with `install-llvm`.
 # Run `revive-llvm clean` between variants. `JOBS=N` caps build parallelism.
 install-llvm-coverage: install-llvm-builder
+	git submodule sync --recursive
 	git submodule update --init --recursive --depth 1
 	CMAKE_BUILD_PARALLEL_LEVEL=$(JOBS) revive-llvm build --llvm-projects lld --llvm-projects clang --enable-coverage
 

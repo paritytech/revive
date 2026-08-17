@@ -150,3 +150,11 @@ pub fn check_attribute_min_size_mode_z() {
         .attributes(inkwell::attributes::AttributeLoc::Function)
         .contains(&llvm.create_enum_attribute(Attribute::MinSize as u32, 0)));
 }
+
+#[test]
+pub fn custom_wide_instruction_intrinsics_exist() {
+    assert!(
+        inkwell::intrinsics::Intrinsic::find("llvm.riscv.revive.mulmod").is_some(),
+        "the linked LLVM does not carry the custom wide instruction intrinsics"
+    );
+}

@@ -1,5 +1,39 @@
 # Wide integer extension: measurements
 
+## Phase 2: PVM blobs
+
+The numbers below stop at the object file, because when they were taken the polkavm linker could
+not decode the new encodings. It can now, and the whole pipeline runs, so the measurement that
+matters is available: the size of the linked PVM blob.
+
+Over the openzeppelin contracts in `oz-tests`, against the same compiler with `+xrevivevec`
+removed:
+
+| contract | without | with | change |
+|---|--:|--:|--:|
+| erc1155 | 30,649 | 16,514 | -46.1% |
+| erc20 | 42,893 | 21,969 | -48.8% |
+| erc721 | 49,423 | 24,128 | -51.2% |
+| oz_gov | 81,159 | 40,511 | -50.1% |
+| oz_rwa | 37,975 | 18,532 | -51.2% |
+| oz_simple_erc20 | 16,554 | 7,932 | -52.1% |
+| oz_stable | 39,032 | 17,904 | -54.1% |
+| proxy | 3,577 | 2,797 | -21.8% |
+| **total** | **301,262** | **150,287** | **-50.1%** |
+
+`proxy` gains least because almost all of it is dispatch and runtime rather than wide
+arithmetic.
+
+Three changes on top of phase 1 account for most of the difference between the object-level
+`-30%` and this. Wide values live in a register file of the extension's own rather than in
+`VRM2`, so no vector type is legal and the spill and copy paths are the extension's own
+instructions against fixed-size stack slots. Half that file is callee saved, so a value live
+across a call is saved once rather than at every call site. And `addmod`, `mulmod`, `exp` and
+`signextend` reach their instructions, where before revive still called the `stdlib.ll`
+routines the instructions exist to replace.
+
+---
+
 Phase 1 of the vector-extension experiment. The goal was to stop LLVM legalizing EVM words into
 `i64` limb chains, and instead select one instruction per wide operation with operands living in
 wide registers.
@@ -8,8 +42,8 @@ Measured on the 15 benchmark contracts under `benchmarks/single-file` (103 modul
 corpus used for the earlier carry-extension analysis, which established where revive's code size
 goes.
 Sizes are taken per section from the compiled object -- code and constant pool separately, because
-the extension moves them in opposite directions. PVM blob sizes are unavailable because the polkavm
-linker cannot decode the new encodings, as agreed for this phase.
+the extension moves them in opposite directions. PVM blob sizes were unavailable when this was
+written, because the polkavm linker could not yet decode the new encodings; they are above.
 
 ---
 
@@ -107,7 +141,7 @@ the custom-2 opcode space; a `Select_VRM2` pseudo for wide selects (2,036 `phi i
 and wide arguments in vector registers in *both* `CC_RISCV` and `CC_RISCV_FastCC` -- the latter
 matters because revive gives its internal functions `fastcc`.
 
-```
+```text
 add i256                              icmp ult i256
 --------------------------------      ------------------------------
   ld   a5, 0(a2)                        ld    a2, 8(a1)
@@ -122,7 +156,7 @@ add i256                              icmp ult i256
 
 The ABI change is the larger half. A three-argument wide call passed everything by reference:
 
-```
+```text
 call3:  addi sp, sp, -192        ->    call3:  addi sp, sp, -16
         sd   ra, 184(sp)                       sd   ra, 8(sp)
         sd   s0, 176(sp)                       addi s0, sp, 16
@@ -170,7 +204,7 @@ built each 64-bit limb with `li`/`lui` and folded away limbs that were zero.
 Values that fit an XLen register are now built there and widened. Both directions matter: masks like
 `-1` have 256 active bits but only one *significant* bit, and are everywhere in EVM code.
 
-```
+```text
 i256 0xFFFFFFFF                       i256 0            i256 -1
 ------------------------------        --------------    ------------------
   lui  a0, %hi(.LCPI2_0)                (pool load)       (pool load)
@@ -338,7 +372,7 @@ of them matter.
 **`umin`/`umax` are the only genuine instruction gap**, at 467 sites. They are `Expand` today, which
 produces a compare, a branch and a copy:
 
-```
+```text
 revive.wsltu a0, v8, v10
 bnez         a0, .LBB0_2
 vsetivli     zero, 1, e8, m1, ta, ma
@@ -406,7 +440,7 @@ are reached by inverting, via `setCondCodeAction(..., Expand)`.
 — the latter matters because revive gives its internal functions `fastcc`, so that is the path most
 `i256` arguments actually take. A three-argument wide call now marshals nothing at all:
 
-```
+```text
 f_call:  addi sp, sp, -8 ; sd ra, 0(sp) ; call opaque ; ld ra, 0(sp) ; addi sp, sp, 8 ; ret
 ```
 
@@ -509,7 +543,7 @@ designs (160,231 either way), so nothing here is about data.
 
 The mechanism is visible in a single spill:
 
-```
+```text
 csrr a1, vlenb        <- RVV slots are sized in vlenb, not bytes
 li   a2, 38
 mul  a1, a1, a2
@@ -574,7 +608,7 @@ and its operands with the scalar instruction. That is where the residual Sha256 
 `wsignextend` have encodings, intrinsics and patterns, and each selects to a single instruction —
 verified:
 
-```
+```text
 revive.waddmod w4, w4, w5, w6      revive.wexp        w4, w4, w5
 revive.wmulmod w4, w4, w5, w6      revive.wsignextend w4, w4, w5
 ```
@@ -595,7 +629,7 @@ type". Adding `IIT_I256` and its decoder case fixed it.
 end-to-end against this LLVM — `VM_FEATURES` requests `+xrevivevec`, and Solidity → Yul → LLVM IR →
 RISC-V object all succeed — and then the polkavm linker rejects the encodings:
 
-```
+```text
 polkavm linker failed: unsupported instruction in <section #0+726> ('.text') at address 0x2d6: 0x0005445b
 ```
 

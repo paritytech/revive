@@ -45,11 +45,32 @@ shift amounts of 256 or more clear the value, and `addmod`/`mulmod` keep the unt
 intermediate. The interpreter implements all of them; the recompiler does not, and refuses
 to compile a module that uses them rather than producing one that traps.
 
+## Encoding
+
+Wide operands are nibbles, two to a byte, so a three-operand instruction is three bytes. A
+destination that repeats the first source is left out, which the register allocator arranges
+for well over half of them, and those instructions are two bytes instead. A widened constant
+does not go through a general purpose register at all: the linker folds the load of it into
+`wide_load_imm_unsigned`/`wide_load_imm_signed` whenever the value fits the immediate field.
+
 ## Status
 
 Experimental, and behind the `+xrevivevec` target feature.
 
-Over the openzeppelin contracts in `oz-tests`, PVM blobs are **45% smaller**. The full
-analysis, per-benchmark results, the VLEN and VLA/VLS comparisons, what the extension does
-not cover, and the work still on the table, is in
-[Measurements](./wide_integer_analysis.md).
+Over the openzeppelin contracts in `oz-tests`, PVM blobs are **50% smaller**: 301,262 bytes
+become 150,287.
+
+| contract | without | with | delta |
+|---|--:|--:|--:|
+| erc1155 | 30,649 | 16,514 | −46.1% |
+| erc20 | 42,893 | 21,969 | −48.8% |
+| erc721 | 49,423 | 24,128 | −51.2% |
+| oz_gov | 81,159 | 40,511 | −50.1% |
+| oz_rwa | 37,975 | 18,532 | −51.2% |
+| oz_simple_erc20 | 16,554 | 7,932 | −52.1% |
+| oz_stable | 39,032 | 17,904 | −54.1% |
+| proxy | 3,577 | 2,797 | −21.8% |
+| **total** | **301,262** | **150,287** | **−50.1%** |
+
+The Phase 1 report, which measured the earlier design that held wide values in the vector
+registers, is in [Measurements](./wide_integer_analysis.md).

@@ -59,7 +59,7 @@ should look like
 # Phase 1
 From analysis doc, implement custom instructions for all arithemtic, compare and `stdlib.ll`. Enable `Zvl128` + VLS in revive.
 You're fine to consider that PVM is not ready, therefore you can stop validation before giving ELF to PVM
-To do revive changes, use `vec_ext_custom_inst` in this repo, use `/Users/nikolaypanchenko/workspaces/parity-llvm` (use release/22.x branch that matches what revive expects) for LLVM changes and setup revive to use this local LLVM repo.
+To do revive changes, use `cl/custom-ops` in this repo; LLVM changes go to the llvm-project fork's `cl/custom-ops` branch, which the submodule tracks.
 The goal:
 - all revivew tests, all benchmarks from the `RECAP.md` doc can be compiled.
 - LLVM never legalized wide type for instructions of interest and always generates custom instructions

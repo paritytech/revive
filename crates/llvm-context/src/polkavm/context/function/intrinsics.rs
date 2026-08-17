@@ -46,6 +46,9 @@ impl<'ctx> Intrinsics<'ctx> {
     /// This and the three below come with the wide integer extension. They are looked up rather
     /// than assumed, because a build linked against an LLVM without the extension still has to
     /// compile: the EVM operations they stand for then go back to their `stdlib.ll` routines.
+    /// The lookup happens only when [`crate::wide_integer_extension_enabled`] holds, since that
+    /// is also what puts the feature into the target machine: an intrinsic declared without the
+    /// feature would select nothing.
     pub const FUNCTION_WIDE_ADD_MOD: &'static str = "llvm.riscv.revive.addmod";
 
     /// The corresponding intrinsic function name.
@@ -105,11 +108,17 @@ impl<'ctx> Intrinsics<'ctx> {
             false,
         );
         let binary_type = word_type.fn_type(&[word_type.into(), word_type.into()], false);
-        let wide_add_mod = Self::try_declare(module, Self::FUNCTION_WIDE_ADD_MOD, modular_type);
-        let wide_mul_mod = Self::try_declare(module, Self::FUNCTION_WIDE_MUL_MOD, modular_type);
-        let wide_exponent = Self::try_declare(module, Self::FUNCTION_WIDE_EXPONENT, binary_type);
-        let wide_sign_extend =
-            Self::try_declare(module, Self::FUNCTION_WIDE_SIGN_EXTEND, binary_type);
+        let (wide_add_mod, wide_mul_mod, wide_exponent, wide_sign_extend) =
+            if crate::wide_integer_extension_enabled() {
+                (
+                    Self::try_declare(module, Self::FUNCTION_WIDE_ADD_MOD, modular_type),
+                    Self::try_declare(module, Self::FUNCTION_WIDE_MUL_MOD, modular_type),
+                    Self::try_declare(module, Self::FUNCTION_WIDE_EXPONENT, binary_type),
+                    Self::try_declare(module, Self::FUNCTION_WIDE_SIGN_EXTEND, binary_type),
+                )
+            } else {
+                (None, None, None, None)
+            };
 
         Self {
             trap,
@@ -123,10 +132,11 @@ impl<'ctx> Intrinsics<'ctx> {
         }
     }
 
-    /// Whether the linked LLVM provides the wide integer extension.
+    /// Whether this module compiles with the wide integer extension.
     ///
-    /// The extension's instructions and its intrinsics come from the same build, so the
-    /// presence of one answers for the other.
+    /// True when the linked LLVM provides the extension and the target machine requests
+    /// it: the intrinsics are only declared when both hold, so the presence of one of
+    /// them answers for the whole arrangement.
     pub fn has_wide_integer_extension(&self) -> bool {
         self.wide_add_mod.is_some()
     }

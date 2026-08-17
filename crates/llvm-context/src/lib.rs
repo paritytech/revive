@@ -136,6 +136,26 @@ const SIZE_LEVEL_Z_ARGUMENTS: &[&str] = &[
 const VECTOR_ARGUMENTS: &[&str] =
     &["--riscv-insert-vsetvli-whole-vector-register-move-valid-vtype=false"];
 
+/// The environment variable that disables the wide integer extension (XReviveVec).
+///
+/// The extension is on by default. Compiling without it is what produces the baseline its
+/// numbers are measured against, keeps a bisection able to cross the boundary where the
+/// extension was introduced, and gives a blob a way to target a PolkaVM release without
+/// the instructions. An environment variable rather than a flag because resolc spawns
+/// itself recursively per contract, and the environment is inherited where a flag would
+/// have to be threaded through every process boundary.
+pub const DISABLE_WIDE_INTEGER_EXTENSION_VARIABLE: &str = "RESOLC_DISABLE_WIDE_INTEGERS";
+
+/// Whether modules are compiled with the wide integer extension (XReviveVec).
+///
+/// This is the one decision both halves of the extension consult. The target machine
+/// appends the `+xrevivevec` feature on its account, and the extension's intrinsics are
+/// declared on its account, so an intrinsic can never be emitted into a module whose
+/// features cannot select the instruction behind it.
+pub fn wide_integer_extension_enabled() -> bool {
+    std::env::var_os(DISABLE_WIDE_INTEGER_EXTENSION_VARIABLE).is_none()
+}
+
 /// Initializes the LLVM compiler backend.
 ///
 /// This is a no-op if called subsequentially.

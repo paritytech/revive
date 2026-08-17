@@ -28,13 +28,19 @@ impl TargetMachine {
     pub const VM_TARGET_CPU: &'static str = "generic-rv64";
 
     /// LLVM target features.
-    ///
-    /// `xrevivevec` makes `i256` a machine type held in a pair of vector registers, so each wide
-    /// operation selects to one instruction instead of an i64 limb chain, and wide arguments are
-    /// passed in registers rather than by reference. It implies the vector extensions that supply
-    /// the registers, so a module may also contain ordinary vector code.
     pub const VM_FEATURES: &'static str = "+e,+m,+a,+c,+zbb,+auipc-addi-fusion,+ld-add-fusion,\
-         +lui-addi-fusion,+xtheadcondmov,+relax,+xrevivevec";
+         +lui-addi-fusion,+xtheadcondmov,+relax";
+
+    /// The wide integer extension (XReviveVec).
+    ///
+    /// It makes `i256` a machine type held in a pair of vector registers, so each wide
+    /// operation selects to one instruction instead of an i64 limb chain, and wide arguments
+    /// are passed in registers rather than by reference. It implies the vector extensions
+    /// that supply the registers, so a module may also contain ordinary vector code.
+    ///
+    /// Appended when [`crate::wide_integer_extension_enabled`] says so, which is also what
+    /// gates the extension's intrinsic declarations; the two must never diverge.
+    pub const VM_FEATURE_WIDE_INTEGER: &'static str = ",+xrevivevec";
 
     /// RISC-V backend feature that lets the code generator emit single (potentially unaligned)
     /// scalar memory accesses instead of splitting them into byte-wise sequences. Enabled for
@@ -54,11 +60,13 @@ impl TargetMachine {
         optimizer_settings: &OptimizerSettings,
         unaligned_scalar_mem: bool,
     ) -> anyhow::Result<Self> {
-        let features = if unaligned_scalar_mem {
-            format!("{}{}", Self::VM_FEATURES, Self::VM_FEATURE_UNALIGNED)
-        } else {
-            Self::VM_FEATURES.to_string()
-        };
+        let mut features = Self::VM_FEATURES.to_string();
+        if crate::wide_integer_extension_enabled() {
+            features.push_str(Self::VM_FEATURE_WIDE_INTEGER);
+        }
+        if unaligned_scalar_mem {
+            features.push_str(Self::VM_FEATURE_UNALIGNED);
+        }
         let target_machine = inkwell::targets::Target::from_name(target.name())
             .ok_or_else(|| anyhow::anyhow!("LLVM target machine `{}` not found", target.name()))?
             .create_target_machine(

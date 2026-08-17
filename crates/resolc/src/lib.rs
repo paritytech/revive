@@ -224,7 +224,14 @@ pub fn standard_json<T: Compiler>(
     let prune_output = solc_input.settings.selection_to_prune();
     let deployed_libraries = solc_input.settings.libraries.as_paths();
     let linker_symbols = solc_input.settings.libraries.as_linker_symbols()?;
-    let optimizer_settings = OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?;
+    let optimizer_settings = OptimizerSettings::try_from_cli(
+        solc_input.settings.optimizer.mode,
+        solc_input
+            .settings
+            .polkavm
+            .wide_instructions
+            .unwrap_or(false),
+    )?;
     let detect_missing_libraries =
         solc_input.settings.detect_missing_libraries || detect_missing_libraries;
     let use_newyork = use_newyork || solc_input.settings.polkavm.newyork.unwrap_or(false);

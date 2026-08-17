@@ -18,6 +18,10 @@ pub struct Settings {
     pub level_middle_end_size: SizeLevel,
     /// The back-end optimization level.
     pub level_back_end: inkwell::OptimizationLevel,
+    /// Whether to target the wide integer instructions.
+    /// `i256` becomes a machine type held in its own registers,
+    /// so each 256-bit operation selects to one instruction.
+    pub wide_instructions: bool,
 
     /// Whether the LLVM `verify each` option is enabled.
     pub is_verify_each_enabled: bool,
@@ -36,6 +40,7 @@ impl Settings {
             level_middle_end,
             level_middle_end_size,
             level_back_end,
+            wide_instructions: false,
 
             is_verify_each_enabled: false,
             is_debug_logging_enabled: false,
@@ -55,15 +60,17 @@ impl Settings {
             level_middle_end,
             level_middle_end_size,
             level_back_end,
+            wide_instructions: false,
 
             is_verify_each_enabled,
             is_debug_logging_enabled,
         }
     }
 
-    /// Creates settings from a CLI optimization parameter.
-    pub fn try_from_cli(value: char) -> anyhow::Result<Self> {
-        Ok(match value {
+    /// Creates settings from a CLI optimization parameter and whether to target the wide
+    /// integer instructions.
+    pub fn try_from_cli(value: char, wide_instructions: bool) -> anyhow::Result<Self> {
+        let mut settings = match value {
             '0' => Self::none(),
             '1' => Self::new(
                 inkwell::OptimizationLevel::Less,
@@ -86,7 +93,10 @@ impl Settings {
             ),
             'z' => Self::size(),
             char => anyhow::bail!("Unexpected optimization option '{}'", char),
-        })
+        };
+        settings.wide_instructions = wide_instructions;
+
+        Ok(settings)
     }
 
     /// Returns the settings without optimizations.
@@ -181,6 +191,7 @@ impl PartialEq for Settings {
         self.level_middle_end == other.level_middle_end
             && self.level_middle_end_size == other.level_middle_end_size
             && self.level_back_end == other.level_back_end
+            && self.wide_instructions == other.wide_instructions
     }
 }
 
@@ -188,9 +199,10 @@ impl std::fmt::Display for Settings {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "M{}B{}",
+            "M{}B{}{}",
             self.middle_end_as_string(),
             self.level_back_end as u8,
+            if self.wide_instructions { "W" } else { "" },
         )
     }
 }

@@ -317,7 +317,8 @@ pub fn build_yul_standard_json(
 ) -> anyhow::Result<SolcStandardJsonOutput> {
     check_dependencies();
     inkwell::support::enable_llvm_pretty_stack_trace();
-    let optimizer_settings = OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?;
+    let optimizer_settings =
+        OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode, false)?;
     initialize_llvm(
         PolkaVMTarget::PVM,
         crate::DEFAULT_EXECUTABLE_NAME,

@@ -39,6 +39,16 @@ impl TargetMachine {
     /// was not isolated, so the feature is restricted to the path it was validated against.
     pub const VM_FEATURE_UNALIGNED: &'static str = ",+unaligned-scalar-mem";
 
+    /// RISC-V backend extension making `i256` a machine type held in its own registers, so that
+    /// each 256-bit operation selects to a single instruction instead of a chain of four 64-bit
+    /// limbs, and wide arguments and return values travel in registers rather than through
+    /// memory. Selected per module by explicitly enabling wide instructions.
+    ///
+    /// It implies the vector extensions, because the registers it uses are RVV's. Enabling it
+    /// therefore also advertises a vector unit to the middle end, which is why it must not be
+    /// enabled for code that has no 256-bit values to gain from it.
+    pub const VM_FEATURE_WIDE: &'static str = ",+xrevivevec";
+
     /// A shortcut constructor.
     /// A separate instance for every optimization level is created.
     ///
@@ -49,11 +59,20 @@ impl TargetMachine {
         optimizer_settings: &OptimizerSettings,
         unaligned_scalar_mem: bool,
     ) -> anyhow::Result<Self> {
-        let features = if unaligned_scalar_mem {
-            format!("{}{}", Self::VM_FEATURES, Self::VM_FEATURE_UNALIGNED)
-        } else {
-            Self::VM_FEATURES.to_string()
-        };
+        let features = format!(
+            "{}{}{}",
+            Self::VM_FEATURES,
+            if unaligned_scalar_mem {
+                Self::VM_FEATURE_UNALIGNED
+            } else {
+                ""
+            },
+            if optimizer_settings.wide_instructions {
+                Self::VM_FEATURE_WIDE
+            } else {
+                ""
+            },
+        );
         let target_machine = inkwell::targets::Target::from_name(target.name())
             .ok_or_else(|| anyhow::anyhow!("LLVM target machine `{}` not found", target.name()))?
             .create_target_machine(
@@ -130,5 +149,61 @@ impl TargetMachine {
     /// Returns the target data.
     pub fn get_target_data(&self) -> inkwell::targets::TargetData {
         self.target_machine.get_target_data()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Target, TargetMachine};
+    use crate::optimizer::settings::Settings as OptimizerSettings;
+
+    /// This asserts plumbing only, not LLVM: `get_feature_string` returns the string
+    /// it was given verbatim, so a feature name LLVM does not recognize round-trips
+    /// unchanged and is only warned about on stderr.
+    #[test]
+    fn custom_wide_instructions_setting_appends_the_target_feature() {
+        crate::initialize_llvm(
+            Target::PVM,
+            "resolc",
+            crate::OptimizerSettingsSizeLevel::Zero,
+            false,
+            Default::default(),
+        );
+
+        fn assert_feature_matches_setting(features: &str, feature: &str, enabled: bool) {
+            let has_feature = features.contains(feature);
+            assert!(
+                has_feature == enabled,
+                "`{feature}` is {}, but its setting was {}. Feature string: `{features}`",
+                if has_feature { "included" } else { "excluded" },
+                if enabled { "enabled" } else { "disabled" },
+            );
+        }
+
+        // Each feature must appear exactly when its own flag is set.
+        for enable_wide_instructions in [false, true] {
+            for enable_unaligned_scalar_mem in [false, true] {
+                let mut settings = OptimizerSettings::size();
+                settings.wide_instructions = enable_wide_instructions;
+                let features =
+                    TargetMachine::new(Target::PVM, &settings, enable_unaligned_scalar_mem)
+                        .expect("the target machine should be created")
+                        .target_machine
+                        .get_feature_string()
+                        .to_string_lossy()
+                        .into_owned();
+
+                assert_feature_matches_setting(
+                    &features,
+                    TargetMachine::VM_FEATURE_WIDE,
+                    enable_wide_instructions,
+                );
+                assert_feature_matches_setting(
+                    &features,
+                    TargetMachine::VM_FEATURE_UNALIGNED,
+                    enable_unaligned_scalar_mem,
+                );
+            }
+        }
     }
 }

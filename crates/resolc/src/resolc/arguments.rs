@@ -72,6 +72,13 @@ pub struct Arguments {
     #[arg(long = "newyork")]
     pub newyork: bool,
 
+    /// Use the wide integer instructions, which make contract code considerably smaller.
+    ///
+    /// In standard JSON mode this flag is rejected; enable it via the `settings.polkavm.wideInstructions`
+    /// input field instead. Off by default.
+    #[arg(long = "wide-instructions")]
+    pub wide_instructions: bool,
+
     /// Disable the `solc` optimizer.
     /// Use it if your project uses the `MSIZE` instruction, or in other cases.
     /// Beware that it will prevent libraries from being inlined.
@@ -413,6 +420,13 @@ impl Arguments {
             if self.newyork {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "The newyork IR pipeline must be enabled in standard JSON input polkavm settings.",
+                    None,
+                    None,
+                ));
+            }
+            if self.wide_instructions {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "The wide instructions must be enabled in standard JSON input polkavm settings.",
                     None,
                     None,
                 ));

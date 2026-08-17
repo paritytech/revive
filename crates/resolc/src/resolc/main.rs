@@ -126,7 +126,8 @@ fn main_inner(
         }
     }
 
-    let mut optimizer_settings = OptimizerSettings::try_from_cli(arguments.optimization)?;
+    let mut optimizer_settings =
+        OptimizerSettings::try_from_cli(arguments.optimization, arguments.wide_instructions)?;
     optimizer_settings.is_verify_each_enabled = arguments.llvm_verify_each;
     optimizer_settings.is_debug_logging_enabled = arguments.llvm_debug_logging;
 

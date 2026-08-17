@@ -24,6 +24,9 @@ const TARGET_ABI_FLAG: &str = "-mabi=lp64e";
 /// a subset of the caller's, so a helper carrying `+unaligned-scalar-mem`
 /// would fail to inline into stock-path code. The feature does not change the
 /// helpers' own codegen, so omitting it costs nothing.
+/// `+xrevivevec` is omitted for the same reason, and because it implies the
+/// vector extensions: these helpers hold no 256-bit values, but at `-O3` the
+/// loop vectorizer would still rewrite `memcpy` and `memmove` into vector code.
 const TARGET_FEATURES: &[&str] = &[
     "+e",
     "+m",

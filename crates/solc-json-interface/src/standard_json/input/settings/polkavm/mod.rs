@@ -20,6 +20,9 @@ pub struct PolkaVM {
     /// Route Yul lowering through the experimental newyork IR pipeline. Off by default.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub newyork: Option<bool>,
+    /// Target the wide integer instructions. Off by default.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wide_instructions: Option<bool>,
 }
 
 impl PolkaVM {
@@ -28,6 +31,7 @@ impl PolkaVM {
             memory_config,
             debug_information: Some(debug_information),
             newyork: None,
+            wide_instructions: None,
         }
     }
 }

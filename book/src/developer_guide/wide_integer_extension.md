@@ -49,28 +49,30 @@ to compile a module that uses them rather than producing one that traps.
 
 Wide operands are nibbles, two to a byte, so a three-operand instruction is three bytes. A
 destination that repeats the first source is left out, which the register allocator arranges
-for well over half of them, and those instructions are two bytes instead. A widened constant
-does not go through a general purpose register at all: the linker folds the load of it into
-`wide_load_imm_unsigned`/`wide_load_imm_signed` whenever the value fits the immediate field.
+for well over half of them, and those instructions are two bytes instead.
+
+A value that was only ever loaded into a general purpose register to feed a wide instruction
+does not need the register at all. The linker folds it into the instruction, which gives the
+widening, the shifts and the load from a fixed address immediate forms of their own.
 
 ## Status
 
 Experimental, and behind the `+xrevivevec` target feature.
 
 Over the openzeppelin contracts in `oz-tests`, PVM blobs are **50% smaller**: 301,262 bytes
-become 150,287.
+become 148,713.
 
 | contract | without | with | delta |
 |---|--:|--:|--:|
-| erc1155 | 30,649 | 16,514 | −46.1% |
-| erc20 | 42,893 | 21,969 | −48.8% |
-| erc721 | 49,423 | 24,128 | −51.2% |
-| oz_gov | 81,159 | 40,511 | −50.1% |
-| oz_rwa | 37,975 | 18,532 | −51.2% |
-| oz_simple_erc20 | 16,554 | 7,932 | −52.1% |
-| oz_stable | 39,032 | 17,904 | −54.1% |
-| proxy | 3,577 | 2,797 | −21.8% |
-| **total** | **301,262** | **150,287** | **−50.1%** |
+| erc1155 | 30,649 | 16,198 | −47.1% |
+| erc20 | 42,893 | 21,885 | −49.0% |
+| erc721 | 49,423 | 23,958 | −51.5% |
+| oz_gov | 81,159 | 40,128 | −50.6% |
+| oz_rwa | 37,975 | 18,290 | −51.8% |
+| oz_simple_erc20 | 16,554 | 7,806 | −52.8% |
+| oz_stable | 39,032 | 17,721 | −54.6% |
+| proxy | 3,577 | 2,727 | −23.8% |
+| **total** | **301,262** | **148,713** | **−50.6%** |
 
 The Phase 1 report, which measured the earlier design that held wide values in the vector
 registers, is in [Measurements](./wide_integer_analysis.md).

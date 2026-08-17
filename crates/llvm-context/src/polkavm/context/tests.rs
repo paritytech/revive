@@ -1,8 +1,7 @@
 //! The LLVM IR generator context tests.
 
 use crate::optimizer::settings::Settings as OptimizerSettings;
-use crate::polkavm::context::attribute::Attribute;
-use crate::polkavm::context::Context;
+use crate::polkavm::context::{attribute::Attribute, function::llvm_runtime::LLVMRuntime, Context};
 use crate::PolkaVMTarget;
 
 /// Initializes the LLVM compiler backend.
@@ -156,5 +155,65 @@ pub fn custom_wide_instruction_intrinsics_exist() {
     assert!(
         inkwell::intrinsics::Intrinsic::find("llvm.riscv.revive.mulmod").is_some(),
         "the linked LLVM does not carry the custom wide instruction intrinsics"
+    );
+}
+
+/// The wide setting swaps the modular arithmetic helpers for intrinsics and makes the routines
+/// they replace reclaimable. `stdlib.ll` gives these external linkage, and global DCE cannot
+/// drop an externally visible symbol, so without the demotion they would survive in every emitted object.
+#[test]
+pub fn custom_wide_instructions_replace_the_stdlib_modular_arithmetic() {
+    initialize_llvm();
+
+    let llvm = inkwell::context::Context::create();
+    let mut settings = OptimizerSettings::size();
+    settings.wide_instructions = true;
+    let context = Context::new_dummy(&llvm, settings);
+
+    assert_eq!(
+        context
+            .llvm_runtime()
+            .mul_mod
+            .value
+            .get_name()
+            .to_str()
+            .expect("should get the intrinsic name"),
+        LLVMRuntime::INTRINSIC_MULMOD,
+    );
+    assert_eq!(
+        context
+            .module()
+            .get_function(LLVMRuntime::FUNCTION_MULMOD)
+            .expect("stdlib is linked into every module")
+            .get_linkage(),
+        inkwell::module::Linkage::Private,
+    );
+}
+
+/// The default path still binds the stdlib routines, and still privatizes them.
+#[test]
+pub fn default_settings_keep_the_stdlib_modular_arithmetic() {
+    initialize_llvm();
+
+    let llvm = inkwell::context::Context::create();
+    let context = Context::new_dummy(&llvm, OptimizerSettings::size());
+
+    assert_eq!(
+        context
+            .llvm_runtime()
+            .mul_mod
+            .value
+            .get_name()
+            .to_str()
+            .expect("should get the function name"),
+        LLVMRuntime::FUNCTION_MULMOD,
+    );
+    assert_eq!(
+        context
+            .module()
+            .get_function(LLVMRuntime::FUNCTION_MULMOD)
+            .expect("stdlib is linked into every module")
+            .get_linkage(),
+        inkwell::module::Linkage::Private,
     );
 }

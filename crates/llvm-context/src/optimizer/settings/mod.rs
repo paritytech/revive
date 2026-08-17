@@ -67,9 +67,10 @@ impl Settings {
         }
     }
 
-    /// Creates settings from a CLI optimization parameter.
-    pub fn try_from_cli(value: char) -> anyhow::Result<Self> {
-        Ok(match value {
+    /// Creates settings from a CLI optimization parameter and whether to target the wide
+    /// integer instructions.
+    pub fn try_from_cli(value: char, wide_instructions: bool) -> anyhow::Result<Self> {
+        let mut settings = match value {
             '0' => Self::none(),
             '1' => Self::new(
                 inkwell::OptimizationLevel::Less,
@@ -92,7 +93,10 @@ impl Settings {
             ),
             'z' => Self::size(),
             char => anyhow::bail!("Unexpected optimization option '{}'", char),
-        })
+        };
+        settings.wide_instructions = wide_instructions;
+
+        Ok(settings)
     }
 
     /// Returns the settings without optimizations.

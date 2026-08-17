@@ -30,10 +30,23 @@ icmp ult      22 instructions  ->  revive.wsltu a0, w0, w1
               192-byte frame        16-byte frame
 ```
 
-The registers are the extension's own rather than an alias of the vector file. That keeps
-the extension free of any dependency on the vector extensions: no vector type becomes legal,
-so nothing else in the backend can select a vector instruction, and every operation on a
-wide value is one custom-2 encoding. Copies are `revive.wmv`, and spills are
+## Why not the vector registers
+
+The extension was specified to hold wide values in the vector registers, with `Zvl128b`
+enabled. It does not. This is a departure from that design, and the reason is what enabling
+the vector extensions brings with it rather than anything about the registers themselves.
+
+Adding `i256` to `VRM2` makes the extension imply `Zve64x` and `Zvl128b`, and once a vector
+type is legal the rest of the vector backend follows. A single compiled contract produced
+`vsetvli`, `vle8.v` from `memset` lowering, `vmsne.vv` with `vcpop.m` from a 128-bit
+equality the DAG combiner vectorised, and `vs2r.v`/`vl2r.v` spills addressed through
+`csrr vlenb`. None of that is wide arithmetic, and all of it would have had to be
+implemented in PolkaVM: a vector unit with `vtype` state, mask registers and the vector
+length CSR, on the recompiler as well as the interpreter.
+
+Giving the extension registers of its own means no vector type is legal, so nothing in the
+backend can select a vector instruction on its account, and every operation on a wide value
+is one custom-2 encoding. Copies are `revive.wmv`, and spills are
 `revive.wst`/`revive.wld` against ordinary fixed-size stack slots, so a spill costs one
 instruction rather than a vector-length query and scalable frame arithmetic.
 
@@ -74,5 +87,8 @@ become 148,713.
 | proxy | 3,577 | 2,727 | −23.8% |
 | **total** | **301,262** | **148,713** | **−50.6%** |
 
-The Phase 1 report, which measured the earlier design that held wide values in the vector
-registers, is in [Measurements](./wide_integer_analysis.md).
+The Phase 1 report measured the vector-register design, and answered the width and
+addressing questions on it: `Zvl128b` against `Zvl256b` was 44 bytes, and pinning the vector
+length made no difference at all, leaving the spill slots scalable and the `csrr vlenb`
+sequences in place. Those results do not carry over, since none of the configurations exist
+here. It is in [Measurements](./wide_integer_analysis.md).

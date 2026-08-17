@@ -123,7 +123,8 @@ const SIZE_LEVEL_Z_ARGUMENTS: &[&str] = &[
 
 /// Initializes the LLVM compiler backend.
 ///
-/// This is a no-op if called subsequentially.
+/// Subsequent calls are a no-op, except that a call arriving while another thread is still
+/// initializing blocks until that thread finishes.
 ///
 /// `llvm_arguments` are passed as-is to the LLVM CL options parser.
 ///
@@ -140,33 +141,34 @@ pub fn initialize_llvm(
     use_newyork: bool,
     llvm_arguments: &[String],
 ) {
-    let Ok(_) = DID_INITIALIZE.set(()) else {
-        return; // Tests don't go through a recursive process
-    };
+    // `get_or_init` rather than `set`, so that a caller arriving while another thread is still
+    // initializing blocks until it finishes rather than proceeding against an unregistered
+    // target. Only parallel test binaries call this concurrently.
+    DID_INITIALIZE.get_or_init(|| {
+        let size_arguments = if use_newyork && size_level == OptimizerSettingsSizeLevel::Z {
+            SIZE_LEVEL_Z_ARGUMENTS
+        } else {
+            &[]
+        };
+        let argv = std::iter::once(name)
+            .chain(size_arguments.iter().copied())
+            .chain(llvm_arguments.iter().map(String::as_str))
+            .map(|arg| CString::new(arg.as_bytes()).unwrap())
+            .collect::<Vec<_>>();
+        let argv: Vec<*const libc::c_char> = argv.iter().map(|arg| arg.as_ptr()).collect();
+        let overview = CString::new("").unwrap();
+        unsafe {
+            inkwell::llvm_sys::support::LLVMParseCommandLineOptions(
+                argv.len() as i32,
+                argv.as_ptr(),
+                overview.as_ptr(),
+            );
+        }
 
-    let size_arguments = if use_newyork && size_level == OptimizerSettingsSizeLevel::Z {
-        SIZE_LEVEL_Z_ARGUMENTS
-    } else {
-        &[]
-    };
-    let argv = std::iter::once(name)
-        .chain(size_arguments.iter().copied())
-        .chain(llvm_arguments.iter().map(String::as_str))
-        .map(|arg| CString::new(arg.as_bytes()).unwrap())
-        .collect::<Vec<_>>();
-    let argv: Vec<*const libc::c_char> = argv.iter().map(|arg| arg.as_ptr()).collect();
-    let overview = CString::new("").unwrap();
-    unsafe {
-        inkwell::llvm_sys::support::LLVMParseCommandLineOptions(
-            argv.len() as i32,
-            argv.as_ptr(),
-            overview.as_ptr(),
-        );
-    }
+        inkwell::support::enable_llvm_pretty_stack_trace();
 
-    inkwell::support::enable_llvm_pretty_stack_trace();
-
-    match target {
-        PolkaVMTarget::PVM => inkwell::targets::Target::initialize_riscv(&Default::default()),
-    }
+        match target {
+            PolkaVMTarget::PVM => inkwell::targets::Target::initialize_riscv(&Default::default()),
+        }
+    });
 }

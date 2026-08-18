@@ -16,20 +16,19 @@ reference* and returned through a hidden pointer, so a call taking three 256-bit
 spends 192 bytes of stack frame and 56 instructions marshalling values before the callee
 starts.
 
-## Two layers
+## One extension
 
-The registers wide enough to hold an EVM word are the ones the vector extensions specify, so
-this is built in two parts that can be used separately.
+`XReviveVec` is what revive's fork of LLVM adds: `i256` becomes a machine type held in a
+vector register pair, each wide operation selects to a single instruction in the custom-2
+opcode space, and a calling convention of its own passes wide arguments in registers rather
+than by reference.
 
-The lower one is the vector extensions themselves: PolkaVM implements `Zve64x` at a vector
-length of 128 bits, so ordinary vector code runs on it and nothing about it is specific to
-revive. A source-level toolchain reaches it with `-march=rv64em_zve64x_zvl128b` and
-`-mrvv-vector-bits=zvl`, and needs nothing else.
-
-The upper one is `XReviveVec`, which is what revive's fork of LLVM adds: `i256` becomes a
-machine type held in a vector register pair, each wide operation selects to a single
-instruction in the custom-2 opcode space, and a calling convention of its own passes wide
-arguments in registers rather than by reference.
+The extension implies nothing. The registers and their pairing are the vector
+specification's, because borrowing an already-specified register file beats inventing one,
+but no vector type becomes legal on the extension's account and the compiler cannot select
+a single standard vector instruction. Everything the code generator emits for wide values
+is the extension's own: its arithmetic, its comparisons, its loads and stores, its spills
+(`revive.wst`/`revive.wld`) and its copies (`revive.wmv`).
 
 ```text
 add i256      30 instructions  ->  revive.wadd v8, v8, v10
@@ -56,32 +55,36 @@ vector calling convention puts vector arguments. The one departure is that `v0` 
 register at all: wide values are what revive keeps live across calls, and without this the
 caller spilled and reloaded every one of them at every call site.
 
-## Fixing the vector length
+## The register width is the extension's own
 
-The vector extensions leave the register width to the implementation, and generated code
-asks for it at run time: `vlenb` is read to size a spill slot, and the frame grows by a
-multiple of a quantity the compiler does not know. PolkaVM's length is architectural rather
-than an implementation choice, and `XReviveVec` is defined for a machine that has it, so the
-backend takes the exact value from the extension and all of that collapses to constants. It also leaves `vl` and `vtype` known at every vector instruction,
-which is what an ahead-of-time recompiler needs in order to translate them.
-
-Three things in the backend follow from a known length, and are what makes the difference
-between a frame with a vector region in it and an ordinary one: a vector spill slot is a
-plain stack object rather than one whose offset is scaled at run time, its size is the
-register class's size scaled up to the real width, and the whole-frame alignment that the
-vector region would demand is not imposed.
+The vector extensions leave the register width to the implementation and generated code
+asks for it at run time, which is why generic vector frames read `vlenb` and grow by
+quantities the compiler does not know. `XReviveVec` has none of that: the extension is
+defined for registers of exactly 128 bits, the backend states that number itself rather
+than taking it from a `Zvl` feature, and every spill slot is a plain 32-byte stack object
+at a constant offset.
 
 ## In PolkaVM
 
 The register file, `vtype` and `vl` are part of the `ReviveV1` instruction set, alongside
-the wide instructions. What is implemented of the vector extensions is: the configuration
-instructions, whole register moves, loads and stores, unit-stride element loads and stores,
-the element-wise integer arithmetic, shifts, comparisons, minimum and maximum, multiply,
-divide and multiply-accumulate in all three operand shapes, the splats and the scalar moves,
-the mask logic, `vcpop.m`, `vfirst.m`, `vid.v`, `vmerge` and the slides. What is not: the
-strided and indexed memory forms, the widening and narrowing operations, the reductions, the
-permutes, and masking on anything other than `vcpop.m` and `vfirst.m`. An instruction outside
-that set is refused at link time rather than at run time.
+the wide instructions. PolkaVM also implements **a subset of `Zve64x`**, and it is exactly
+that: a subset, not the extension. What is in it: the configuration instructions, whole
+register moves, loads and stores, unit-stride element loads and stores, the element-wise
+integer arithmetic, shifts, comparisons, minimum and maximum, multiply, divide and
+multiply-accumulate in all three operand shapes, the splats and the scalar moves, the mask
+logic, `vcpop.m`, `vfirst.m`, `vid.v`, `vmerge` and the slides. What is not: the strided
+and indexed memory forms, the widening and narrowing operations, the reductions, the
+permutes, and masking on anything other than `vcpop.m` and `vfirst.m`. An instruction
+outside the subset is refused at link time rather than at run time.
+
+Two consequences of it being a subset. resolc uses none of it: since the extension stopped
+implying the vector extensions, the compiler cannot emit a standard vector instruction at
+all, and measurements showed the subset was contributing nothing to code size anyway. And
+code built by a stock toolchain for standard `Zve64x` will generally fail to link, because
+generic code generation freely uses the families the subset omits; building vectors from
+scalars alone goes through `vslide1down.vx`. The subset stays implemented and tested in the
+interpreter and the recompiler, but nothing targets it today, and a toolchain cannot be
+told to target it, because feature flags describe whole extensions rather than subsets.
 
 The wide instructions' semantics are the EVM's rather than Rust's: division and remainder by
 zero produce zero, shift amounts of 256 or more clear the value, and `addmod`/`mulmod` keep
@@ -90,11 +93,12 @@ the untruncated intermediate.
 The interpreter and the recompiler both execute everything above, out of one implementation:
 every operation on the register file lives in `polkavm-common`, the interpreter calls it
 directly, and recompiled code reaches it through a native helper that receives the
-instruction's operands packed at translation time. A recompiled memory access is answered
-rather than performed by the helper, with a source, a destination and a length; the bytes
-move in recompiled code, so that a page fault lands where the signal handler can attribute
-it to the guest address the call site recorded. The execution tests run each backend and,
-in the tracing configuration, run both in lockstep.
+instruction's operands packed at translation time. That makes the recompiler correct, not
+fast: each of these instructions costs a register save and restore around a native call.
+A recompiled memory access is answered rather than performed by the helper, with a source,
+a destination and a length; the bytes move in recompiled code, so that a page fault lands
+where the signal handler can attribute it to the guest address the call site recorded. The
+execution tests run each backend and, in the tracing configuration, run both in lockstep.
 
 ## Encoding
 
@@ -119,19 +123,22 @@ extension, which is how the baseline column below is produced, and what a bisect
 blob for a PolkaVM without the instructions uses.
 
 Over the openzeppelin contracts in `oz-tests`, PVM blobs are **50% smaller**: 301,262 bytes
-become 148,847.
+become 148,784. The custom instructions carry the entire reduction: compiling with every
+form of vectorization disabled produces byte-identical blobs, and enabling the standard
+vector extension without the custom instructions makes every contract slightly larger than
+the baseline.
 
 | contract | without | with | delta |
 |---|--:|--:|--:|
 | erc1155 | 30,649 | 16,243 | -47.0% |
-| erc20 | 42,893 | 21,907 | -48.9% |
-| erc721 | 49,423 | 23,981 | -51.5% |
-| oz_gov | 81,159 | 40,147 | -50.5% |
-| oz_rwa | 37,975 | 18,303 | -51.8% |
+| erc20 | 42,893 | 21,903 | -48.9% |
+| erc721 | 49,423 | 23,966 | -51.5% |
+| oz_gov | 81,159 | 40,128 | -50.6% |
+| oz_rwa | 37,975 | 18,290 | -51.8% |
 | oz_simple_erc20 | 16,554 | 7,806 | -52.8% |
-| oz_stable | 39,032 | 17,733 | -54.6% |
+| oz_stable | 39,032 | 17,721 | -54.6% |
 | proxy | 3,577 | 2,727 | -23.8% |
-| **total** | **301,262** | **148,847** | **-50.6%** |
+| **total** | **301,262** | **148,784** | **-50.6%** |
 
 The Phase 1 report measured an earlier arrangement of the same idea and answered the width
 and addressing questions on it: `Zvl128b` against `Zvl256b` was 44 bytes, and pinning the

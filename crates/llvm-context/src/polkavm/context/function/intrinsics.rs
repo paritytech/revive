@@ -18,6 +18,14 @@ pub struct Intrinsics<'ctx> {
     pub byte_swap_eth_address: FunctionDeclaration<'ctx>,
     /// Counts leading zeroes.
     pub count_leading_zeros: FunctionDeclaration<'ctx>,
+    /// `addmod`, as a single wide instruction.
+    pub revive_add_mod: FunctionDeclaration<'ctx>,
+    /// `mulmod`, as a single wide instruction.
+    pub revive_mul_mod: FunctionDeclaration<'ctx>,
+    /// `exp`, as a single wide instruction.
+    pub revive_exp: FunctionDeclaration<'ctx>,
+    /// `signextend`, as a single wide instruction.
+    pub revive_sign_extend: FunctionDeclaration<'ctx>,
 }
 
 impl<'ctx> Intrinsics<'ctx> {
@@ -32,6 +40,18 @@ impl<'ctx> Intrinsics<'ctx> {
 
     /// The corresponding intrinsic function name.
     pub const FUNCTION_COUNT_LEADING_ZEROS: &'static str = "llvm.ctlz.i256";
+
+    /// The corresponding intrinsic function name.
+    pub const FUNCTION_REVIVE_ADDMOD: &'static str = "llvm.riscv.revive.addmod";
+
+    /// The corresponding intrinsic function name.
+    pub const FUNCTION_REVIVE_MULMOD: &'static str = "llvm.riscv.revive.mulmod";
+
+    /// The corresponding intrinsic function name.
+    pub const FUNCTION_REVIVE_EXP: &'static str = "llvm.riscv.revive.exp";
+
+    /// The corresponding intrinsic function name.
+    pub const FUNCTION_REVIVE_SIGNEXTEND: &'static str = "llvm.riscv.revive.signextend";
 
     /// A shortcut constructor.
     pub fn new(
@@ -76,11 +96,31 @@ impl<'ctx> Intrinsics<'ctx> {
             word_type.fn_type(&[word_type.into(), llvm.bool_type().into()], false),
         );
 
+        // EVM operations with an instruction of their own, replacing the stdlib routines
+        // they used to call.
+        let ternary_word = word_type.fn_type(
+            &[word_type.into(), word_type.into(), word_type.into()],
+            false,
+        );
+        let binary_word = word_type.fn_type(&[word_type.into(), word_type.into()], false);
+
+        let revive_add_mod =
+            Self::declare(llvm, module, Self::FUNCTION_REVIVE_ADDMOD, ternary_word);
+        let revive_mul_mod =
+            Self::declare(llvm, module, Self::FUNCTION_REVIVE_MULMOD, ternary_word);
+        let revive_exp = Self::declare(llvm, module, Self::FUNCTION_REVIVE_EXP, binary_word);
+        let revive_sign_extend =
+            Self::declare(llvm, module, Self::FUNCTION_REVIVE_SIGNEXTEND, binary_word);
+
         Self {
             trap,
             byte_swap_word,
             byte_swap_eth_address,
             count_leading_zeros,
+            revive_add_mod,
+            revive_mul_mod,
+            revive_exp,
+            revive_sign_extend,
         }
     }
 

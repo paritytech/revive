@@ -5,7 +5,7 @@
 Supported `polkadot-sdk` rev: `2604.2.0`
 
 ### Added
-- Contracts exceeding the target runtime's deployment limits are now detected at link time instead of failing on deployment. The budget is configurable via `--memory-limit` and the check can be downgraded to a warning with `--ignore-memory-limit`. [#PR](https://github.com/paritytech/revive/pull/PR)
+- Contracts exceeding the target runtime's deployment limits are now detected at link time instead of failing on deployment. The budget is configurable via `--memory-limit` and the check can be downgraded to a warning with `--ignore-memory-limit`. [#599](https://github.com/paritytech/revive/pull/599)
 
 ### Fixed
 - `--newyork`: A bug in dead call value analysis. [#589](https://github.com/paritytech/revive/pull/589)

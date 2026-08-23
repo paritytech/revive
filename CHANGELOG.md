@@ -6,7 +6,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 
 ### Added
 
-- Contracts exceeding the target runtime's deployment limits are now detected at link time instead of failing on deployment. The budget is configurable via `--memory-limit` and the check can be downgraded to a warning with `--ignore-memory-limit`. [#PR](https://github.com/paritytech/revive/pull/PR)
+- Contracts exceeding the target runtime's deployment limits are now detected at link time instead of failing on deployment. The budget is configurable via `--memory-limit` and the check can be downgraded to a warning with `--ignore-memory-limit`. [#599](https://github.com/paritytech/revive/pull/599)
 - Support for solc v0.8.37. The new `slotnum()` Yul builtin (EIP-7843) is rejected with an unsupported instruction error, as `pallet-revive` has no notion of a beacon chain slot number.
 
 ### Fixed

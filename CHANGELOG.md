@@ -6,6 +6,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 
 ### Fixed
 - `--newyork`: A bug in dead call value analysis. [#589](https://github.com/paritytech/revive/pull/589)
+- Yul objects carrying deploy code only, without a `_deployed` runtime sub-object, failed to compile with an LLVM IR verification error. [#PR](https://github.com/paritytech/revive/pull/PR)
 
 ## v1.4.0
 

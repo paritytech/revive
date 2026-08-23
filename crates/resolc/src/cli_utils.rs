@@ -50,6 +50,10 @@ pub const YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH: &str =
 pub const YUL_EMPTY_RUNTIME_OBJECT_PATH: &str = "src/tests/data/yul/empty_runtime_object.yul";
 /// Yul contract carrying deploy code only, without the `_deployed` runtime sub-object.
 pub const YUL_DEPLOY_ONLY_OBJECT_PATH: &str = "src/tests/data/yul/deploy_only_object.yul";
+/// Yul contract with a sibling object that is not a contract of its own.
+pub const YUL_SIBLING_OBJECTS_PATH: &str = "src/tests/data/yul/sibling_objects.yul";
+/// Yul contract addressing a nested object through the dotted notation.
+pub const YUL_DOTTED_OBJECT_PATH: &str = "src/tests/data/yul/dotted_object_path.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =

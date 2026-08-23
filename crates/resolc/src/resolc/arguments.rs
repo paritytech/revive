@@ -200,6 +200,21 @@ pub struct Arguments {
     #[arg(long = "heap-size", default_value_t = PolkaVMDefaultHeapMemorySize)]
     pub heap_size: u32,
 
+    /// The target runtime's baseline interpreter memory budget in bytes.
+    ///
+    /// A contract exceeding it compiles but is rejected on deployment, so `resolc` checks the
+    /// linked blob against this budget and fails the build. The default is the Asset Hub limit;
+    /// override it when targeting a runtime configured differently.
+    ///
+    /// The static heap and stack buffers are part of this budget, so lowering `--heap-size` or
+    /// `--stack-size` frees room for code.
+    #[arg(long = "memory-limit", default_value_t = revive_linker::limits::PalletLimits::ASSET_HUB.baseline_memory_limit)]
+    pub memory_limit: u32,
+
+    /// Report contracts exceeding the deployment limits as warnings instead of failing the build.
+    #[arg(long = "ignore-memory-limit")]
+    pub ignore_memory_limit: bool,
+
     /// The contracts total stack size in bytes.
     ///
     /// PVM is a register machine with a traditional stack memory space for local

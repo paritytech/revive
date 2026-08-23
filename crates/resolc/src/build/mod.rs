@@ -9,6 +9,7 @@ use normpath::PathExt;
 
 use revive_common::ObjectFormat;
 use revive_common::BYTE_LENGTH_ETH_ADDRESS;
+use revive_linker::limits::{check, DeploymentLimits, Enforcement};
 use revive_llvm_context::polkavm_disassemble;
 use revive_llvm_context::polkavm_hash;
 use revive_llvm_context::polkavm_link;
@@ -53,6 +54,7 @@ impl Build {
         mut self,
         linker_symbols: BTreeMap<String, [u8; BYTE_LENGTH_ETH_ADDRESS]>,
         debug_config: &DebugConfig,
+        deployment_limits: &DeploymentLimits,
     ) -> Self {
         let mut contracts: BTreeMap<String, Contract> = self
             .results
@@ -86,6 +88,12 @@ impl Build {
                     !debug_config.emit_debug_info,
                 ) {
                     Ok((memory_buffer_linked, ObjectFormat::PVM)) => {
+                        self.messages.extend(check_deployment_limits(
+                            path,
+                            &memory_buffer_linked,
+                            deployment_limits,
+                        ));
+
                         let bytecode_hash = polkavm_hash(&memory_buffer_linked);
                         let assembly_text =
                             polkavm_disassemble(path, &memory_buffer_linked, debug_config)
@@ -349,4 +357,42 @@ impl SolcStandardJsonOutputErrorHandler for Build {
         self.messages.retain(|message| !message.is_warning());
         warnings
     }
+}
+
+/// Reports the deployment limits `bytecode` exceeds, if any.
+///
+/// A contract over the limits compiles but can never be deployed, so by default this is an error.
+/// The check needs the linked blob, hence it runs here rather than in code generation.
+fn check_deployment_limits(
+    path: &str,
+    bytecode: &[u8],
+    deployment_limits: &DeploymentLimits,
+) -> Vec<SolcStandardJsonOutputError> {
+    let violations = match check(bytecode, &deployment_limits.limits) {
+        Ok(violations) => violations,
+        Err(error) => {
+            // Measuring is best effort: a blob we cannot parse is a separate problem, and the
+            // linker or the pallet will report it in its own terms.
+            return vec![SolcStandardJsonOutputError::new_warning(
+                format!("{path}: unable to check the deployment limits: {error}"),
+                None,
+                None,
+            )];
+        }
+    };
+
+    violations
+        .into_iter()
+        .map(|violation| {
+            let message = format!(
+                "{path} cannot be deployed to the target runtime: {violation}. Pass \
+                 `--ignore-memory-limit` to compile anyway, or `--memory-limit` if the target \
+                 runtime has a different budget."
+            );
+            match deployment_limits.enforcement {
+                Enforcement::Deny => SolcStandardJsonOutputError::new_error(message, None, None),
+                Enforcement::Warn => SolcStandardJsonOutputError::new_warning(message, None, None),
+            }
+        })
+        .collect()
 }

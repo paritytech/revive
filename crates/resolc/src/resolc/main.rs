@@ -5,6 +5,7 @@ use std::{io::Write, path::PathBuf};
 use clap::error::ErrorKind;
 use resolc::Process;
 use revive_common::{deserialize_from_str, EVMVersion, EXIT_CODE_FAILURE, EXIT_CODE_SUCCESS};
+use revive_linker::limits::{DeploymentLimits, Enforcement};
 use revive_llvm_context::{initialize_llvm, DebugConfig, OptimizerSettings, PolkaVMTarget};
 use revive_solc_json_interface::{
     ResolcWarning, SolcStandardJsonInputSettingsPolkaVMMemory,
@@ -180,6 +181,15 @@ fn main_inner(
         Some(arguments.stack_size),
     );
 
+    let deployment_limits = DeploymentLimits::new(
+        arguments.memory_limit,
+        if arguments.ignore_memory_limit {
+            Enforcement::Warn
+        } else {
+            Enforcement::Deny
+        },
+    );
+
     let use_newyork = arguments.newyork;
 
     let build = if arguments.yul {
@@ -193,12 +203,14 @@ fn main_inner(
             debug_config,
             &arguments.llvm_arguments,
             memory_config,
+            deployment_limits,
             use_newyork,
         )
     } else if let Some(standard_json) = arguments.standard_json {
         resolc::standard_json(
             &solc,
             arguments.metadata_hash,
+            deployment_limits,
             messages,
             standard_json.map(PathBuf::from),
             arguments.base_path,
@@ -230,6 +242,7 @@ fn main_inner(
             arguments.overwrite,
             arguments.llvm_arguments,
             memory_config,
+            deployment_limits,
             use_newyork,
         )?;
         return Ok(());
@@ -253,6 +266,7 @@ fn main_inner(
             debug_config,
             arguments.llvm_arguments,
             memory_config,
+            deployment_limits,
             use_newyork,
         )
     }?;

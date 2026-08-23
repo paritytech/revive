@@ -34,6 +34,10 @@ pub const YUL_DUPLICATE_FUNCTIONS_SWITCH_PATH: &str =
 /// Yul contract with duplicate function names in deeply nested switch cases.
 pub const YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH: &str =
     "src/tests/data/yul/duplicate_functions_deep_nesting.yul";
+/// Yul contract with a sibling object that is not a contract of its own.
+pub const YUL_SIBLING_OBJECTS_PATH: &str = "src/tests/data/yul/sibling_objects.yul";
+/// Yul contract addressing a nested object through the dotted notation.
+pub const YUL_DOTTED_OBJECT_PATH: &str = "src/tests/data/yul/dotted_object_path.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =

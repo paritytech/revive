@@ -86,15 +86,37 @@ impl Project {
 
         let results = iter
             .map(|(path, mut contract)| {
-                let factory_dependencies = contract
-                    .ir
-                    .drain_factory_dependencies()
+                // Every object `resolc` compiles is a contract of its own, so an object referenced
+                // by `dataoffset` or `datasize` has to be one of them. A sibling object that is
+                // not, or the dotted notation for a nested object, has no entry here and used to
+                // panic.
+                let dependencies = contract.ir.drain_factory_dependencies();
+                let unresolved = dependencies
+                    .iter()
+                    .filter(|identifier| !self.identifier_paths.contains_key(*identifier))
+                    .cloned()
+                    .collect::<Vec<String>>();
+                if !unresolved.is_empty() {
+                    let error = SolcStandardJsonOutputError::new_error(
+                        format!(
+                            "{path}: the object(s) `{}` referenced by `dataoffset` or `datasize` \
+                             are not compiled contracts. `resolc` expects every Yul object to be a \
+                             contract of its own; sibling objects that are not, and the dotted \
+                             notation for addressing a nested object, are not supported.",
+                            unresolved.join("`, `"),
+                        ),
+                        None,
+                        None,
+                    );
+                    return (path, Err(error));
+                }
+                let factory_dependencies = dependencies
                     .iter()
                     .map(|identifier| {
                         self.identifier_paths
                             .get(identifier)
                             .cloned()
-                            .expect("Always exists")
+                            .expect("checked above")
                     })
                     .collect();
                 let missing_libraries = contract.get_missing_libraries(&deployed_libraries);

@@ -49,10 +49,10 @@ which = "8.0"
 path-slash = "0.2"
 rayon = "1.11"
 clap = { version = "4", default-features = false, features = ["derive"] }
-polkavm-common = { git = "https://github.com/paritytech/polkavm", branch = "cl/more-instr" }
-polkavm-linker = { git = "https://github.com/paritytech/polkavm", branch = "cl/more-instr" }
-polkavm-disassembler = { git = "https://github.com/paritytech/polkavm", branch = "cl/more-instr" }
-polkavm = { git = "https://github.com/paritytech/polkavm", branch = "cl/more-instr" }
+polkavm-common = { git = "https://github.com/paritytech/polkavm", branch = "lj/more-instr-128" }
+polkavm-linker = { git = "https://github.com/paritytech/polkavm", branch = "lj/more-instr-128" }
+polkavm-disassembler = { git = "https://github.com/paritytech/polkavm", branch = "lj/more-instr-128" }
+polkavm = { git = "https://github.com/paritytech/polkavm", branch = "lj/more-instr-128" }
 alloy-primitives = { version = "1.4", features = ["serde"] }
 alloy-sol-types = "1.4"
 alloy-genesis = "1.1.2"
@@ -75,7 +75,7 @@ normpath = "1.5"
 # polkadot-sdk and friends
 codec = { version = "3.7.5", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.6", default-features = false }
-polkadot-sdk = { path = "../polkadot-sdk/umbrella" }
+polkadot-sdk = { git = "https://github.com/paritytech/polkadot-sdk", branch = "lj/custom-ops-128" }
 
 # llvm
 [workspace.dependencies.inkwell]

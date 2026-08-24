@@ -115,6 +115,43 @@ operation and its three operands in a single immediate, because there are enough
 that an opcode each would not fit in the byte the instruction set has, and they are rare
 enough in practice that the extra byte does not matter.
 
+## The second width
+
+An EVM word needs the pair, and between the pair and a general purpose register the code
+generator has nothing. The 160 bits of an address, or the half of a word that is still live
+once the other half has been proved dead, is therefore either promoted to a whole pair or
+expanded into `i64` limbs again. A second width gives the legalizer the rung in the middle:
+a 160-bit access becomes a 128-bit one plus a remainder rather than four limbs, and a value
+whose upper half is dead stays in a single register.
+
+That register is one of the same ones. Where an `i256` is the pair `v2n`, `v2n+1`, an `i128`
+is either half of it, so the code generator moves between the widths for nearly nothing:
+narrowing to the lower half is a subregister read rather than an instruction, and widening
+costs the one instruction that fills the upper half with zeroes or with the sign.
+
+Nothing configures the width. The vector extensions would keep an element width in `vtype`
+and make every instruction depend on the `vsetvli` that set it; here each instruction
+carries its own: the top bit of `funct7` in the register forms, and in the memory forms the
+low bit of the offset field, which is why a wide offset is even at either width. PolkaVM
+spends a second opcode on it instead. Either way the width belongs to the instruction rather
+than to the machine, so the two interleave freely and neither can be read as the other.
+
+Thirty-three of the thirty-seven wide instructions have a 128-bit twin: the arithmetic,
+division and remainder, the comparisons, the shifts by a register and by an immediate, the
+loads and stores including their immediate and absolute forms, the move, the byte reversal,
+the bit counts, and the conversions to and from a general purpose register. The four without
+one are `addmod`, `mulmod`, exponentiation and byte sign extension, which the EVM defines on
+256-bit words, leaving a narrower version nothing to mean.
+
+The calling convention needs no new registers either. An `i128` argument or return travels
+in one of `v8` to `v23`, the range the pairs already come from, which at this width carries
+sixteen values rather than eight.
+
+None of it is on yet. LLVM keeps `i128` illegal unless the hidden `-riscv-revive-i128`
+option says otherwise, which is what lets one compiler produce both arrangements and be
+measured against itself; resolc reaches it through `--llvm-arg=-riscv-revive-i128`. The
+option is deleted when the width ships unconditionally.
+
 ## Status
 
 Experimental, and behind the `+xrevivevec` target feature, which resolc requests by

@@ -7,7 +7,7 @@ pub fn polkavm_linker<T: AsRef<[u8]>>(code: T, strip_binary: bool) -> anyhow::Re
 
     polkavm_linker::program_from_elf(
         config,
-        polkavm_linker::TargetInstructionSet::ReviveV1,
+        polkavm_linker::TargetInstructionSet::ReviveV2,
         code.as_ref(),
     )
     .map_err(|reason| anyhow::anyhow!("polkavm linker failed: {}", reason))

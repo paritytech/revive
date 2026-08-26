@@ -8,8 +8,10 @@ Measured on the 15 benchmark contracts under `benchmarks/single-file` (103 modul
 corpus used for the earlier carry-extension analysis, which established where revive's code size
 goes.
 Sizes are taken per section from the compiled object -- code and constant pool separately, because
-the extension moves them in opposite directions. PVM blob sizes are unavailable because the polkavm
-linker cannot decode the new encodings, as agreed for this phase.
+the extension moves them in opposite directions. When these size figures were taken the polkavm
+linker could not yet decode the new encodings, so PVM blob sizes were left out of this section;
+revive is now pointed at the polkavm tree that carries `ReviveV2`, blobs link and run, and the
+resulting execution numbers are in [§1b](#1b-execution-performance-extension-vs-scalar-reference).
 
 ---
 
@@ -71,6 +73,103 @@ Instruction mix for XENCrypto, the benchmark with the most wide arithmetic:
 
 `sltu` reaching zero is the direct confirmation of the goal: every one of those was materializing a
 carry or a comparison result that RISC-V has no flag register for.
+
+---
+
+## 1b. Execution performance: extension vs scalar reference
+
+The size numbers above stopped at the object file because, at the time, the polkavm linker could
+not decode the new encodings. That is no longer true -- revive is pointed at the polkavm tree that
+carries the `ReviveV2` instruction set, so blobs link and *run* -- and the extension can be measured
+where it ultimately matters: execution time.
+
+**What is measured.** Every one of the 32 wide instructions, at both 128 and 256 bits, against the
+scalar limb chain a base-ISA build would emit for the same operation. The extension form is one
+instruction over operands living in wide registers; the reference keeps the value in memory and
+computes limb by limb with explicit carries, which is what a base-ISA build does -- thirteen
+general-purpose registers cannot hold several wide values plus temporaries, so it spills, exactly as
+the "`add i256` is 30 instructions" figure above reflects. Both are the authentic shape of their
+build. The harness (`crates/polkavm/src/wide_microbench.rs`) unrolls the body to amortize the call,
+subtracts an empty-body baseline, and takes the best of five runs; it also runs the two forms on the
+same inputs and asserts they agree, so a wrong reference is caught rather than flattering the
+comparison. Twenty of the operations have a short scalar reference and are compared directly; the
+iterative and select-heavy ones (division, exp, the fused modular forms, min/max, the signed
+compares) would need a hundreds-of-instructions routine as a reference, so only the extension side is
+reported for them. Figures are nanoseconds per operation on one x86-64 machine -- read the ratios,
+not the absolutes.
+
+Whole-contract execution is not measured here: `pallet-revive` still carries polkavm 0.33, which
+cannot execute a `ReviveV2` blob, so the numbers come from running the instructions directly on the
+0.37 interpreter and recompiler.
+
+### Interpreter -- the extension wins across the board
+
+One interpreted wide instruction replaces the whole scalar limb chain, and the dispatch that
+dominates an interpreter is paid once instead of per limb. The win grows with width, because the
+chain it replaces is longer:
+
+| op | 128-bit speedup | 256-bit speedup |
+|---|--:|--:|
+| add | 9.2× | **15.8×** |
+| sub | 8.9× | **15.2×** |
+| and / or / xor | ~3.9× | ~6.7× |
+| mul | 11.8× | **26.8×** |
+| shift-left | 3.7× | 8.0× |
+| byte-swap | 3.2× | 5.8× |
+| move | 2.5× | 4.7× |
+| slt (unsigned) | 12.3× | **23.5×** |
+| set-equal | 7.5× | 13.0× |
+| widen | 2.1× | 3.1× |
+| truncate | 1.6× | 1.6× |
+
+The iterative and fused operations have no short scalar reference, so only the extension cost is
+reported -- but each is one instruction where a base-ISA build calls a routine:
+
+| op | 128-bit (ns) | 256-bit (ns) |
+|---|--:|--:|
+| div / rem | ~658 | ~2,785 |
+| addmod | 1,306 | 5,575 |
+| exp | 1,738 | 5,558 |
+| mulmod | 1,890 | 6,805 |
+
+### Recompiler -- the trampoline dominates the compute operations
+
+The recompiler does not inline the wide *compute* operations; it routes each through the
+`syscall_wide` trampoline into the shared implementation the interpreter uses, so the two backends
+can never disagree about what an instruction means. That call boundary -- saving the live registers,
+crossing into the shared routine, returning -- costs about **1,700 ns** and is the same for every
+compute operation and both widths, cheap or not: `add` 1,684, `and` 1,689, `mul` 1,738, `slt` 1,682,
+`move` 1,712, `byte-swap` 1,694 at 256 bits, all within noise of each other and of their 128-bit
+counterparts.
+
+Against that, the inline scalar reference is a handful of native instructions the recompiler emits
+directly -- `add` 3.4 ns, `and` 0.5 ns, `mul` 22.4 ns, `slt` 4.5 ns -- so on the recompiler the
+extension is a **loss for the cheap operations**: the wide `add` (1,700 ns) is even slower than the
+*interpreter's* wide `add` (20 ns).
+
+Two kinds of wide instruction escape the trampoline. Loads and stores are generated inline -- so a
+bad address faults through the same guard pages a scalar access does -- and they are correspondingly
+cheap: `load` 0.6 ns, `store` 3.2 ns at 256 bits. And the iterative operations, whose own work
+dwarfs the boundary, are where the extension pays for itself even on the recompiler:
+
+| op | 128-bit (ns) | 256-bit (ns) |
+|---|--:|--:|
+| div / rem | ~4,250 | ~6,950 |
+| exp | 7,302 | 8,572 |
+| addmod | 5,330 | 12,152 |
+| mulmod | 5,635 | 13,447 |
+
+That the compute floor is a fixed ~1,700 ns regardless of width or operation, while the iterative
+costs scale with both, confirms the floor is the call boundary itself and not measurement noise; the
+generic and Linux sandboxes measure it identically.
+
+**The reading.** The extension is an unambiguous win for the interpreter at both widths, and for the
+heavy modular arithmetic and memory traffic on both backends. For the cheap compute operations on the
+recompiler it is a loss, and the cause is specific and fixable: those operations are not inlined.
+`adc`/`sbb` are in the assembler for exactly this, and inlining a wide add would replace the 1,700 ns
+boundary with a few native instructions -- see [§7](#7-the-biggest-thing-left-on-the-table). Until
+then, routing compute through one shared routine is what keeps the recompiler and the interpreter in
+agreement, which was the correctness priority for this phase.
 
 ---
 

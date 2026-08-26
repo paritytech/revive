@@ -103,6 +103,10 @@ pub const STANDARD_JSON_YUL_PVM_CODEGEN_PATH: &str =
 /// PVM bytecode generation and only validate the Yul.
 pub const STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/yul_no_pvm_codegen.json";
+/// A standard JSON fixture whose heap buffer exceeds the default Asset Hub
+/// baseline interpreter memory budget.
+pub const STANDARD_JSON_OVERSIZED_HEAP_PATH: &str =
+    "src/tests/data/standard_json/oversized_heap.json";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";

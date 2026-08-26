@@ -271,7 +271,10 @@ impl Build {
         standard_json: &mut SolcStandardJsonOutput,
         solc_version: &SolcVersion,
     ) -> anyhow::Result<()> {
-        let mut errors = Vec::with_capacity(self.results.len());
+        // Link-time diagnostics (deployment limits, unresolved symbols) live in
+        // `messages`, not `results`.
+        let mut errors = self.messages;
+        errors.reserve(self.results.len());
         for result in self.results.into_values() {
             let build = match result {
                 Ok(build) => build,

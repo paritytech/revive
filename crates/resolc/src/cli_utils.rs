@@ -34,6 +34,8 @@ pub const YUL_DUPLICATE_FUNCTIONS_SWITCH_PATH: &str =
 /// Yul contract with duplicate function names in deeply nested switch cases.
 pub const YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH: &str =
     "src/tests/data/yul/duplicate_functions_deep_nesting.yul";
+/// The odd-offset wide store YUL contract test fixture path (stores 32 bytes at memory address 1).
+pub const YUL_ODD_OFFSET_WIDE_STORE_PATH: &str = "src/tests/data/yul/odd_offset_wide_store.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
@@ -109,6 +111,8 @@ pub const RESOLC_YUL_FLAG: &str = "--yul";
 /// The `--yul` option was deprecated in Solidity 0.8.27 in favor of `--strict-assembly`.
 /// See section `--strict-assembly vs. --yul` in the [release announcement](https://soliditylang.org/blog/2024/09/04/solidity-0.8.27-release-announcement/).
 pub const SOLC_YUL_FLAG: &str = "--strict-assembly";
+/// The `resolc` flag routing Yul lowering through the newyork IR pipeline.
+pub const RESOLC_NEWYORK_FLAG: &str = "--newyork";
 
 /// Common `resolc` CLI optimization settings.
 pub struct ResolcOptSettings;

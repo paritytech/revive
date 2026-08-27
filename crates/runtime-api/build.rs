@@ -17,13 +17,14 @@ const TARGET_ABI_FLAG: &str = "-mabi=lp64e";
 ///
 /// The list mirrors `TargetMachine::VM_FEATURES` in `revive-llvm-context`
 /// (kept in sync by hand — a build script can't depend on that crate). It
-/// deliberately omits `+unaligned-scalar-mem`: these helpers are linked into
-/// every contract and must stay inline-compatible with the **stock** Yul path,
-/// whose target machine does not enable that feature (newyork appends it only
-/// for its own code). LLVM refuses to inline a callee whose feature set is not
-/// a subset of the caller's, so a helper carrying `+unaligned-scalar-mem`
-/// would fail to inline into stock-path code. The feature does not change the
-/// helpers' own codegen, so omitting it costs nothing.
+/// deliberately omits `+unaligned-scalar-mem`: both pipelines enable that
+/// feature by default, but `RESOLC_DISABLE_UNALIGNED_SCALAR_MEM` turns it off,
+/// and these helpers are linked into every contract either way. LLVM refuses
+/// to inline a callee whose feature set is not a subset of the caller's, so a
+/// helper carrying `+unaligned-scalar-mem` would fail to inline into code
+/// compiled without it. The feature does not change the helpers' own codegen,
+/// so omitting it costs nothing and keeps them inlinable in both
+/// configurations.
 const TARGET_FEATURES: &[&str] = &[
     "+e",
     "+m",

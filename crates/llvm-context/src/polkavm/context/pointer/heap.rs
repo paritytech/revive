@@ -87,11 +87,11 @@ impl RuntimeFunction for StoreWord {
 /// 2. Byte-swap each 64-bit value using llvm.bswap.i64
 /// 3. Combine them in reversed word order to form the 256-bit result
 ///
-/// The unrolled form only pays off with the `+unaligned-scalar-mem` target feature,
-/// which is enabled for newyork modules exclusively. Without it the backend splits
-/// each 64-bit access into byte operations, producing larger and slower code than
-/// the single word load it replaces, so the stock Yul path keeps the legacy
-/// `llvm.bswap.i256` lowering it was validated against.
+/// The unrolled form only pays off with the `+unaligned-scalar-mem` target feature.
+/// Without it the backend splits each 64-bit access into byte operations, producing
+/// larger and slower code than the single word load it replaces. Both pipelines enable
+/// the feature by default, and under it the single word load is one wide load, so the
+/// stock Yul path keeps the legacy `llvm.bswap.i256` lowering it was validated against.
 ///
 /// The wide integer extension does the same again: with it the word is one load and
 /// `llvm.bswap.i256` is one instruction, so the unrolling has nothing left to win.
@@ -200,8 +200,8 @@ pub(crate) fn build_efficient_load_swap<'ctx>(
 /// 3. Store them in reversed word order
 ///
 /// As with [`build_efficient_load_swap`], the unrolled form requires the
-/// `+unaligned-scalar-mem` target feature and is therefore reserved for newyork
-/// modules without the wide integer extension; every other path keeps the
+/// `+unaligned-scalar-mem` target feature and is reserved for newyork modules
+/// without the wide integer extension; every other path keeps the
 /// `llvm.bswap.i256` lowering.
 pub(crate) fn build_efficient_store_swap<'ctx>(
     context: &Context<'ctx>,

@@ -144,8 +144,7 @@ pub fn build_symbols(
         );
     }
 
-    let target_machine =
-        PolkaVMTargetMachine::new(PolkaVMTarget::PVM, &OptimizerSettings::none(), false)?;
+    let target_machine = PolkaVMTargetMachine::new(PolkaVMTarget::PVM, &OptimizerSettings::none())?;
     let buffer = target_machine
         .write_to_memory_buffer(&module)
         .expect("ICE: the symbols module should be valid");

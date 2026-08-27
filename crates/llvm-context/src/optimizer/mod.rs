@@ -37,9 +37,8 @@ impl Optimizer {
     }
 
     /// Whether the module being optimized was produced by the newyork IR generator.
-    /// Gates the two pieces of newyork-specific codegen that the stock Yul path must not use:
-    /// the aggressive code-size pipeline in [`Optimizer::run`] and the `+unaligned-scalar-mem`
-    /// target feature in [`crate::target_machine::TargetMachine`].
+    /// Gates the aggressive code-size pipeline in [`Optimizer::run`], which the stock Yul path
+    /// must not use.
     pub fn is_newyork(&self) -> bool {
         self.newyork
     }

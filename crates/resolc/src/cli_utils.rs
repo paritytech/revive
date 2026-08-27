@@ -19,6 +19,15 @@ pub const SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH: &str = "src/tests/data/solidity/
 /// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
 pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
     "src/tests/data/solidity/folded_guard_inlined_loop.sol";
+/// The Solidity contract whose values the newyork pipeline narrows to 128 bits.
+///
+/// Solidity validates the parameters as `uint128` on entry, which is the proof newyork's type
+/// inference needs to narrow the recursive helper's parameters to that width; the arithmetic
+/// feeding the call narrows with them. Recursion is what keeps the call site, since an inlined
+/// helper has no parameters left to narrow, and the `unchecked` block is what keeps the
+/// arithmetic modular, since an overflow check needs the full 256-bit product.
+pub const SOLIDITY_RECURSIVE_UINT128_ARITHMETIC_PATH: &str =
+    "src/tests/data/solidity/recursive_uint128_arithmetic.sol";
 
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";

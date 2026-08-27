@@ -43,28 +43,22 @@ impl TargetMachine {
     pub const VM_FEATURE_WIDE_INTEGER: &'static str = ",+xrevivevec";
 
     /// RISC-V backend feature that lets the code generator emit single (potentially unaligned)
-    /// scalar memory accesses instead of splitting them into byte-wise sequences. Enabled for
-    /// newyork modules only; the stock Yul path omits it, matching the upstream target
-    /// configuration. Enabling it on the Yul path was observed to introduce an end-to-end
-    /// regression (`complex/internal_function_pointers/mixed_features_2`); the exact interaction
-    /// was not isolated, so the feature is restricted to the path it was validated against.
+    /// scalar memory accesses instead of splitting them into byte-wise sequences. Without it a
+    /// `load i256, align 1` — the shape of `__revive_load_heap_word` and its store twin —
+    /// legalizes into 32 byte accesses reassembled with shifts and ORs.
+    ///
+    /// Appended on both pipelines when [`crate::unaligned_scalar_mem_enabled`] says so;
+    /// [`crate::DISABLE_UNALIGNED_SCALAR_MEM_VARIABLE`] turns it off.
     pub const VM_FEATURE_UNALIGNED: &'static str = ",+unaligned-scalar-mem";
 
     /// A shortcut constructor.
     /// A separate instance for every optimization level is created.
-    ///
-    /// `unaligned_scalar_mem` appends [`Self::VM_FEATURE_UNALIGNED`]; pass `true` only for newyork
-    /// modules (see the constant's documentation).
-    pub fn new(
-        target: Target,
-        optimizer_settings: &OptimizerSettings,
-        unaligned_scalar_mem: bool,
-    ) -> anyhow::Result<Self> {
+    pub fn new(target: Target, optimizer_settings: &OptimizerSettings) -> anyhow::Result<Self> {
         let mut features = Self::VM_FEATURES.to_string();
         if crate::wide_integer_extension_enabled() {
             features.push_str(Self::VM_FEATURE_WIDE_INTEGER);
         }
-        if unaligned_scalar_mem {
+        if crate::unaligned_scalar_mem_enabled() {
             features.push_str(Self::VM_FEATURE_UNALIGNED);
         }
         let target_machine = inkwell::targets::Target::from_name(target.name())

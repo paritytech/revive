@@ -36,8 +36,9 @@ fn runs_with_valid_input_file() {
 /// back to the same offset. A toolchain on either of the old encodings emits an extra `addi`
 /// and stores at offset 0, so this line is the one thing it cannot produce.
 ///
-/// Only the newyork pipeline reaches an odd wide offset, because it is what makes unaligned
-/// scalar memory legal; the stock Yul pipeline keeps its wide accesses aligned.
+/// Only the newyork pipeline reaches an odd wide offset. Unaligned scalar memory is legal on
+/// both pipelines, but the stock Yul pipeline still materializes the address into a register
+/// and stores at offset 0.
 #[test]
 fn an_odd_memory_offset_reaches_the_linked_blob() {
     // The 256-bit memory access, as the disassembler spells it.

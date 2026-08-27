@@ -330,11 +330,7 @@ impl<'ctx> Context<'ctx> {
     ) -> anyhow::Result<Build> {
         self.link_polkavm_exports(contract_path)?;
         self.link_immutable_data(contract_path)?;
-        let target_machine = TargetMachine::new(
-            Target::PVM,
-            self.optimizer.settings(),
-            self.optimizer.is_newyork(),
-        )?;
+        let target_machine = TargetMachine::new(Target::PVM, self.optimizer.settings())?;
         self.module().set_triple(&target_machine.get_triple());
 
         self.debug_config

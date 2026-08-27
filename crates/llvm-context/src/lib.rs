@@ -106,10 +106,9 @@ static DID_INITIALIZE: OnceLock<()> = OnceLock::new();
 /// when the user explicitly asked for `-Oz`.
 ///
 /// They are applied only for modules produced by the newyork IR generator. Like the
-/// aggressive code-size pass pipeline in [`crate::optimizer::Optimizer::run`] and the
-/// `+unaligned-scalar-mem` target feature, these knobs are tuned and validated against
-/// newyork's outlined code; the stock Yul path keeps the upstream LLVM defaults it was
-/// validated against (matching `main`).
+/// aggressive code-size pass pipeline in [`crate::optimizer::Optimizer::run`], these knobs
+/// are tuned and validated against newyork's outlined code; the stock Yul path keeps the
+/// upstream LLVM defaults it was validated against (matching `main`).
 const SIZE_LEVEL_Z_ARGUMENTS: &[&str] = &[
     "--disable-licm-promotion",
     "--disable-machine-licm",
@@ -139,6 +138,25 @@ pub const DISABLE_WIDE_INTEGER_EXTENSION_VARIABLE: &str = "RESOLC_DISABLE_WIDE_I
 /// features cannot select the instruction behind it.
 pub fn wide_integer_extension_enabled() -> bool {
     std::env::var_os(DISABLE_WIDE_INTEGER_EXTENSION_VARIABLE).is_none()
+}
+
+/// The environment variable that disables unaligned scalar memory accesses.
+///
+/// They are on by default, on both the stock Yul and the newyork pipeline. Compiling without
+/// them is what produces the baseline the code size numbers are measured against, and keeps a
+/// bisection able to cross the boundary where the stock path gained them. An environment
+/// variable rather than a flag because resolc spawns itself recursively per contract, and the
+/// environment is inherited where a flag would have to be threaded through every process
+/// boundary.
+pub const DISABLE_UNALIGNED_SCALAR_MEM_VARIABLE: &str = "RESOLC_DISABLE_UNALIGNED_SCALAR_MEM";
+
+/// Whether modules are compiled with unaligned scalar memory accesses.
+///
+/// The target machine appends the `+unaligned-scalar-mem` feature when this says so. Without
+/// it the code generator splits every scalar access wider than its alignment into a byte-wise
+/// sequence, which is how revive's heap word helpers were lowered on the stock Yul path.
+pub fn unaligned_scalar_mem_enabled() -> bool {
+    std::env::var_os(DISABLE_UNALIGNED_SCALAR_MEM_VARIABLE).is_none()
 }
 
 /// Initializes the LLVM compiler backend.

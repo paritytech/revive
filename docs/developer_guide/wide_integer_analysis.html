@@ -1,0 +1,1184 @@
+<!DOCTYPE HTML>
+<html lang="en" class="light sidebar-visible" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Measurements - revive compiler book</title>
+
+
+        <!-- Custom HTML head -->
+
+        <meta name="description" content="">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="../favicon-de23e50b.svg">
+        <link rel="shortcut icon" href="../favicon-8114d1fc.png">
+        <link rel="stylesheet" href="../css/variables-8adf115d.css">
+        <link rel="stylesheet" href="../css/general-2459343d.css">
+        <link rel="stylesheet" href="../css/chrome-ae938929.css">
+        <link rel="stylesheet" href="../css/print-9e4910d8.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="../fonts/fonts-9644e21d.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" id="mdbook-highlight-css" href="../highlight-493f70e1.css">
+        <link rel="stylesheet" id="mdbook-tomorrow-night-css" href="../tomorrow-night-4c0ae647.css">
+        <link rel="stylesheet" id="mdbook-ayu-highlight-css" href="../ayu-highlight-3fdfc3ac.css">
+
+        <!-- Custom theme stylesheets -->
+
+
+        <!-- Provide site root and default themes to javascript -->
+        <script>
+            const path_to_root = "../";
+            const default_light_theme = "light";
+            const default_dark_theme = "navy";
+            window.path_to_searchindex_js = "../searchindex-0bca1593.js";
+        </script>
+        <!-- Start loading toc.js asap -->
+        <script src="../toc-9b760f09.js"></script>
+    </head>
+    <body>
+    <div id="mdbook-help-container">
+        <div id="mdbook-help-popup">
+            <h2 class="mdbook-help-title">Keyboard shortcuts</h2>
+            <div>
+                <p>Press <kbd>←</kbd> or <kbd>→</kbd> to navigate between chapters</p>
+                <p>Press <kbd>S</kbd> or <kbd>/</kbd> to search in the book</p>
+                <p>Press <kbd>?</kbd> to show this help</p>
+                <p>Press <kbd>Esc</kbd> to hide this help</p>
+            </div>
+        </div>
+    </div>
+    <div id="mdbook-body-container">
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                let theme = localStorage.getItem('mdbook-theme');
+                let sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            const default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? default_dark_theme : default_light_theme;
+            let theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            const html = document.documentElement;
+            html.classList.remove('light')
+            html.classList.add(theme);
+            html.classList.add("js");
+        </script>
+
+        <input type="checkbox" id="mdbook-sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            let sidebar = null;
+            const sidebar_toggle = document.getElementById("mdbook-sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+                sidebar_toggle.checked = false;
+            }
+            if (sidebar === 'visible') {
+                sidebar_toggle.checked = true;
+            } else {
+                html.classList.remove('sidebar-visible');
+            }
+        </script>
+
+        <nav id="mdbook-sidebar" class="sidebar" aria-label="Table of contents">
+            <!-- populated by js -->
+            <mdbook-sidebar-scrollbox class="sidebar-scrollbox"></mdbook-sidebar-scrollbox>
+            <noscript>
+                <iframe class="sidebar-iframe-outer" src="../toc.html"></iframe>
+            </noscript>
+            <div id="mdbook-sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <div id="mdbook-page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                <div id="mdbook-menu-bar-hover-placeholder"></div>
+                <div id="mdbook-menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="mdbook-sidebar-toggle" class="icon-button" for="mdbook-sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="mdbook-sidebar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M0 96C0 78.3 14.3 64 32 64H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 128 0 113.7 0 96zM0 256c0-17.7 14.3-32 32-32H416c17.7 0 32 14.3 32 32s-14.3 32-32 32H32c-17.7 0-32-14.3-32-32zM448 416c0 17.7-14.3 32-32 32H32c-17.7 0-32-14.3-32-32s14.3-32 32-32H416c17.7 0 32 14.3 32 32z"/></svg></span>
+                        </label>
+                        <button id="mdbook-theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="mdbook-theme-list">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M371.3 367.1c27.3-3.9 51.9-19.4 67.2-42.9L600.2 74.1c12.6-19.5 9.4-45.3-7.6-61.2S549.7-4.4 531.1 9.6L294.4 187.2c-24 18-38.2 46.1-38.4 76.1L371.3 367.1zm-19.6 25.4l-116-104.4C175.9 290.3 128 339.6 128 400c0 3.9 .2 7.8 .6 11.6c1.8 17.5-10.2 36.4-27.8 36.4H96c-17.7 0-32 14.3-32 32s14.3 32 32 32H240c61.9 0 112-50.1 112-112c0-2.5-.1-5-.2-7.5z"/></svg></span>
+                        </button>
+                        <ul id="mdbook-theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-default_theme">Auto</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="mdbook-theme-ayu">Ayu</button></li>
+                        </ul>
+                        <button id="mdbook-search-toggle" class="icon-button" type="button" title="Search (`/`)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="/ s" aria-controls="mdbook-searchbar">
+                            <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M416 208c0 45.9-14.9 88.3-40 122.7L502.6 457.4c12.5 12.5 12.5 32.8 0 45.3s-32.8 12.5-45.3 0L330.7 376c-34.4 25.2-76.8 40-122.7 40C93.1 416 0 322.9 0 208S93.1 0 208 0S416 93.1 416 208zM208 352c79.5 0 144-64.5 144-144s-64.5-144-144-144S64 128.5 64 208s64.5 144 144 144z"/></svg></span>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">revive compiler book</h1>
+
+                    <div class="right-buttons">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
+                            <span class=fa-svg id="print-button"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M128 0C92.7 0 64 28.7 64 64v96h64V64H354.7L384 93.3V160h64V93.3c0-17-6.7-33.3-18.7-45.3L400 18.7C388 6.7 371.7 0 354.7 0H128zM384 352v32 64H128V384 368 352H384zm64 32h32c17.7 0 32-14.3 32-32V256c0-35.3-28.7-64-64-64H64c-35.3 0-64 28.7-64 64v96c0 17.7 14.3 32 32 32H64v64c0 35.3 28.7 64 64 64H384c35.3 0 64-28.7 64-64V384zm-16-88c-13.3 0-24-10.7-24-24s10.7-24 24-24s24 10.7 24 24s-10.7 24-24 24z"/></svg></span>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="mdbook-search-wrapper" class="hidden">
+                    <form id="mdbook-searchbar-outer" class="searchbar-outer">
+                        <div class="search-wrapper">
+                            <input type="search" id="mdbook-searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="mdbook-searchresults-outer" aria-describedby="searchresults-header">
+                            <div class="spinner-wrapper">
+                                <span class=fa-svg id="fa-spin"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M304 48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zm0 416c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM48 304c26.5 0 48-21.5 48-48s-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48zm464-48c0-26.5-21.5-48-48-48s-48 21.5-48 48s21.5 48 48 48s48-21.5 48-48zM142.9 437c18.7-18.7 18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zm0-294.2c18.7-18.7 18.7-49.1 0-67.9S93.7 56.2 75 75s-18.7 49.1 0 67.9s49.1 18.7 67.9 0zM369.1 437c18.7 18.7 49.1 18.7 67.9 0s18.7-49.1 0-67.9s-49.1-18.7-67.9 0s-18.7 49.1 0 67.9z"/></svg></span>
+                            </div>
+                        </div>
+                    </form>
+                    <div id="mdbook-searchresults-outer" class="searchresults-outer hidden">
+                        <div id="mdbook-searchresults-header" class="searchresults-header"></div>
+                        <ul id="mdbook-searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('mdbook-sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('mdbook-sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#mdbook-sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="mdbook-content" class="content">
+                    <main>
+                        <h1 id="wide-integer-extension-measurements"><a class="header" href="#wide-integer-extension-measurements">Wide integer extension: measurements</a></h1>
+<p>Phase 1 of the vector-extension experiment. The goal was to stop LLVM legalizing EVM words into
+<code>i64</code> limb chains, and instead select one instruction per wide operation with operands living in
+wide registers.</p>
+<p>Measured on the 15 benchmark contracts under <code>benchmarks/single-file</code> (103 modules), the same
+corpus used for the earlier carry-extension analysis, which established where revive’s code size
+goes.
+Sizes are taken per section from the compiled object – code and constant pool separately, because
+the extension moves them in opposite directions. When these size figures were taken the polkavm
+linker could not yet decode the new encodings, so PVM blob sizes were left out of this section;
+revive is now pointed at the polkavm tree that carries <code>ReviveV2</code>, blobs link and run, and the
+resulting execution numbers are in <a href="#1b-execution-performance-extension-vs-scalar-reference">§1b</a>.</p>
+<hr>
+<h2 id="1-result"><a class="header" href="#1-result">1. Result</a></h2>
+<p><strong>−909,658 bytes, −35.29%</strong> across the 15 benchmark contracts (103 modules). Every contract
+improves. Code and read-only data move in opposite directions and are reported separately:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th style="text-align: right">baseline</th><th style="text-align: right">XReviveVec</th><th style="text-align: right">delta</th></tr>
+</thead>
+<tbody>
+<tr><td><strong>code</strong> (<code>.text</code>)</td><td style="text-align: right">2,503,468</td><td style="text-align: right"><strong>1,507,562</strong></td><td style="text-align: right"><strong>−995,906 (−39.78%)</strong></td></tr>
+<tr><td>constant pool (<code>.rodata</code>)</td><td style="text-align: right">74,015</td><td style="text-align: right">160,263</td><td style="text-align: right">+86,248 (+116.53%)</td></tr>
+<tr><td><strong>combined</strong></td><td style="text-align: right"><strong>2,577,483</strong></td><td style="text-align: right"><strong>1,667,825</strong></td><td style="text-align: right"><strong>−909,658 (−35.29%)</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p>Wide values live in the vector registers – <code>i256</code> is a type <code>VRM2</code> holds, so at VLEN=128 a wide
+value is an LMUL=2 register pair. All 103 modules compile.</p>
+<p>For scale, the carry extension measured −8.64% on this corpus, and did not change the argument ABI.</p>
+<h3 id="per-benchmark"><a class="header" href="#per-benchmark">Per benchmark</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>benchmark</th><th style="text-align: right">modules</th><th style="text-align: right">baseline</th><th style="text-align: right">combined</th><th style="text-align: right">code only</th></tr>
+</thead>
+<tbody>
+<tr><td>V5QuoteVerifier</td><td style="text-align: right">18</td><td style="text-align: right">565,562</td><td style="text-align: right">−37.69%</td><td style="text-align: right">−41.66%</td></tr>
+<tr><td>XENCrypto</td><td style="text-align: right">10</td><td style="text-align: right">427,602</td><td style="text-align: right">−39.94%</td><td style="text-align: right">−44.07%</td></tr>
+<tr><td>FiatTokenV1</td><td style="text-align: right">16</td><td style="text-align: right">371,048</td><td style="text-align: right">−26.94%</td><td style="text-align: right">−32.80%</td></tr>
+<tr><td>SnapshotPCCSRouter</td><td style="text-align: right">13</td><td style="text-align: right">300,473</td><td style="text-align: right">−35.14%</td><td style="text-align: right">−40.54%</td></tr>
+<tr><td>AutomataDcapAttestationFee</td><td style="text-align: right">17</td><td style="text-align: right">284,507</td><td style="text-align: right">−34.25%</td><td style="text-align: right">−39.29%</td></tr>
+<tr><td>Festival</td><td style="text-align: right">14</td><td style="text-align: right">188,814</td><td style="text-align: right">−27.82%</td><td style="text-align: right">−32.52%</td></tr>
+<tr><td>P2PMarket</td><td style="text-align: right">1</td><td style="text-align: right">135,657</td><td style="text-align: right">−42.45%</td><td style="text-align: right">−44.65%</td></tr>
+<tr><td>T3rminalDriver</td><td style="text-align: right">3</td><td style="text-align: right">133,685</td><td style="text-align: right">−43.01%</td><td style="text-align: right">−45.41%</td></tr>
+<tr><td>TetherToken</td><td style="text-align: right">3</td><td style="text-align: right">51,145</td><td style="text-align: right">−30.88%</td><td style="text-align: right">−34.82%</td></tr>
+<tr><td>ERC20Factory</td><td style="text-align: right">2</td><td style="text-align: right">25,474</td><td style="text-align: right">−30.58%</td><td style="text-align: right">−34.37%</td></tr>
+<tr><td>DaimoP256Verifier</td><td style="text-align: right">1</td><td style="text-align: right">22,051</td><td style="text-align: right"><strong>−51.71%</strong></td><td style="text-align: right">−57.28%</td></tr>
+<tr><td>ERC20</td><td style="text-align: right">1</td><td style="text-align: right">21,617</td><td style="text-align: right">−35.53%</td><td style="text-align: right">−38.91%</td></tr>
+<tr><td>Multicall3</td><td style="text-align: right">1</td><td style="text-align: right">21,363</td><td style="text-align: right">−33.21%</td><td style="text-align: right">−35.87%</td></tr>
+<tr><td>WETH9</td><td style="text-align: right">2</td><td style="text-align: right">20,426</td><td style="text-align: right">−23.07%</td><td style="text-align: right">−26.90%</td></tr>
+<tr><td>Sha256</td><td style="text-align: right">1</td><td style="text-align: right">8,059</td><td style="text-align: right">−7.97%</td><td style="text-align: right">−15.69%</td></tr>
+<tr><td><strong>TOTAL</strong></td><td style="text-align: right"><strong>103</strong></td><td style="text-align: right"><strong>2,577,483</strong></td><td style="text-align: right"><strong>−35.29%</strong></td><td style="text-align: right"><strong>−39.78%</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p>Sha256 improves least: it is a 32-bit algorithm written in 256-bit words, so it gains least from
+wide instructions while still paying for the constant pool. See §7.</p>
+<p><strong>On corpus freshness.</strong> These figures come from IR dumped with the compiler at the time of writing.
+An earlier revision of this analysis used dumps that were ten days old, and the drift mattered: one
+of the gaps it identified (<code>__mul</code>, below) had already been fixed in revive, and one that current
+revive does emit (<code>llvm.umul.with.overflow.i256</code>) was absent entirely. Measurements that compile a
+fixed corpus with two compilers are unaffected by staleness – the input is the controlled variable
+– but any claim about <em>what revive emits</em> has to be re-dumped before it is trusted.</p>
+<h3 id="where-the-size-goes"><a class="header" href="#where-the-size-goes">Where the size goes</a></h3>
+<p>Instruction mix for XENCrypto, the benchmark with the most wide arithmetic:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th style="text-align: right">baseline</th><th style="text-align: right">XReviveVec</th></tr>
+</thead>
+<tbody>
+<tr><td>total instructions</td><td style="text-align: right">27,926</td><td style="text-align: right"><strong>10,418</strong></td></tr>
+<tr><td><code>sltu</code></td><td style="text-align: right">704</td><td style="text-align: right"><strong>0</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>sltu</code> reaching zero is the direct confirmation of the goal: every one of those was materializing a
+carry or a comparison result that RISC-V has no flag register for.</p>
+<hr>
+<h2 id="1b-execution-performance-extension-vs-scalar-reference"><a class="header" href="#1b-execution-performance-extension-vs-scalar-reference">1b. Execution performance: extension vs scalar reference</a></h2>
+<p>The size numbers above stopped at the object file because, at the time, the polkavm linker could
+not decode the new encodings. That is no longer true – revive is pointed at the polkavm tree that
+carries the <code>ReviveV2</code> instruction set, so blobs link and <em>run</em> – and the extension can be measured
+where it ultimately matters: execution time.</p>
+<p><strong>What is measured.</strong> Every one of the 32 wide instructions, at both 128 and 256 bits, against the
+scalar limb chain a base-ISA build would emit for the same operation. The extension form is one
+instruction over operands living in wide registers; the reference keeps the value in memory and
+computes limb by limb with explicit carries, which is what a base-ISA build does – thirteen
+general-purpose registers cannot hold several wide values plus temporaries, so it spills, exactly as
+the “<code>add i256</code> is 30 instructions” figure above reflects. Both are the authentic shape of their
+build. The harness (<code>crates/polkavm/src/wide_microbench.rs</code>) unrolls the body to amortize the call,
+subtracts an empty-body baseline, and takes the best of five runs; it also runs the two forms on the
+same inputs and asserts they agree, so a wrong reference is caught rather than flattering the
+comparison. Twenty of the operations have a short scalar reference and are compared directly; the
+iterative and select-heavy ones (division, exp, the fused modular forms, min/max, the signed
+compares) would need a hundreds-of-instructions routine as a reference, so only the extension side is
+reported for them. Figures are nanoseconds per operation on one x86-64 machine – read the ratios,
+not the absolutes.</p>
+<p>Whole-contract execution is not measured here: <code>pallet-revive</code> still carries polkavm 0.33, which
+cannot execute a <code>ReviveV2</code> blob, so the numbers come from running the instructions directly on the
+0.37 interpreter and recompiler.</p>
+<h3 id="interpreter--the-extension-wins-across-the-board"><a class="header" href="#interpreter--the-extension-wins-across-the-board">Interpreter – the extension wins across the board</a></h3>
+<p>One interpreted wide instruction replaces the whole scalar limb chain, and the dispatch that
+dominates an interpreter is paid once instead of per limb. The win grows with width, because the
+chain it replaces is longer:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>op</th><th style="text-align: right">128-bit speedup</th><th style="text-align: right">256-bit speedup</th></tr>
+</thead>
+<tbody>
+<tr><td>add</td><td style="text-align: right">9.2×</td><td style="text-align: right"><strong>15.8×</strong></td></tr>
+<tr><td>sub</td><td style="text-align: right">8.9×</td><td style="text-align: right"><strong>15.2×</strong></td></tr>
+<tr><td>and / or / xor</td><td style="text-align: right">~3.9×</td><td style="text-align: right">~6.7×</td></tr>
+<tr><td>mul</td><td style="text-align: right">11.8×</td><td style="text-align: right"><strong>26.8×</strong></td></tr>
+<tr><td>shift-left</td><td style="text-align: right">3.7×</td><td style="text-align: right">8.0×</td></tr>
+<tr><td>byte-swap</td><td style="text-align: right">3.2×</td><td style="text-align: right">5.8×</td></tr>
+<tr><td>move</td><td style="text-align: right">2.5×</td><td style="text-align: right">4.7×</td></tr>
+<tr><td>slt (unsigned)</td><td style="text-align: right">12.3×</td><td style="text-align: right"><strong>23.5×</strong></td></tr>
+<tr><td>set-equal</td><td style="text-align: right">7.5×</td><td style="text-align: right">13.0×</td></tr>
+<tr><td>widen</td><td style="text-align: right">2.1×</td><td style="text-align: right">3.1×</td></tr>
+<tr><td>truncate</td><td style="text-align: right">1.6×</td><td style="text-align: right">1.6×</td></tr>
+</tbody>
+</table>
+</div>
+<p>The iterative and fused operations have no short scalar reference, so only the extension cost is
+reported – but each is one instruction where a base-ISA build calls a routine:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>op</th><th style="text-align: right">128-bit (ns)</th><th style="text-align: right">256-bit (ns)</th></tr>
+</thead>
+<tbody>
+<tr><td>div / rem</td><td style="text-align: right">~658</td><td style="text-align: right">~2,785</td></tr>
+<tr><td>addmod</td><td style="text-align: right">1,306</td><td style="text-align: right">5,575</td></tr>
+<tr><td>exp</td><td style="text-align: right">1,738</td><td style="text-align: right">5,558</td></tr>
+<tr><td>mulmod</td><td style="text-align: right">1,890</td><td style="text-align: right">6,805</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="recompiler--the-trampoline-dominates-the-compute-operations"><a class="header" href="#recompiler--the-trampoline-dominates-the-compute-operations">Recompiler – the trampoline dominates the compute operations</a></h3>
+<p>The recompiler does not inline the wide <em>compute</em> operations; it routes each through the
+<code>syscall_wide</code> trampoline into the shared implementation the interpreter uses, so the two backends
+can never disagree about what an instruction means. That call boundary – saving the live registers,
+crossing into the shared routine, returning – costs about <strong>1,700 ns</strong> and is the same for every
+compute operation and both widths, cheap or not: <code>add</code> 1,684, <code>and</code> 1,689, <code>mul</code> 1,738, <code>slt</code> 1,682,
+<code>move</code> 1,712, <code>byte-swap</code> 1,694 at 256 bits, all within noise of each other and of their 128-bit
+counterparts.</p>
+<p>Against that, the inline scalar reference is a handful of native instructions the recompiler emits
+directly – <code>add</code> 3.4 ns, <code>and</code> 0.5 ns, <code>mul</code> 22.4 ns, <code>slt</code> 4.5 ns – so on the recompiler the
+extension is a <strong>loss for the cheap operations</strong>: the wide <code>add</code> (1,700 ns) is even slower than the
+<em>interpreter’s</em> wide <code>add</code> (20 ns).</p>
+<p>Two kinds of wide instruction escape the trampoline. Loads and stores are generated inline – so a
+bad address faults through the same guard pages a scalar access does – and they are correspondingly
+cheap: <code>load</code> 0.6 ns, <code>store</code> 3.2 ns at 256 bits. And the iterative operations, whose own work
+dwarfs the boundary, are where the extension pays for itself even on the recompiler:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>op</th><th style="text-align: right">128-bit (ns)</th><th style="text-align: right">256-bit (ns)</th></tr>
+</thead>
+<tbody>
+<tr><td>div / rem</td><td style="text-align: right">~4,250</td><td style="text-align: right">~6,950</td></tr>
+<tr><td>exp</td><td style="text-align: right">7,302</td><td style="text-align: right">8,572</td></tr>
+<tr><td>addmod</td><td style="text-align: right">5,330</td><td style="text-align: right">12,152</td></tr>
+<tr><td>mulmod</td><td style="text-align: right">5,635</td><td style="text-align: right">13,447</td></tr>
+</tbody>
+</table>
+</div>
+<p>That the compute floor is a fixed ~1,700 ns regardless of width or operation, while the iterative
+costs scale with both, confirms the floor is the call boundary itself and not measurement noise; the
+generic and Linux sandboxes measure it identically.</p>
+<p><strong>The reading.</strong> The extension is an unambiguous win for the interpreter at both widths, and for the
+heavy modular arithmetic and memory traffic on both backends. For the cheap compute operations on the
+recompiler it is a loss, and the cause is specific and fixable: those operations are not inlined.
+<code>adc</code>/<code>sbb</code> are in the assembler for exactly this, and inlining a wide add would replace the 1,700 ns
+boundary with a few native instructions – see <a href="#7-the-biggest-thing-left-on-the-table">§7</a>. Until
+then, routing compute through one shared routine is what keeps the recompiler and the interpreter in
+agreement, which was the correctness priority for this phase.</p>
+<hr>
+<h2 id="2-phase-1-step-by-step"><a class="header" href="#2-phase-1-step-by-step">2. Phase 1, step by step</a></h2>
+<p><strong>Setup.</strong> Branched <code>parity-llvm</code> from <code>upstream/release/22.x</code> (LLVM 22.1.8, close enough to
+revive’s 22.1.5 for <code>llvm-sys 221</code>), built through revive’s own builder using a build root whose
+<code>llvm</code> is a symlink – the builder resolves <code>./llvm/</code>, <code>./patches/llvm/</code> and <code>./target-llvm/</code>
+relative to the working directory, so this avoids duplicating a multi-GB tree.</p>
+<h3 id="step-0--put-wide-values-in-the-vector-registers"><a class="header" href="#step-0--put-wide-values-in-the-vector-registers">Step 0 – put wide values in the vector registers</a></h3>
+<p><code>i256</code> is added to <code>VRM2</code>’s type list, so a wide value <em>is</em> an LMUL=2 vector register pair – exactly
+256 bits at VLEN=128. The feature implies <code>Zve64x</code> and <code>Zvl128b</code>, because it needs those registers.</p>
+<p>This is deliberately the vector registers rather than a file of the extension’s own. The allocator
+then knows these operands overlap ordinary vector values, so a wide value and an RVV value can never
+share a physical register. Everything else reuses what RVV has: <code>VMV2R_V</code> for copies,
+<code>VS2R_V</code>/<code>VL2RE8_V</code> for spills, <code>ArgVRM2s</code> for arguments. <code>RISCVInstrInfo.cpp</code> needs no new copy or
+spill code, and the register definition is a two-line addition to a type list.</p>
+<p>The cost, at this point, is that RVV spill slots are <strong>scalable</strong>: sized in <code>vlenb</code>, so each access
+needs a runtime VLEN query and arithmetic. A spill-heavy test emits 37 <code>csrr</code>. Non-leaf functions
+also carry frame-pointer setup and stack realignment. Step 4 removes both.</p>
+<h3 id="step-1--the-instruction-set-and-the-abi"><a class="header" href="#step-1--the-instruction-set-and-the-abi">Step 1 – the instruction set and the ABI</a></h3>
+<p><code>addRegisterClass(MVT::i256, ...)</code> so type legalization stops splitting wide values; operation
+actions marking the supported operations Legal and the rest Expand; the instructions themselves in
+the custom-2 opcode space; a <code>Select_VRM2</code> pseudo for wide selects (2,036 <code>phi i256</code> in the corpus);
+and wide arguments in vector registers in <em>both</em> <code>CC_RISCV</code> and <code>CC_RISCV_FastCC</code> – the latter
+matters because revive gives its internal functions <code>fastcc</code>.</p>
+<pre><code>add i256                              icmp ult i256
+--------------------------------      ------------------------------
+  ld   a5, 0(a2)                        ld    a2, 8(a1)
+  ld   s0, 8(a2)                        ld    t1, 16(a1)
+  ld   t1, 16(a2)          30 instrs    ld    a3, 24(a1)        22 instrs
+  ld   t0, 24(a2)                       beq   a4, a3, .LBB1_3
+  ...                                   sltu  t0, a4, a3
+                                        ...
+-&gt;                                    -&gt;
+  revive.wadd v8, v8, v10   3 instrs    revive.wsltu a0, v8, v10  3 instrs
+</code></pre>
+<p>The ABI change is the larger half. A three-argument wide call passed everything by reference:</p>
+<pre><code>call3:  addi sp, sp, -192        -&gt;    call3:  addi sp, sp, -16
+        sd   ra, 184(sp)                       sd   ra, 8(sp)
+        sd   s0, 176(sp)                       addi s0, sp, 16
+        sd   s1, 168(sp)                       andi sp, sp, -16
+        addi s0, sp, 192                       call opaque
+        andi sp, sp, -16                       addi sp, s0, -16
+        ld   a4, 0(a1)                         ld   ra, 8(sp)
+        sd   a4, 24(sp)                        addi sp, sp, 16
+        ...            56 instrs               ret          9 instrs
+</code></pre>
+<p>A 192-byte frame and limb-by-limb marshalling becomes a 16-byte frame and no marshalling at all.</p>
+<p>Measured on its own – wide constants still coming from the pool, which step 2 fixes:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>benchmark</th><th style="text-align: right">baseline</th><th style="text-align: right">step 1</th><th style="text-align: right">delta</th></tr>
+</thead>
+<tbody>
+<tr><td>V5QuoteVerifier</td><td style="text-align: right">575,524</td><td style="text-align: right">553,100</td><td style="text-align: right">−3.90%</td></tr>
+<tr><td>XENCrypto</td><td style="text-align: right">479,234</td><td style="text-align: right">340,772</td><td style="text-align: right"><strong>−28.89%</strong></td></tr>
+<tr><td>FiatTokenV1</td><td style="text-align: right">373,746</td><td style="text-align: right">375,660</td><td style="text-align: right">+0.51%</td></tr>
+<tr><td>SnapshotPCCSRouter</td><td style="text-align: right">306,187</td><td style="text-align: right">302,263</td><td style="text-align: right">−1.28%</td></tr>
+<tr><td>AutomataDcapAttestationFee</td><td style="text-align: right">290,231</td><td style="text-align: right">286,901</td><td style="text-align: right">−1.15%</td></tr>
+<tr><td>Festival</td><td style="text-align: right">189,194</td><td style="text-align: right">171,942</td><td style="text-align: right">−9.12%</td></tr>
+<tr><td>P2PMarket</td><td style="text-align: right">136,095</td><td style="text-align: right">101,139</td><td style="text-align: right">−25.68%</td></tr>
+<tr><td>T3rminalDriver</td><td style="text-align: right">134,985</td><td style="text-align: right">102,883</td><td style="text-align: right">−23.78%</td></tr>
+<tr><td>TetherToken</td><td style="text-align: right">52,163</td><td style="text-align: right">44,699</td><td style="text-align: right">−14.31%</td></tr>
+<tr><td>ERC20Factory</td><td style="text-align: right">25,486</td><td style="text-align: right">22,862</td><td style="text-align: right">−10.30%</td></tr>
+<tr><td>DaimoP256Verifier</td><td style="text-align: right">22,045</td><td style="text-align: right">15,609</td><td style="text-align: right"><strong>−29.19%</strong></td></tr>
+<tr><td>ERC20</td><td style="text-align: right">21,629</td><td style="text-align: right">18,461</td><td style="text-align: right">−14.65%</td></tr>
+<tr><td>Multicall3</td><td style="text-align: right">21,367</td><td style="text-align: right">21,717</td><td style="text-align: right">+1.64%</td></tr>
+<tr><td>WETH9</td><td style="text-align: right">20,436</td><td style="text-align: right">19,816</td><td style="text-align: right">−3.03%</td></tr>
+<tr><td>Sha256</td><td style="text-align: right">8,059</td><td style="text-align: right">11,195</td><td style="text-align: right"><strong>+38.91%</strong></td></tr>
+<tr><td><strong>TOTAL</strong></td><td style="text-align: right"><strong>2,656,381</strong></td><td style="text-align: right"><strong>2,389,019</strong></td><td style="text-align: right"><strong>−10.06%</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Code falls 26.79% at this step, but the constant pool grows 573%</strong>, so only 10 points survive into
+the combined figure. Three benchmarks come out worse. That is not a property of the instruction set;
+it is the constant handling, which step 2 addresses.</p>
+<h3 id="step-2--constant-materialization"><a class="header" href="#step-2--constant-materialization">Step 2 – constant materialization</a></h3>
+<p>The first working version sent every immediate wider than 11 bits to the constant pool: a 32-byte
+<code>.rodata.cst32</code> entry plus two instructions to address and load it, where the limb expansion had
+built each 64-bit limb with <code>li</code>/<code>lui</code> and folded away limbs that were zero.</p>
+<p>Values that fit an XLen register are now built there and widened. Both directions matter: masks like
+<code>-1</code> have 256 active bits but only one <em>significant</em> bit, and are everywhere in EVM code.</p>
+<pre><code>i256 0xFFFFFFFF                       i256 0            i256 -1
+------------------------------        --------------    ------------------
+  lui  a0, %hi(.LCPI2_0)                (pool load)       (pool load)
+  revive.wld v8, %lo(.LCPI2_0)(a0)
+  + 32 bytes of .rodata               -&gt;                -&gt;
+-&gt;                                      revive.wzext      li   a0, -1
+  li   a0, -1                           v8, zero          revive.wsext v8, a0
+  srli a0, a0, 32
+  revive.wzext v8, a0
+</code></pre>
+<p>The widening uses target DAG nodes (<code>RISCVISD::WIDE_ZEXT</code>/<code>WIDE_SEXT</code>) rather than
+<code>ZERO_EXTEND</code>/<code>SIGN_EXTEND</code>, because an extend of a constant folds straight back into a wide constant
+and lands right back in the pool. Returning <code>SDValue()</code> from the Custom lowering does not work
+either – LegalizeDAG then falls back to its default constant expansion, which <em>is</em> the pool.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>benchmark</th><th style="text-align: right">step 1</th><th style="text-align: right">step 2</th><th style="text-align: right">gain</th></tr>
+</thead>
+<tbody>
+<tr><td>V5QuoteVerifier</td><td style="text-align: right">−3.90%</td><td style="text-align: right"><strong>−23.14%</strong></td><td style="text-align: right">+19.2 pts</td></tr>
+<tr><td>XENCrypto</td><td style="text-align: right">−28.89%</td><td style="text-align: right"><strong>−41.14%</strong></td><td style="text-align: right">+12.3 pts</td></tr>
+<tr><td>FiatTokenV1</td><td style="text-align: right">+0.51%</td><td style="text-align: right"><strong>−17.39%</strong></td><td style="text-align: right">+17.9 pts</td></tr>
+<tr><td>SnapshotPCCSRouter</td><td style="text-align: right">−1.28%</td><td style="text-align: right"><strong>−20.34%</strong></td><td style="text-align: right">+19.1 pts</td></tr>
+<tr><td>AutomataDcapAttestationFee</td><td style="text-align: right">−1.15%</td><td style="text-align: right"><strong>−19.43%</strong></td><td style="text-align: right">+18.3 pts</td></tr>
+<tr><td>Festival</td><td style="text-align: right">−9.12%</td><td style="text-align: right"><strong>−21.85%</strong></td><td style="text-align: right">+12.7 pts</td></tr>
+<tr><td>P2PMarket</td><td style="text-align: right">−25.68%</td><td style="text-align: right"><strong>−35.69%</strong></td><td style="text-align: right">+10.0 pts</td></tr>
+<tr><td>T3rminalDriver</td><td style="text-align: right">−23.78%</td><td style="text-align: right"><strong>−35.50%</strong></td><td style="text-align: right">+11.7 pts</td></tr>
+<tr><td>TetherToken</td><td style="text-align: right">−14.31%</td><td style="text-align: right"><strong>−25.14%</strong></td><td style="text-align: right">+10.8 pts</td></tr>
+<tr><td>ERC20Factory</td><td style="text-align: right">−10.30%</td><td style="text-align: right"><strong>−22.85%</strong></td><td style="text-align: right">+12.6 pts</td></tr>
+<tr><td>DaimoP256Verifier</td><td style="text-align: right">−29.19%</td><td style="text-align: right"><strong>−37.33%</strong></td><td style="text-align: right">+8.1 pts</td></tr>
+<tr><td>ERC20</td><td style="text-align: right">−14.65%</td><td style="text-align: right"><strong>−27.62%</strong></td><td style="text-align: right">+13.0 pts</td></tr>
+<tr><td>Multicall3</td><td style="text-align: right">+1.64%</td><td style="text-align: right"><strong>−13.62%</strong></td><td style="text-align: right">+15.3 pts</td></tr>
+<tr><td>WETH9</td><td style="text-align: right">−3.03%</td><td style="text-align: right"><strong>−14.76%</strong></td><td style="text-align: right">+11.7 pts</td></tr>
+<tr><td>Sha256</td><td style="text-align: right">+38.91%</td><td style="text-align: right"><strong>+16.28%</strong></td><td style="text-align: right">+22.6 pts</td></tr>
+<tr><td><strong>TOTAL</strong></td><td style="text-align: right"><strong>−10.06%</strong></td><td style="text-align: right"><strong>−25.96%</strong></td><td style="text-align: right"><strong>+15.9 pts</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p>Steps 1 and 2 were measured before the VLEN and frame-pointer work described in step 0, so these
+figures show the size of each gain rather than the final numbers in §1.</p>
+<p>The constant pool drops from +573.53% to +116.46%, and every benchmark improves by 8 to 23 points.
+The three that step 1 made worse are all recovered; Sha256 is still a regression but less than half
+of what it was, for the reasons in §7.</p>
+<p>Both steps can be measured with one compiler: <code>-riscv-revive-wide-const-in-reg=false</code> restores the
+step-1 behaviour.</p>
+<h3 id="step-3--known-bits-implemented-measured-reverted"><a class="header" href="#step-3--known-bits-implemented-measured-reverted">Step 3 – known bits: implemented, measured, reverted</a></h3>
+<p><code>computeKnownBitsForTargetNode</code> for the widening nodes, so the combiner could see through a
+materialized constant. It produced <strong>no size change whatsoever</strong> – eleven modules compared
+byte-for-byte identical – while causing a severe compile-time regression: roughly a quarter of the
+corpus began exceeding the harness’s 120-second limit, and the largest module went from 1 second to
+over 120.</p>
+<p>The null result is the expected one in hindsight. The wide arithmetic selects from <em>generic</em> ISD
+nodes – <code>and</code>, <code>or</code>, <code>shl</code>, <code>icmp</code> – whose known-bits support is width-agnostic and was never
+missing. The only opaque nodes are the two widening ones, and they carry constants the combiner
+already knows before legalization. It added recomputation without adding information. What is
+actually needed is a <em>narrowing</em> transform; see §6.</p>
+<h3 id="step-4--vls-was-never-actually-set"><a class="header" href="#step-4--vls-was-never-actually-set">Step 4 – VLS was never actually set</a></h3>
+<p>Steps 0 to 3 ran with what looked like a vector-length-specific configuration and behaved as though
+it were length-agnostic: every RVV spill slot scalable, every access through <code>vlenb</code>. §3 had already
+found that <code>-riscv-v-vector-bits-min</code> changed nothing and recorded it as a null result. It was not a
+null result – the configuration was wrong.</p>
+<p><strong><code>Zvl128b</code> sets a floor, not a width.</strong> That is what the extension means in the RISC-V spec, VLEN
+<em>at least</em> 128, and LLVM follows it: <code>getRealMaxVLen()</code> stays at 65536 unless
+<code>-riscv-v-vector-bits-max</code> is given, so <code>getRealVLen()</code> never yields a known value.
+<code>-riscv-v-vector-bits-min</code> sets the floor again and moves nothing. <strong>Both</strong> bounds have to be
+pinned, and neither <code>Zvl128b</code> nor the min flag does that.</p>
+<p><strong>And nothing on the spill path consulted VLEN anyway.</strong> In <code>RISCVInstrInfo::storeRegToStackSlot</code>
+the decision came from the register class alone:</p>
+<pre><code class="language-cpp">if (RISCVRegisterInfo::isRVVRegClass(RC)) {
+  ... TypeSize::getScalable(MFI.getObjectSize(FI)) ...
+  MFI.setStackID(FI, TargetStackID::ScalableVector);
+</code></pre>
+<p>So even with the width known the slot stayed scalable. VLS governs vector <em>type</em> legalization; it
+never reached stack object classification.</p>
+<p>Three changes follow from that. The feature now pins both VLEN bounds itself, so no flags are
+needed. Where the width is known, spill slots are ordinary fixed-size objects:</p>
+<pre><code>csrr a1, vlenb ; li a2, 38 ; mul a1, a1, a2      addi   a1, sp, 584
+add  a1, a1, sp ; addi a1, a1, 32          -&gt;    vs2r.v v10, (a1)
+vs2r.v v10, (a1)                                 # 32-byte Folded Spill
+</code></pre>
+<p>And <code>hasRVVFrameObject()</code> is answered precisely rather than as <code>hasVInstructions()</code>. That function
+is deliberately imprecise upstream, because scanning stack objects gives different answers before
+and after register allocation – RVV spill slots appear during it (issue 53016). With fixed slots
+the extension never creates a scalable object, so the scan is stable. Returning <code>true</code> for every
+function was forcing 16-byte frame alignment, which exceeds LP64E’s 8-byte stack alignment, so every
+function realigned and needed a frame pointer. Leaf functions are now <code>revive.wadd v8, v8, v10 ; ret</code>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th style="text-align: right">code</th><th style="text-align: right">constant pool</th><th style="text-align: right">combined</th></tr>
+</thead>
+<tbody>
+<tr><td>scalable slots, frame pointer</td><td style="text-align: right">1,806,612</td><td style="text-align: right">160,231</td><td style="text-align: right">1,966,843 (−25.96%)</td></tr>
+<tr><td>fixed slots</td><td style="text-align: right">1,543,866</td><td style="text-align: right">160,231</td><td style="text-align: right">1,704,097 (−35.85%)</td></tr>
+<tr><td>+ precise <code>hasRVVFrameObject</code></td><td style="text-align: right"><strong>1,526,096</strong></td><td style="text-align: right">160,231</td><td style="text-align: right"><strong>1,686,327 (−36.52%)</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p>Per benchmark, against the same corpus before the step:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>benchmark</th><th style="text-align: right">before</th><th style="text-align: right">after</th><th style="text-align: right">gain</th></tr>
+</thead>
+<tbody>
+<tr><td>V5QuoteVerifier</td><td style="text-align: right">442,362</td><td style="text-align: right">358,040</td><td style="text-align: right"><strong>−19.1%</strong></td></tr>
+<tr><td>FiatTokenV1</td><td style="text-align: right">308,768</td><td style="text-align: right">273,340</td><td style="text-align: right">−11.5%</td></tr>
+<tr><td>XENCrypto</td><td style="text-align: right">282,072</td><td style="text-align: right">258,936</td><td style="text-align: right">−8.2%</td></tr>
+<tr><td>SnapshotPCCSRouter</td><td style="text-align: right">243,915</td><td style="text-align: right">198,497</td><td style="text-align: right">−18.6%</td></tr>
+<tr><td>AutomataDcapAttestationFee</td><td style="text-align: right">233,851</td><td style="text-align: right">190,649</td><td style="text-align: right">−18.5%</td></tr>
+<tr><td>Festival</td><td style="text-align: right">147,862</td><td style="text-align: right">136,552</td><td style="text-align: right">−7.6%</td></tr>
+<tr><td>P2PMarket</td><td style="text-align: right">87,525</td><td style="text-align: right">78,491</td><td style="text-align: right">−10.3%</td></tr>
+<tr><td>T3rminalDriver</td><td style="text-align: right">87,061</td><td style="text-align: right">76,277</td><td style="text-align: right">−12.4%</td></tr>
+<tr><td>TetherToken</td><td style="text-align: right">39,047</td><td style="text-align: right">35,395</td><td style="text-align: right">−9.4%</td></tr>
+<tr><td>ERC20Factory</td><td style="text-align: right">19,662</td><td style="text-align: right">17,696</td><td style="text-align: right">−10.0%</td></tr>
+<tr><td>Multicall3</td><td style="text-align: right">18,457</td><td style="text-align: right">14,481</td><td style="text-align: right"><strong>−21.5%</strong></td></tr>
+<tr><td>WETH9</td><td style="text-align: right">17,420</td><td style="text-align: right">15,738</td><td style="text-align: right">−9.7%</td></tr>
+<tr><td>ERC20</td><td style="text-align: right">15,655</td><td style="text-align: right">13,949</td><td style="text-align: right">−10.9%</td></tr>
+<tr><td>DaimoP256Verifier</td><td style="text-align: right">13,815</td><td style="text-align: right">10,849</td><td style="text-align: right"><strong>−21.5%</strong></td></tr>
+<tr><td>Sha256</td><td style="text-align: right">9,371</td><td style="text-align: right">7,437</td><td style="text-align: right">−20.6%</td></tr>
+<tr><td><strong>TOTAL</strong></td><td style="text-align: right"><strong>1,966,843</strong></td><td style="text-align: right"><strong>1,686,327</strong></td><td style="text-align: right"><strong>−14.3%</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>280,516 bytes</strong>, and the gap to the separate register file falls from 413,712 to 133,196. Every
+benchmark improves, by 7.6% to 21.5%; Sha256 stops being a regression.</p>
+<p>The spread tracks how much each contract spills: the biggest gains are the small contracts whose
+frames existed only to hold wide values, and XENCrypto gains least because its wide arithmetic
+mostly stays in registers. <code>check-llvm-codegen-riscv</code> passes 2454/2454 and
+the RVV suite 1200/1200 – the fixed-slot change is gated on the extension, so ordinary RVV is
+untouched.</p>
+<hr>
+<h3 id="a-future-improvement-a-register-file-of-the-extensions-own"><a class="header" href="#a-future-improvement-a-register-file-of-the-extensions-own">A future improvement: a register file of the extension’s own</a></h3>
+<p>An earlier revision kept <code>i256</code> in a separate <code>W0</code>-<code>W15</code> class, encoded as the even vector register
+numbers so the emitted ELF still named vector registers, but modelled inside LLVM as its own class
+with fixed-size spill slots. It remains smaller:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th style="text-align: right">code</th><th style="text-align: right">constant pool</th><th style="text-align: right">combined</th></tr>
+</thead>
+<tbody>
+<tr><td>vector registers (current)</td><td style="text-align: right">1,526,096</td><td style="text-align: right">160,231</td><td style="text-align: right"><strong>1,686,327 (−36.52%)</strong></td></tr>
+<tr><td>separate <code>W</code> file</td><td style="text-align: right">1,392,900</td><td style="text-align: right">160,231</td><td style="text-align: right"><strong>1,553,131 (−41.53%)</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p>The gap is <strong>133,196 bytes</strong>, down from 413,712 before the VLEN and frame-pointer fixes, and the
+spread across benchmarks is now 7-13% rather than 16-41% – one systematic remainder rather than
+several causes. What is left is most likely allocation quality; see §7.</p>
+<p><strong>It is not adopted, and should not be without more work.</strong> LLVM would not know the two register
+files overlap, so a wide value and an RVV value could be assigned the same physical register with no
+conflict detected – safe only while no RVV code is generated, which is not a property to rely on.</p>
+<hr>
+<h2 id="3-phase-2-vlen-width-and-vla-against-vls"><a class="header" href="#3-phase-2-vlen-width-and-vla-against-vls">3. Phase 2: VLEN width, and VLA against VLS</a></h2>
+<p>Both comparisons are null results, measured over all 103 modules on the vector-register design. The
+extension implies <code>Zve64x</code> and <code>Zvl128b</code>, so plain <code>XReviveVec</code> is already <code>Zvl128</code> and
+length-agnostic; the other three raise VLEN or pin it with <code>-riscv-v-vector-bits-min</code>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>configuration</th><th style="text-align: right">code</th><th style="text-align: right">constant pool</th><th style="text-align: right">combined</th><th style="text-align: right">vs Zvl128 VLA</th></tr>
+</thead>
+<tbody>
+<tr><td><code>Zvl128</code>, VLA</td><td style="text-align: right">1,806,612</td><td style="text-align: right">160,231</td><td style="text-align: right">1,966,843</td><td style="text-align: right">—</td></tr>
+<tr><td><code>Zvl128</code>, VLS</td><td style="text-align: right">1,806,612</td><td style="text-align: right">160,231</td><td style="text-align: right">1,966,843</td><td style="text-align: right"><strong>+0 (0.00%)</strong></td></tr>
+<tr><td><code>Zvl256</code>, VLA</td><td style="text-align: right">1,806,656</td><td style="text-align: right">160,231</td><td style="text-align: right">1,966,887</td><td style="text-align: right">+44 (0.00%)</td></tr>
+<tr><td><code>Zvl256</code>, VLS</td><td style="text-align: right">1,806,656</td><td style="text-align: right">160,231</td><td style="text-align: right">1,966,887</td><td style="text-align: right">+44 (0.00%)</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Zvl128 against Zvl256: 44 bytes in 1.97 MB</strong>, or 0.002%, and <code>Zvl256</code> is the <em>larger</em> of the two.
+Code size saturates well below 256 bits, matching the earlier VLEN sweep that found 256, 512, 1024
+and 2048 within 48 bytes of one another.</p>
+<p><strong>VLA against VLS: byte-identical</strong>, at both widths. <code>-riscv-v-vector-bits-min</code> changes nothing on
+top of <code>Zvl*b</code>, which already pins the width – the flag is redundant rather than an alternative.
+The earlier RVV experiment reached the same conclusion at 256; this confirms it at 128 and with the
+extension present.</p>
+<p>There is a structural reason the second comparison cannot show much: <strong>the extension’s instructions
+are fixed-width by construction and read neither <code>vtype</code> nor <code>vl</code></strong>. Nothing about a <code>revive.wadd</code>
+is length-agnostic or length-specific. The axis can only reach whatever ordinary RVV codegen the
+vectorizer emits alongside them – which, per the earlier experiment, is byte-compare and
+small-memcpy idioms and no vector arithmetic at all. This is worth stating plainly rather than
+letting a null result read as “no difference found”: the question is close to unanswerable for this
+design.</p>
+<p>The result that <em>would</em> have been useful is negative too. VLS does not make RVV spill slots
+fixed-size – a spill-heavy test emits the same 37 <code>csrr</code> instructions either way – so pinning VLEN
+does not recover any of the scalable-stack overhead described in §2. Getting that back needs a
+change to how <code>VRM2</code> slots are sized, not a command-line flag. Why the flag does not reach the frame
+lowering is the open question in §7, and the next thing to establish.</p>
+<p><strong>Conclusion.</strong> Neither knob is worth turning. <code>Zvl128</code> is the right setting: it is what the
+extension already implies, it is 44 bytes smaller than <code>Zvl256</code>, and VLS buys nothing at either
+width.</p>
+<hr>
+<h3 id="second-pass-after-step-4"><a class="header" href="#second-pass-after-step-4">Second pass, after step 4</a></h3>
+<p>The measurements above were taken while VLS was not actually in effect (§2, step 4). Repeating them
+on the corrected configuration does not refine the comparison – it removes it. Both axes collapse.</p>
+<p><strong>VLA is no longer a valid configuration.</strong> Forcing it back with <code>-riscv-v-vector-bits-max=0</code> makes
+the slots scalable again, which reintroduces the 16-byte frame alignment the precise
+<code>hasRVVFrameObject</code> no longer asks for, and compilation asserts in <code>emitPrologue</code>. The extension
+requires a pinned VLEN; it is not a tuning choice.</p>
+<p><strong>VLEN=256 is meaningless for this design.</strong> The mapping is <code>i256</code> onto an LMUL=2 group, which is
+256 bits only at VLEN=128. At 256 the group is 512 bits, so every wide value occupies a slot twice
+its size:</p>
+<pre><code>VLEN=128:  vs2r.v v10, (a1)   # 32-byte Folded Spill
+VLEN=256:  vs2r.v v10, (a1)   # 64-byte Folded Spill
+</code></pre>
+<p>The spill frame in the same test grows from 616 to 1224 bytes, and half of it is padding. The
+extension is defined at VLEN=128 by construction.</p>
+<p>Measured properly, the four configurations are no longer equivalent. All carry
+<code>"frame-pointer"="all"</code>, since VLA needs it and charging that to one side would confound the
+comparison:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>configuration</th><th style="text-align: right">code</th><th style="text-align: right">constant pool</th><th style="text-align: right">combined</th><th style="text-align: right">vs VLA 128</th></tr>
+</thead>
+<tbody>
+<tr><td>VLA, VLEN ≥ 128</td><td style="text-align: right">1,819,342</td><td style="text-align: right">160,231</td><td style="text-align: right">1,979,573</td><td style="text-align: right">—</td></tr>
+<tr><td>VLA, VLEN ≥ 256</td><td style="text-align: right">1,819,384</td><td style="text-align: right">160,231</td><td style="text-align: right">1,979,615</td><td style="text-align: right">+42 (+0.00%)</td></tr>
+<tr><td><strong>VLS, VLEN = 128</strong></td><td style="text-align: right"><strong>1,567,822</strong></td><td style="text-align: right">160,231</td><td style="text-align: right"><strong>1,728,053</strong></td><td style="text-align: right"><strong>−251,520 (−12.71%)</strong></td></tr>
+<tr><td>VLS, VLEN = 256</td><td style="text-align: right">1,595,984</td><td style="text-align: right">160,231</td><td style="text-align: right">1,756,215</td><td style="text-align: right">−223,358 (−11.28%)</td></tr>
+</tbody>
+</table>
+</div>
+<p>Three things fall out.</p>
+<p><strong>VLS against VLA is worth 12.71%</strong> – the whole scalable-addressing cost from step 4, now visible
+as a direct comparison rather than inferred. This is what the first pass should have measured.</p>
+<p><strong>Width still does not matter for VLA</strong>: 42 bytes between 128 and 256, matching the original null
+result. With nothing pinned, the code is identical whatever the floor.</p>
+<p><strong>Width does matter for VLS, and 128 wins by 28,162 bytes.</strong> At VLEN=256 an LMUL=2 group is 512
+bits, so each wide value occupies a slot twice its size and half the frame is padding. 128 is not
+just the natural width for the mapping; it is the smaller one.</p>
+<p>So the Phase 2 axes are not both null after all. VLA against VLS is the real choice and VLS wins
+decisively; width is a null result only in the length-agnostic mode that the extension cannot use.
+For the shipped configuration – VLS at 128 – neither is a tuning knob: the width is fixed by the
+register mapping, and VLA is incompatible with the fixed-size slots that make the design worth
+having.</p>
+<hr>
+<h2 id="4-phase-3-what-the-extension-does-not-cover"><a class="header" href="#4-phase-3-what-the-extension-does-not-cover">4. Phase 3: what the extension does not cover</a></h2>
+<p>Every instruction in the corpus whose operands are wider than an XLen register – 72,055 of them
+across the 103 modules – classified by whether the extension selects it to a single instruction.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>category</th><th style="text-align: right">count</th><th style="text-align: right">share</th></tr>
+</thead>
+<tbody>
+<tr><td>Selected to one instruction</td><td style="text-align: right">53,109</td><td style="text-align: right">73.9%</td></tr>
+<tr><td>revive runtime calls carrying wide values</td><td style="text-align: right">18,157</td><td style="text-align: right">25.3%</td></tr>
+<tr><td><strong>Not covered</strong></td><td style="text-align: right"><strong>522</strong></td><td style="text-align: right"><strong>0.7%</strong></td></tr>
+<tr><td>Instruction defined, but resolc still calls <code>stdlib.ll</code></td><td style="text-align: right">97</td><td style="text-align: right">0.1%</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>The arithmetic is essentially fully covered.</strong> What is left is 694 operations, and only two kinds
+of them matter.</p>
+<h3 id="not-covered"><a class="header" href="#not-covered">Not covered</a></h3>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>operation</th><th style="text-align: right">width</th><th style="text-align: right">count</th></tr>
+</thead>
+<tbody>
+<tr><td><code>llvm.umin</code></td><td style="text-align: right">i256</td><td style="text-align: right">463</td></tr>
+<tr><td><code>llvm.umul.with.overflow</code></td><td style="text-align: right">i256</td><td style="text-align: right">47</td></tr>
+<tr><td><code>llvm.umax</code></td><td style="text-align: right">i256</td><td style="text-align: right">4</td></tr>
+<tr><td><code>zext</code> / <code>trunc</code> / <code>mul</code> / <code>lshr</code></td><td style="text-align: right">i512</td><td style="text-align: right">6</td></tr>
+<tr><td><code>llvm.umin</code></td><td style="text-align: right">i128</td><td style="text-align: right">2</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong><code>umin</code>/<code>umax</code> are the only genuine instruction gap</strong>, at 467 sites. They are <code>Expand</code> today, which
+produces a compare, a branch and a copy:</p>
+<pre><code>revive.wsltu a0, v8, v10
+bnez         a0, .LBB0_2
+vsetivli     zero, 1, e8, m1, ta, ma
+vmv2r.v      v8, v10
+</code></pre>
+<p>Five instructions including a <code>vsetivli</code>, where a <code>revive.wminu</code> would be one. Worth adding, though
+at 467 sites the total is small.</p>
+<p>The i512 handful is not worth an instruction: eight sites corpus-wide, all from <code>mulmod</code>’s exact
+product.</p>
+<h3 id="an-outlining-decision-the-extension-invalidated"><a class="header" href="#an-outlining-decision-the-extension-invalidated">An outlining decision the extension invalidated</a></h3>
+<p><code>__mul</code> was a revive-generated wrapper around a single <code>mul i256</code>, outlined with <code>noinline</code> because
+the operation cost 458 bytes. With the extension it costs 13, so the call became dearer than the
+work. <strong>Current revive no longer emits it</strong>; the gap is closed. It is recorded here because the
+heuristic that produced it is still in place, and the same inversion will recur for any helper whose
+body becomes one instruction.</p>
+<h3 id="the-25-that-are-runtime-calls"><a class="header" href="#the-25-that-are-runtime-calls">The 25% that are runtime calls</a></h3>
+<p><code>__revive_store_heap_word</code> (10,904), <code>__revive_load_heap_word</code> (5,370) and
+<code>__revive_load_storage_word</code> (1,647) dominate this group. They are memory and storage operations,
+not arithmetic, so they are not candidates for instructions – but they are the single largest
+consumer of wide values in the corpus, and they benefit from step 0 and step 1 anyway: the value
+now arrives in a register pair instead of by reference.</p>
+<p>If wide memory access is ever worth an instruction of its own, this is where the volume is: 17,921
+calls, more than every wide arithmetic operation in the corpus except <code>icmp ult</code>.</p>
+<hr>
+<h3 id="re-checked-after-step-4"><a class="header" href="#re-checked-after-step-4">Re-checked after step 4</a></h3>
+<p>The coverage figures are unchanged: step 4 altered how wide values are spilled and framed, not which
+operations have instructions. 73.7% selected, 1.0% not covered, 25.2% runtime calls.</p>
+<p>The <code>umin</code>/<code>umax</code> gap is also unchanged – still five instructions, and still carrying a <code>vsetivli</code>
+for what is only a register copy:</p>
+<pre><code>revive.wsltu a0, v8, v10 ; bnez a0, .LBB0_2 ; vsetivli zero, 1, e8, m1, ta, ma ; vmv2r.v v8, v10
+</code></pre>
+<p>That <code>vsetivli</code> is the same class of overhead §7 counts at 9,200 bytes corpus-wide: vector
+configuration emitted around operations that do not read <code>vtype</code>. A <code>revive.wminu</code> would remove both
+the branch and the copy at 467 sites, and is the one instruction still worth adding.</p>
+<hr>
+<h3 id="prototypes"><a class="header" href="#prototypes">Prototypes</a></h3>
+<p>The three gaps §4 identified were built and measured. All are on the branch; the corpus totals below
+are cumulative, since each was measured on top of the previous.</p>
+<h4 id="1-wide-min-and-max"><a class="header" href="#1-wide-min-and-max">1. Wide min and max</a></h4>
+<p><code>umin</code>/<code>umax</code> were the only genuine instruction gap: 467 sites, each expanding to a compare, a
+branch and a register copy – and the copy dragged a <code>vsetvli</code> with it. Four instructions added
+(<code>wminu</code>, <code>wmin</code>, <code>wmaxu</code>, <code>wmax</code>), and the four operations moved from Expand to Legal.</p>
+<pre><code>revive.wsltu a0, v8, v10 ; bnez a0, .LBB0_2      -&gt;   revive.wminu v8, v8, v10
+vsetivli zero, 1, e8, m1, ta, ma ; vmv2r.v v8, v10
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>benchmark</th><th style="text-align: right">before</th><th style="text-align: right">after</th><th style="text-align: right">gain</th></tr>
+</thead>
+<tbody>
+<tr><td>V5QuoteVerifier</td><td style="text-align: right">328,998</td><td style="text-align: right">327,374</td><td style="text-align: right">−0.49%</td></tr>
+<tr><td>XENCrypto</td><td style="text-align: right">235,854</td><td style="text-align: right">235,640</td><td style="text-align: right">−0.09%</td></tr>
+<tr><td>FiatTokenV1</td><td style="text-align: right">240,108</td><td style="text-align: right">239,824</td><td style="text-align: right">−0.12%</td></tr>
+<tr><td>SnapshotPCCSRouter</td><td style="text-align: right">176,628</td><td style="text-align: right">175,794</td><td style="text-align: right">−0.47%</td></tr>
+<tr><td>AutomataDcapAttestationFee</td><td style="text-align: right">170,824</td><td style="text-align: right">169,772</td><td style="text-align: right">−0.62%</td></tr>
+<tr><td>Festival</td><td style="text-align: right">122,298</td><td style="text-align: right">122,122</td><td style="text-align: right">−0.14%</td></tr>
+<tr><td>P2PMarket</td><td style="text-align: right">74,938</td><td style="text-align: right">74,606</td><td style="text-align: right">−0.44%</td></tr>
+<tr><td>T3rminalDriver</td><td style="text-align: right">72,018</td><td style="text-align: right">71,956</td><td style="text-align: right">−0.09%</td></tr>
+<tr><td>TetherToken</td><td style="text-align: right">32,256</td><td style="text-align: right">32,216</td><td style="text-align: right">−0.12%</td></tr>
+<tr><td>ERC20Factory</td><td style="text-align: right">16,030</td><td style="text-align: right">16,014</td><td style="text-align: right">−0.10%</td></tr>
+<tr><td>DaimoP256Verifier</td><td style="text-align: right">9,280</td><td style="text-align: right">9,210</td><td style="text-align: right">−0.75%</td></tr>
+<tr><td>ERC20</td><td style="text-align: right">12,860</td><td style="text-align: right">12,844</td><td style="text-align: right">−0.12%</td></tr>
+<tr><td>Multicall3</td><td style="text-align: right">13,584</td><td style="text-align: right">13,372</td><td style="text-align: right"><strong>−1.56%</strong></td></tr>
+<tr><td>WETH9</td><td style="text-align: right">14,200</td><td style="text-align: right">14,172</td><td style="text-align: right">−0.20%</td></tr>
+<tr><td>Sha256</td><td style="text-align: right">6,220</td><td style="text-align: right">6,200</td><td style="text-align: right">−0.32%</td></tr>
+<tr><td><strong>TOTAL (code)</strong></td><td style="text-align: right"><strong>1,526,096</strong></td><td style="text-align: right"><strong>1,521,116</strong></td><td style="text-align: right"><strong>−0.33%</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>4,980 bytes.</strong> Small, as 467 sites predicted, but cheap: four encodings, no lowering code, and it
+removes a branch and a <code>vsetvli</code> per site.</p>
+<h4 id="2-512--and-1024-bit-widths"><a class="header" href="#2-512--and-1024-bit-widths">2. 512- and 1024-bit widths</a></h4>
+<p><code>i512</code> is added to <code>VRM4</code> (LMUL=4) and a new <code>i1024</code> machine type to <code>VRM8</code> (LMUL=8), so the same
+instruction set exists at three widths. The operation encoding could not carry the width – the I-
+and S-type memory forms have no spare field – so <strong>each width takes its own custom opcode</strong>: i256 in
+custom-2, i512 in custom-3, i1024 in custom-1. That is three of the four custom opcode spaces, which
+is the real cost of this step.</p>
+<p>The corpus barely notices, because it contains eight i512 operations in total. An artificial
+benchmark – the same arithmetic, compare, shift and memory work at each width – shows what the
+widths are worth where they are used:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>width</th><th style="text-align: right">expanded</th><th style="text-align: right">with the extension</th><th style="text-align: right">delta</th></tr>
+</thead>
+<tbody>
+<tr><td>i256</td><td style="text-align: right">3,404</td><td style="text-align: right">88</td><td style="text-align: right"><strong>−97.4%</strong></td></tr>
+<tr><td>i512</td><td style="text-align: right">10,886</td><td style="text-align: right">88</td><td style="text-align: right"><strong>−99.2%</strong></td></tr>
+<tr><td>i1024</td><td style="text-align: right">45,328</td><td style="text-align: right">118</td><td style="text-align: right"><strong>−99.7%</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p>The expansion grows superlinearly – multiplication is quadratic in limb count – while the
+instruction sequence stays flat, so the wider the type the larger the factor. On the real corpus the
+change is within noise, and it is worth having only if contracts start using types wider than a
+machine word for their own sake rather than as <code>mulmod</code> intermediates.</p>
+<p>Two defects surfaced while building it, both of which the corpus caught: truncation between the
+wide widths, and zero-extension between them, neither of which existed when there was only one width.</p>
+<h4 id="3-emitting-mul-instead-of-calling-__mul--already-done"><a class="header" href="#3-emitting-mul-instead-of-calling-__mul--already-done">3. Emitting <code>mul</code> instead of calling <code>__mul</code> – already done</a></h4>
+<p><code>__mul</code> was a revive-generated wrapper whose whole body was one <code>mul i256</code>, marked <code>noinline</code>, in 25
+modules with 219 call sites. It was outlined because the operation used to cost 458 bytes; with the
+extension it costs 13, so the call had become more expensive than the work.</p>
+<p><strong>Current revive no longer emits it.</strong> Modelling the change on the older corpus measured −6,492
+bytes, but re-dumping showed zero occurrences across all 103 modules: the frontend had already been
+fixed. The correct value of this step today is <strong>zero</strong>, and the −6,492 figure is an artefact of
+measuring against stale input.</p>
+<p>The underlying point still holds for the future. <code>add_noinline_minsize_attrs</code> marks outlined helpers
+<code>noinline</code> for size reasons, and that decision is calibrated against the expansion cost. Any helper
+whose body becomes a single instruction inverts the same way, so the heuristic is worth revisiting
+whenever the instruction set grows.</p>
+<p>Re-dumping also surfaced a gap that the older corpus did not contain at all:
+<strong><code>llvm.umul.with.overflow.i256</code>, 47 sites</strong>. Current revive emits checked multiplication as the
+overflow intrinsic, which the extension does not cover and which therefore expands. It belongs with
+<code>umin</code>/<code>umax</code> as an instruction candidate.</p>
+<p><strong>Together the prototypes are worth about 5,000 bytes</strong>, once the third is discounted to zero. None of them is where
+the remaining money is – that is still the allocation gap in §7 – but the first and third are
+small, self-contained and have no downside, and the second buys a capability rather than bytes.</p>
+<hr>
+<h3 id="cost-of-every-instruction-reaching-codegen"><a class="header" href="#cost-of-every-instruction-reaching-codegen">Cost of every instruction reaching codegen</a></h3>
+<p>Frequency and size are unrelated, and reporting one as if it were the other is a mistake this
+analysis made earlier. <code>unreachable</code> is 11.7% of the IR and emits <strong>no instruction at all</strong>; <code>call</code>
+and <code>br</code> are the two most frequent opcodes and contribute nothing measurable. Meanwhile
+<code>mul nuw nsw i256</code> appears once and costs 458 bytes.</p>
+<p>So the table below carries both, keyed on the (opcode, type, flags) triple: how often it reaches
+codegen across the 103 modules, and what one costs under each compiler. <strong>The product is the only
+number that ranks work.</strong></p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>instruction</th><th style="text-align: right">count</th><th style="text-align: right">base</th><th style="text-align: right">ext</th><th style="text-align: right">base total</th><th style="text-align: right">ext total</th></tr>
+</thead>
+<tbody>
+<tr><td><code>call</code></td><td style="text-align: right">41,206</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td style="text-align: right">—</td></tr>
+<tr><td><code>br</code></td><td style="text-align: right">25,254</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td style="text-align: right">—</td></tr>
+<tr><td><code>unreachable</code></td><td style="text-align: right">20,909</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td style="text-align: right">—</td></tr>
+<tr><td><code>trunc nuw i256→i32</code></td><td style="text-align: right">6,999</td><td style="text-align: right">10</td><td style="text-align: right">8</td><td style="text-align: right">69,990</td><td style="text-align: right">55,992</td></tr>
+<tr><td><code>alloca</code></td><td style="text-align: right">6,957</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td style="text-align: right">—</td></tr>
+<tr><td><code>ptrtoint ptr→i32</code></td><td style="text-align: right">6,685</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td style="text-align: right">—</td></tr>
+<tr><td><strong><code>icmp ult i256</code></strong></td><td style="text-align: right">6,541</td><td style="text-align: right"><strong>73</strong></td><td style="text-align: right"><strong>11</strong></td><td style="text-align: right"><strong>477,493</strong></td><td style="text-align: right">71,951</td></tr>
+<tr><td><code>icmp ult samesign i256</code></td><td style="text-align: right">4,884</td><td style="text-align: right">73</td><td style="text-align: right">11</td><td style="text-align: right">356,532</td><td style="text-align: right">53,724</td></tr>
+<tr><td><code>store i256</code></td><td style="text-align: right">4,814</td><td style="text-align: right">35</td><td style="text-align: right">9</td><td style="text-align: right">168,490</td><td style="text-align: right">43,326</td></tr>
+<tr><td><code>add nuw i32</code></td><td style="text-align: right">4,493</td><td style="text-align: right">11</td><td style="text-align: right">11</td><td style="text-align: right">49,423</td><td style="text-align: right">49,423</td></tr>
+<tr><td><code>load i256</code></td><td style="text-align: right">4,147</td><td style="text-align: right">32</td><td style="text-align: right">8</td><td style="text-align: right">132,704</td><td style="text-align: right">33,176</td></tr>
+<tr><td><code>load i32</code></td><td style="text-align: right">3,825</td><td style="text-align: right">10</td><td style="text-align: right">10</td><td style="text-align: right">38,250</td><td style="text-align: right">38,250</td></tr>
+<tr><td><code>icmp eq i256</code></td><td style="text-align: right">3,270</td><td style="text-align: right">68</td><td style="text-align: right">19</td><td style="text-align: right">222,360</td><td style="text-align: right">62,130</td></tr>
+<tr><td><code>and i256</code></td><td style="text-align: right">3,051</td><td style="text-align: right">62</td><td style="text-align: right">13</td><td style="text-align: right">189,162</td><td style="text-align: right">39,663</td></tr>
+<tr><td><code>add nuw nsw i256</code></td><td style="text-align: right">2,678</td><td style="text-align: right">105</td><td style="text-align: right">13</td><td style="text-align: right">281,190</td><td style="text-align: right">34,814</td></tr>
+<tr><td><code>icmp ult i32</code></td><td style="text-align: right">2,471</td><td style="text-align: right">13</td><td style="text-align: right">13</td><td style="text-align: right">32,123</td><td style="text-align: right">32,123</td></tr>
+<tr><td><code>add i256</code></td><td style="text-align: right">2,371</td><td style="text-align: right">105</td><td style="text-align: right">13</td><td style="text-align: right">248,955</td><td style="text-align: right">30,823</td></tr>
+<tr><td><code>store i32</code></td><td style="text-align: right">2,078</td><td style="text-align: right">7</td><td style="text-align: right">7</td><td style="text-align: right">14,546</td><td style="text-align: right">14,546</td></tr>
+<tr><td><code>phi i256</code></td><td style="text-align: right">2,048</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td style="text-align: right">—</td><td style="text-align: right">—</td></tr>
+<tr><td><code>icmp ugt i256</code></td><td style="text-align: right">1,488</td><td style="text-align: right">73</td><td style="text-align: right">11</td><td style="text-align: right">108,624</td><td style="text-align: right">16,368</td></tr>
+<tr><td><code>lshr i256</code></td><td style="text-align: right">1,058</td><td style="text-align: right">164</td><td style="text-align: right">12</td><td style="text-align: right">173,512</td><td style="text-align: right">12,696</td></tr>
+<tr><td><code>zext i32→i256</code></td><td style="text-align: right">999</td><td style="text-align: right">21</td><td style="text-align: right">15</td><td style="text-align: right">20,979</td><td style="text-align: right">14,985</td></tr>
+<tr><td><code>add nsw i256</code></td><td style="text-align: right">631</td><td style="text-align: right">105</td><td style="text-align: right">13</td><td style="text-align: right">66,255</td><td style="text-align: right">8,203</td></tr>
+<tr><td><code>zext i160→i256</code></td><td style="text-align: right">553</td><td style="text-align: right">32</td><td style="text-align: right">13</td><td style="text-align: right">17,696</td><td style="text-align: right">7,189</td></tr>
+<tr><td><code>or disjoint i256</code></td><td style="text-align: right">543</td><td style="text-align: right">62</td><td style="text-align: right">13</td><td style="text-align: right">33,666</td><td style="text-align: right">7,059</td></tr>
+<tr><td><code>sub nsw i256</code></td><td style="text-align: right">480</td><td style="text-align: right">168</td><td style="text-align: right">13</td><td style="text-align: right">80,640</td><td style="text-align: right">6,240</td></tr>
+<tr><td><code>zext i1→i256</code></td><td style="text-align: right">475</td><td style="text-align: right">21</td><td style="text-align: right">18</td><td style="text-align: right">9,975</td><td style="text-align: right">8,550</td></tr>
+<tr><td><code>shl nuw nsw i256</code></td><td style="text-align: right">447</td><td style="text-align: right">168</td><td style="text-align: right">12</td><td style="text-align: right">75,096</td><td style="text-align: right">5,364</td></tr>
+<tr><td><code>select i256</code></td><td style="text-align: right">420</td><td style="text-align: right">55</td><td style="text-align: right">24</td><td style="text-align: right">23,100</td><td style="text-align: right">10,080</td></tr>
+<tr><td><code>icmp slt i256</code></td><td style="text-align: right">418</td><td style="text-align: right">73</td><td style="text-align: right">11</td><td style="text-align: right">30,514</td><td style="text-align: right">4,598</td></tr>
+<tr><td><code>sub i256</code></td><td style="text-align: right">388</td><td style="text-align: right">168</td><td style="text-align: right">13</td><td style="text-align: right">65,184</td><td style="text-align: right">5,044</td></tr>
+<tr><td><code>shl i256</code></td><td style="text-align: right">339</td><td style="text-align: right">168</td><td style="text-align: right">12</td><td style="text-align: right">56,952</td><td style="text-align: right">4,068</td></tr>
+<tr><td><code>xor i256</code></td><td style="text-align: right">279</td><td style="text-align: right">62</td><td style="text-align: right">13</td><td style="text-align: right">17,298</td><td style="text-align: right">3,627</td></tr>
+<tr><td><code>udiv i256</code></td><td style="text-align: right">109</td><td style="text-align: right"><strong>1,150</strong></td><td style="text-align: right">13</td><td style="text-align: right">125,350</td><td style="text-align: right">1,417</td></tr>
+<tr><td><code>mul nuw nsw i256</code></td><td style="text-align: right">1</td><td style="text-align: right"><strong>458</strong></td><td style="text-align: right">13</td><td style="text-align: right">458</td><td style="text-align: right">13</td></tr>
+<tr><td><strong>TOTAL (measurable)</strong></td><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right"></td><td style="text-align: right"><strong>3,503,767</strong></td><td style="text-align: right"><strong>817,468</strong></td></tr>
+</tbody>
+</table>
+</div>
+<p>Full output in <code>instr-table.txt</code>; 111 of the 130 triples are measurable, the rest being control flow,
+<code>phi</code>, <code>alloca</code> and pointer casts that cannot be isolated this way.</p>
+<p><strong>How it is measured.</strong> Marginal cost: the <code>.text</code> slope between four and twelve independent
+instances of the instruction, with every result consumed through a volatile store so nothing folds
+away. An earlier attempt compared against a control function and was biased – <code>icmp</code> measured as
+<strong>zero</strong> because the control (<code>trunc</code>) costs exactly what the instruction costs with the extension,
+and non-volatile loads were deleted as dead. These numbers are also higher than isolated
+single-instruction figures (<code>add i256</code> is 105 here against 56 measured in isolation) because twelve
+live wide values create real register pressure, so the marginal cost includes its share of spilling.
+That is the more representative figure for code that exists.</p>
+<p><strong>What it shows.</strong> The two <code>ult i256</code> variants alone were 834,025 bytes at baseline – roughly a
+quarter of all measurable code – and are now 125,675. Division is the extreme per-instruction case
+at 1,150 bytes, but only 109 sites.</p>
+<p>What remains is no longer dominated by wide arithmetic. The largest surviving entries are narrow
+work the extension does not touch (<code>add nuw i32</code> 49,423, <code>load i32</code> 38,250, <code>trunc i256→i32</code>
+55,992), and two wide comparisons. <code>icmp eq i256</code> at 19 bytes against <code>ult</code> at 11 is the one
+anomaly worth chasing: equality should be the cheaper of the two, and is not.</p>
+<hr>
+<h2 id="5-what-is-implemented"><a class="header" href="#5-what-is-implemented">5. What is implemented</a></h2>
+<p><code>i256</code> is a legal type with its own register class, so type legalization never splits it.</p>
+<p><strong>Registers.</strong> <code>i256</code> is a type <code>VRM2</code> holds, so a wide value is an LMUL=2 vector register pair –
+exactly 256 bits at VLEN=128. Copies, spills and reloads reuse RVV’s own <code>VMV2R_V</code>, <code>VS2R_V</code> and
+<code>VL2RE8_V</code>, and arguments use the existing <code>ArgVRM2s</code>. An earlier revision used a parallel register
+file for this; see the future-improvement note at the end of §2. A decoder reading the ELF sees vector
+register numbers. <code>w4</code>–<code>w11</code> (encoding <code>v8</code>–<code>v22</code>) are the argument registers, mirroring <code>ArgVRM2s</code>.</p>
+<p><strong>Instructions</strong>, all in the custom-2 opcode space, <code>funct3</code> selecting operand shape:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>group</th><th>instructions</th></tr>
+</thead>
+<tbody>
+<tr><td>arithmetic</td><td><code>wadd</code> <code>wsub</code> <code>wmul</code> <code>wand</code> <code>wor</code> <code>wxor</code> <code>wdivu</code> <code>wdiv</code> <code>wremu</code> <code>wrem</code></td></tr>
+<tr><td>shifts</td><td><code>wsll</code> <code>wsrl</code> <code>wsra</code> (amount in a GPR)</td></tr>
+<tr><td>compare</td><td><code>wseq</code> <code>wsne</code> <code>wsltu</code> <code>wslt</code> (result in a GPR)</td></tr>
+<tr><td>move/convert</td><td><code>wmv</code> <code>wtrunc</code> <code>wzext</code> <code>wsext</code> <code>wbswap</code></td></tr>
+<tr><td>memory</td><td><code>wld</code> <code>wst</code></td></tr>
+<tr><td>EVM-specific</td><td><code>waddmod</code> <code>wmulmod</code> <code>wexp</code> <code>wsignextend</code></td></tr>
+</tbody>
+</table>
+</div>
+<p><code>ugt</code>/<code>sgt</code> need no encoding — they are the same instruction with operands swapped. <code>le</code>/<code>ge</code> forms
+are reached by inverting, via <code>setCondCodeAction(..., Expand)</code>.</p>
+<p><strong>Calling convention.</strong> Wide values pass in wide registers in both <code>CC_RISCV</code> and <code>CC_RISCV_FastCC</code>
+— the latter matters because revive gives its internal functions <code>fastcc</code>, so that is the path most
+<code>i256</code> arguments actually take. A three-argument wide call now marshals nothing at all:</p>
+<pre><code>f_call:  addi sp, sp, -8 ; sd ra, 0(sp) ; call opaque ; ld ra, 0(sp) ; addi sp, sp, 8 ; ret
+</code></pre>
+<p>against 144 bytes of address arithmetic and copies before. Single operations collapse accordingly:
+<code>add i256</code> from 28 instructions to <code>revive.wadd w4, w4, w5</code>, and <code>udiv i256</code> from 1,040 bytes to one
+instruction.</p>
+<p><strong>Supporting work</strong>: a <code>Select_VRM2</code> pseudo for wide selects (2,036 <code>phi i256</code> in the corpus),
+constant materialization – XLen-sized values built in a GPR and widened through target nodes,
+anything genuinely wider from the constant pool – hand-written lowering for 128-bit loads and
+stores, and reserving the frame pointer up front so RVV’s late stack objects cannot invalidate the
+<code>hasFP</code> decision.</p>
+<hr>
+<h3 id="tests"><a class="header" href="#tests">Tests</a></h3>
+<p><code>llvm/test/CodeGen/RISCV/xrevivevec-*.ll</code> – nine files, 543 checks, generated with
+<code>update_llc_test_checks.py</code> and idempotent, so the assertions are what the compiler actually emits:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>file</th><th>covers</th></tr>
+</thead>
+<tbody>
+<tr><td><code>arith</code></td><td>every wide arithmetic and shift, with both narrowed and wide shift amounts</td></tr>
+<tr><td><code>cmp</code></td><td>all ten predicates, plus a compare feeding a branch</td></tr>
+<tr><td><code>mem</code></td><td>full-width, extending and truncating access, i128, and the conversions</td></tr>
+<tr><td><code>const</code></td><td>zero, small, 32- and 64-bit masks, <code>-1</code>, a genuinely wide value, a constant operand</td></tr>
+<tr><td><code>abi</code></td><td>argument passing and calls on RV64I and RV64E, fastcc, register exhaustion, live-across-call</td></tr>
+<tr><td><code>select</code></td><td>select, wide-condition select, phi, and enough live values to force spilling</td></tr>
+<tr><td><code>intrinsics</code></td><td><code>addmod</code>, <code>mulmod</code>, <code>exp</code>, <code>signextend</code>, <code>bswap</code></td></tr>
+<tr><td><code>disabled</code></td><td>with the feature off, i256 expands as before and nothing leaks in</td></tr>
+<tr><td><code>vlen</code></td><td>spills are fixed 32-byte slots at immediate offsets, with no <code>vlenb</code> arithmetic</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>llvm/test/MC/RISCV/xrevivevec-disasm.txt</code> covers the decoder for 27 encodings byte-exactly, and
+asserts each is invalid without the extension. <code>check-llvm-codegen-riscv</code> passes 2454/2454 and the
+RVV suite 1200/1200.</p>
+<p>Two things came out of writing them. <strong>A real bug</strong>: <code>sextload i8/i16/i32 -&gt; i256</code> could not be
+selected, because <code>sign_extend_inreg</code> is formed after legalization and never reached the Custom
+lowering; it is now matched at selection. The corpus never exercised it, which is the argument for
+having the tests.</p>
+<p><strong>A gap left open</strong>: the assembler cannot parse <code>revive.wadd v8, v10, v12</code>, because the parser does
+not accept a VRM2 operand written as <code>v8</code> – no upstream RVV instruction has one. Codegen and
+disassembly both work, so this only matters for hand-written assembly, and the MC test is scoped to
+the decoder accordingly.</p>
+<hr>
+<h2 id="6-what-went-wrong"><a class="header" href="#6-what-went-wrong">6. What went wrong</a></h2>
+<p>Eight issues were found and fixed. Most were not in the new code but in <strong>existing code that assumed
+no scalar type could be wider than an XLen register</strong>.</p>
+<ol>
+<li>
+<p><strong><code>riscv_seteq</code> is a C++ <code>ComplexPattern</code></strong>, not a TableGen pattern, so it never type-checked its
+operands. It matched <code>setcc</code> on <code>i256</code> and emitted a GPR <code>XOR</code>, silently inserting a cross-class
+copy. Guarded on the operand being XLen-sized. The same trap was hit by the earlier <code>w256</code>
+prototype — a C++ matcher is invisible to TableGen’s type inference.</p>
+</li>
+<li>
+<p><strong><code>DAGCombiner</code> merged adjacent constant stores into a 256-bit store, then re-widened its own
+result forever.</strong> This hung the largest module. Fixed by overriding <code>canMergeStoresTo</code>, which is
+the correct answer anyway: a merged wide constant store needs a constant-pool entry and a load,
+where the unmerged form used plain immediate stores.</p>
+</li>
+<li>
+<p><strong><code>ExpandIRInsts</code> rewrote wide <code>udiv</code>/<code>urem</code> into libcalls before they reached the selector</strong>,
+because <code>MaxDivRemBitWidthSupported</code> was 128. Raised to 256 when the extension is on.</p>
+</li>
+<li>
+<p><strong>The calling-convention fast path desynchronised <code>PendingLocs</code></strong> for split aggregates, and the
+rejection surfaced as <code>llvm_unreachable(nullptr)</code> — an abort with no message at all. Guarded on
+<code>!ArgFlags.isSplit() &amp;&amp; PendingLocs.empty()</code>.</p>
+</li>
+<li>
+<p><strong>Wide spill slots requested 32-byte alignment</strong>, which exceeds the 8-byte stack alignment of
+<code>LP64E</code>. The register allocator creates those slots <em>after</em> <code>getReservedRegs</code> has decided whether
+to reserve the frame pointer, so <code>emitPrologue</code> then found <code>hasFP</code> true with <code>X8</code> unreserved and
+asserted. These loads and stores carry no alignment requirement of their own, so the slot
+alignment was dropped to the stack alignment.</p>
+</li>
+<li>
+<p><strong>Missing patterns surfaced one at a time</strong> as the corpus exercised them: <code>bswap</code> (no generic
+expansion exists at this width, and EVM byte-swaps constantly for big-endian calldata),
+extending loads from <code>i8</code>/<code>i16</code>/<code>i32</code>/<code>i64</code>, and truncating stores. <code>EXTLOAD</code> cannot be marked
+<code>Expand</code> — LegalizeDAG asserts it is always supported — so it needs real patterns. The missing
+<code>extloadi64</code> pattern was what made the largest module pathologically slow.</p>
+</li>
+<li>
+<p><strong>Every wide immediate went to the constant pool</strong>, because the first version only built values
+of 11 bits or fewer in a register. This cost more than it saved and made Sha256 look like a code
+regression when its code had shrunk. Fixed with target widening nodes; see §2, step 2.</p>
+</li>
+<li>
+<p><strong>The disassembler needed a decoder for the new register class</strong>, and TableGen generates a call
+to it whether or not one exists. This only appeared on a full build: iterating with <code>ninja llc</code>
+never compiles the disassembler, so the first <code>ninja install</code> failed on a target that had been
+silently broken for hours. Worth knowing for anyone iterating the same way.</p>
+</li>
+</ol>
+<hr>
+<h2 id="7-the-biggest-thing-left-on-the-table"><a class="header" href="#7-the-biggest-thing-left-on-the-table">7. The biggest thing left on the table</a></h2>
+<p><strong>Register allocation quality: about 117,000 bytes.</strong> The gap to a register file of the extension’s
+own is now <strong>133,196 bytes</strong>, down from 413,712. Two of its three known components are fixed – the
+scalable spill addressing and the frame pointer, in §2 step 0 – and what is measurable in the rest
+is small:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th></th><th style="text-align: right">bytes</th><th style="text-align: right">share of gap</th></tr>
+</thead>
+<tbody>
+<tr><td><code>vsetvli</code> around vector operations</td><td style="text-align: right">9,200</td><td style="text-align: right">7%</td></tr>
+<tr><td>unattributed</td><td style="text-align: right">~124,000</td><td style="text-align: right">93%</td></tr>
+</tbody>
+</table>
+</div>
+<p>The unattributed part looks like allocation rather than a missing transform. Whole-register spills
+number 34,626 across the corpus, and <code>VRM2</code> overlaps <code>VR</code>, <code>VRM4</code> and <code>VRM8</code>, so the allocator’s
+interference model is far more constrained than a standalone 16-register class would be; <code>v0</code> also
+doubles as the RVV mask register. That is a hypothesis, not a measurement – confirming it needs the
+spill count from a non-overlapping class of the same size.</p>
+<p><strong>Narrowing wide operations whose result only needs XLen bits.</strong> EVM contracts hold <code>uint32</code>,
+<code>uint64</code> and <code>address</code> values inside 256-bit words, and once <code>i256</code> is a machine type every one is
+computed at full width. The limb expansion got the demotion for free: masking against <code>0xFFFFFFFF</code>
+folded the upper three limbs to literal zeros and the knowledge propagated downstream.</p>
+<p>The obvious-looking fix – <code>computeKnownBitsForTargetNode</code> – was implemented and measured and does
+<strong>not</strong> work; see §2, step 3. Known bits were never the missing ingredient. What is needed is a
+<em>narrowing</em> transform: when the demanded bits of a wide operation fit an XLen register, replace it
+and its operands with the scalar instruction. That is where the residual Sha256 regression lives.</p>
+<hr>
+<h2 id="8-what-is-not-done"><a class="header" href="#8-what-is-not-done">8. What is not done</a></h2>
+<p><strong>The EVM-specific instructions work, but nothing emits them yet.</strong> <code>waddmod</code>, <code>wmulmod</code>, <code>wexp</code> and
+<code>wsignextend</code> have encodings, intrinsics and patterns, and each selects to a single instruction —
+verified:</p>
+<pre><code>revive.waddmod w4, w4, w5, w6      revive.wexp        w4, w4, w5
+revive.wmulmod w4, w4, w5, w6      revive.wsignextend w4, w4, w5
+</code></pre>
+<p>What is missing is the resolc side: it still calls the hand-written routines in <code>stdlib.ll</code>, so the
+measurement above <strong>excludes</strong> this win entirely. The corpus has 57 <code>__mulmod</code>, 22 <code>__addmod</code> and
+18 <code>__exp</code> call sites; <code>__mulmod</code> is 4,534 bytes and drags in <code>__ulongrem</code> at 5,710 for the slow
+path that every modulus near 2²⁵⁶ takes, and the production routines plus helpers come to 15,688
+bytes. Note this win cannot be measured through the <code>llc</code> harness at all — the saving comes from the
+routine bodies becoming unreferenced, and only the PVM linker garbage-collects them.</p>
+<p>Getting there needed one piece of LLVM plumbing worth calling out: <strong>intrinsics could not take a
+256-bit scalar</strong>. The type encoding LLVM uses for intrinsic signatures stopped at <code>IIT_I128</code>,
+because no in-tree target has a scalar that wide, so the declarations verified as “incorrect return
+type”. Adding <code>IIT_I256</code> and its decoder case fixed it.</p>
+<p><strong>PVM cannot consume the output</strong>, which is the agreed boundary for this phase. <code>resolc</code> now runs
+end-to-end against this LLVM — <code>VM_FEATURES</code> requests <code>+xrevivevec</code>, and Solidity → Yul → LLVM IR →
+RISC-V object all succeed — and then the polkavm linker rejects the encodings:</p>
+<pre><code>polkavm linker failed: unsupported instruction in &lt;section #0+726&gt; ('.text') at address 0x2d6: 0x0005445b
+</code></pre>
+<p><code>0x…5b</code> is custom-2. Everything up to that point works, and the emitted object is real: ERC20’s
+<code>.text</code> disassembles to 387 <code>wld</code>, 180 <code>wst</code>, 52 <code>wtrunc</code>, 47 <code>wsrl</code>, 45 <code>wsltu</code>, 41 <code>wseq</code>,
+37 <code>wadd</code>, 32 <code>wbswap</code>. A consequence worth stating plainly: on this branch <code>resolc</code> cannot produce
+a blob for <em>any</em> contract, so the branch is an experiment, not something to merge as-is.</p>
+<p>What has been demonstrated through <code>resolc</code> itself is ERC20 (complete object) and
+AutomataDcapAttestationFee (all 16 modules emitted) — the rest of the corpus is covered at the
+codegen level by the 103-module measurement above, which is the same compiler and the same IR, but
+driven through <code>llc</code> rather than the <code>resolc</code> front end.</p>
+<hr>
+<h2 id="9-what-could-go-wrong"><a class="header" href="#9-what-could-go-wrong">9. What could go wrong</a></h2>
+<p><strong>The register overlap hazard is resolved.</strong> An earlier revision kept the wide values in a parallel
+register file that overlapped the vector registers without LLVM knowing, so the allocator could
+assign a wide value and an RVV value to the same physical register. <code>i256</code> now lives on <code>VRM2</code>
+itself, so no such aliasing exists. The cost of that correctness is measured at the end of §2.</p>
+<p>Worth recording that the reasoning which produced the parallel file was partly wrong. A class that
+<em>aliases</em> the vector registers does break vector copies and spills – 424 of 2,595 RVV tests in the
+earlier prototype – but adding <code>i256</code> to <code>VRM2</code>’s type list is a different thing and works, despite
+<code>VReg</code> sizing the class from ELEN. That possibility was dismissed by inference rather than tested.</p>
+<p><strong>Only 16 wide registers, all caller-saved.</strong> None are in any callee-saved list, so every wide value
+live across a call is spilled. Giving some of them callee-saved status is likely worth measuring.</p>
+<p><strong>Compile time.</strong> Two pathologies were found and fixed – the store-merging loop and the missing
+<code>extloadi64</code> pattern – and every module now compiles inside the harness’s 120-second limit, where
+the largest previously did not. Whole-contract <code>resolc</code> runs are still slow: <code>AutomataDcapAttestationFee</code>
+ran 12 CPU-minutes past codegen without completing its link when this was last measured, before the
+constant fix. Worth re-checking and profiling before this goes near CI.</p>
+<p><strong>Nothing verifies semantics.</strong> Stopping before PVM means no differential testing against EVM, so a
+wrong lowering is invisible. Every result here is a size measurement, not a correctness one. The
+mitigation worth building is a mode that lowers the wide instructions back to scalar limbs, so the
+same IR can be differentially tested.</p>
+<hr>
+<h2 id="10-how-these-were-measured"><a class="header" href="#10-how-these-were-measured">10. How these were measured</a></h2>
+<p>Every figure above is <code>.text</code> and <code>.rodata</code> of the compiled object, taken per section with
+<code>llvm-size -A</code>. The default Berkeley <code>text</code> column folds <code>.rodata</code> in with the code, which is what
+hid the constant-pool growth on the first pass and made Sha256 look like a code regression when its
+code had shrunk 23%.</p>
+<p>The inputs are the post-optimization LLVM IR of the 15 benchmark contracts, dumped with
+<code>resolc --debug-output-dir</code> and compiled with <code>llc</code>. Working from the dumped IR keeps the comparison
+to one variable – the target features – and avoids rebuilding the compiler for every backend
+change.</p>
+<p>One trap is worth recording: revive stamps an explicit <code>target-features</code> attribute on some
+functions, and a per-function attribute beats <code>-mattr</code> on the command line. In a typical module only
+5 of 15 attribute groups carry one, and the functions doing the <code>i256</code> work are not among them. The
+features have to be rewritten inside the IR <em>and</em> passed on the command line; passing either alone
+silently measures nothing, which produced a byte-identical “result” on the first run.</p>
+<p><code>-riscv-revive-wide-const-in-reg=false</code> restores the step-1 constant handling, so steps 1 and 2 can
+be compared with a single compiler.</p>
+<p>The scripts that produced these numbers are not part of the repository.</p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="../developer_guide/wide_integer_extension.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                            </a>
+
+                            <a rel="next prefetch" href="../developer_guide/testing.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="../developer_guide/wide_integer_extension.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
+                    </a>
+
+                    <a rel="next prefetch" href="../developer_guide/testing.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
+                    </a>
+            </nav>
+
+        </div>
+
+        <template id=fa-eye><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M288 32c-80.8 0-145.5 36.8-192.6 80.6C48.6 156 17.3 208 2.5 243.7c-3.3 7.9-3.3 16.7 0 24.6C17.3 304 48.6 356 95.4 399.4C142.5 443.2 207.2 480 288 480s145.5-36.8 192.6-80.6c46.8-43.5 78.1-95.4 93-131.1c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C433.5 68.8 368.8 32 288 32zM432 256c0 79.5-64.5 144-144 144s-144-64.5-144-144s64.5-144 144-144s144 64.5 144 144zM288 192c0 35.3-28.7 64-64 64c-11.5 0-22.3-3-31.6-8.4c-.2 2.8-.4 5.5-.4 8.4c0 53 43 96 96 96s96-43 96-96s-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6z"/></svg></span></template>
+        <template id=fa-eye-slash><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M38.8 5.1C28.4-3.1 13.3-1.2 5.1 9.2S-1.2 34.7 9.2 42.9l592 464c10.4 8.2 25.5 6.3 33.7-4.1s6.3-25.5-4.1-33.7L525.6 386.7c39.6-40.6 66.4-86.1 79.9-118.4c3.3-7.9 3.3-16.7 0-24.6c-14.9-35.7-46.2-87.7-93-131.1C465.5 68.8 400.8 32 320 32c-68.2 0-125 26.3-169.3 60.8L38.8 5.1zM223.1 149.5C248.6 126.2 282.7 112 320 112c79.5 0 144 64.5 144 144c0 24.9-6.3 48.3-17.4 68.7L408 294.5c5.2-11.8 8-24.8 8-38.5c0-53-43-96-96-96c-2.8 0-5.6 .1-8.4 .4c5.3 9.3 8.4 20.1 8.4 31.6c0 10.2-2.4 19.8-6.6 28.3l-90.3-70.8zm223.1 298L373 389.9c-16.4 6.5-34.3 10.1-53 10.1c-79.5 0-144-64.5-144-144c0-6.9 .5-13.6 1.4-20.2L83.1 161.5C60.3 191.2 44 220.8 34.5 243.7c-3.3 7.9-3.3 16.7 0 24.6c14.9 35.7 46.2 87.7 93 131.1C174.5 443.2 239.2 480 320 480c47.8 0 89.9-12.9 126.2-32.5z"/></svg></span></template>
+        <template id=fa-copy><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M502.6 70.63l-61.25-61.25C435.4 3.371 427.2 0 418.7 0H255.1c-35.35 0-64 28.66-64 64l.0195 256C192 355.4 220.7 384 256 384h192c35.2 0 64-28.8 64-64V93.25C512 84.77 508.6 76.63 502.6 70.63zM464 320c0 8.836-7.164 16-16 16H255.1c-8.838 0-16-7.164-16-16L239.1 64.13c0-8.836 7.164-16 16-16h128L384 96c0 17.67 14.33 32 32 32h47.1V320zM272 448c0 8.836-7.164 16-16 16H63.1c-8.838 0-16-7.164-16-16L47.98 192.1c0-8.836 7.164-16 16-16H160V128H63.99c-35.35 0-64 28.65-64 64l.0098 256C.002 483.3 28.66 512 64 512h192c35.2 0 64-28.8 64-64v-32h-47.1L272 448z"/></svg></span></template>
+        <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
+        <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="../elasticlunr-ef4e11c1.min.js"></script>
+        <script src="../mark-09e88c2c.min.js"></script>
+        <script src="../searcher-c2a407aa.js"></script>
+
+        <script src="../clipboard-1626706a.min.js"></script>
+        <script src="../highlight-abc7f01d.js"></script>
+        <script src="../book-a0b12cfe.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+
+    </div>
+    </body>
+</html>

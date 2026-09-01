@@ -157,7 +157,7 @@ jobs:
       # obtained from the crate's .cargo_vcs_info.json via:
       # curl -sL -A "user-agent" https://crates.io/api/v1/crates/polkadot-sdk/<VERSION>/download | tar xzO polkadot-sdk-<VERSION>/.cargo_vcs_info.json
       # Current version: 2604.2.0
-      POLKADOT_SDK_REF: "85ee13960404cdf89799a824f7e8451afaa2a6e9"
+      POLKADOT_SDK_REF: "c2db7a312d94cca294b1694f3b8903888c5fcfc1"
       RUSTFLAGS: "-Awarnings"
     steps:
       - name: Checkout revive

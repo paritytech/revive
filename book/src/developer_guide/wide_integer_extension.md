@@ -68,13 +68,15 @@ at a constant offset.
 
 The register file, `vtype` and `vl` are part of the `ReviveV1` instruction set, alongside
 the wide instructions. PolkaVM also implements **a subset of `Zve64x`**, and it is exactly
-that: a subset, not the extension. What is in it: the configuration instructions, whole
-register moves, loads and stores, unit-stride element loads and stores, the element-wise
-integer arithmetic, shifts, comparisons, minimum and maximum, multiply, divide and
-multiply-accumulate in all three operand shapes, the splats and the scalar moves, the mask
-logic, `vcpop.m`, `vfirst.m`, `vid.v`, `vmerge` and the slides. What is not: the strided
-and indexed memory forms, the widening and narrowing operations, the reductions, the
-permutes, and masking on anything other than `vcpop.m` and `vfirst.m`. An instruction
+that: a subset, not the extension. What is in it: the configuration instructions that name
+the type as an immediate, whole register moves, loads and stores, unit-stride element loads
+and stores, the element-wise integer arithmetic, shifts, minimum and maximum, multiply,
+divide and multiply-accumulate, each in the operand shapes the vector extensions define for
+it, the equality comparisons, the splats and the scalar moves, the mask logic, `vcpop.m`,
+`vfirst.m`, `vid.v`, `vmerge` and the slides. What is not: `vsetvl`, whose type comes from a
+register, the strided and indexed memory forms, the widening and narrowing operations, the
+ordering comparisons, the reductions, the permutes, and masking on anything other than
+`vcpop.m`, `vfirst.m` and `vmerge`, which is a masked form by definition. An instruction
 outside the subset is refused at link time rather than at run time.
 
 Two consequences of it being a subset. resolc uses none of it: since the extension stopped
@@ -131,10 +133,17 @@ costs the one instruction that fills the upper half with zeroes or with the sign
 
 Nothing configures the width. The vector extensions would keep an element width in `vtype`
 and make every instruction depend on the `vsetvli` that set it; here each instruction
-carries its own: the top bit of `funct7` in the register forms, and in the memory forms the
-low bit of the offset field, which is why a wide offset is even at either width. PolkaVM
-spends a second opcode on it instead. Either way the width belongs to the instruction rather
-than to the machine, so the two interleave freely and neither can be read as the other.
+carries its own. In the register forms it is the top bit of `funct7`, whose remaining six
+bits name the operation, so an operation keeps one number at both widths. `funct3` groups
+those forms by operand shape, and the memory forms take four of its eight values -- 100 and
+101 the 256-bit load and store, 110 and 111 the 128-bit ones -- which is why the eight
+one-source operations share `funct3` 000 with the arithmetic, above it at `funct6` 12 through
+19. Nothing is left for the offset to give up, so at either width it is the byte-granular
+signed 12-bit field `ld` and `sd` take. PolkaVM spends a second opcode on each width instead,
+and a second operand encoding with it: an `i128` is one register rather than a pair, so its
+operands are five-bit register numbers packed end to end and the destination is always
+written. Either way the width belongs to the instruction rather than to the machine, so the
+two interleave freely and neither can be read as the other.
 
 Thirty-three of the thirty-seven wide instructions have a 128-bit twin: the arithmetic,
 division and remainder, the comparisons, the shifts by a register and by an immediate, the
@@ -147,39 +156,33 @@ The calling convention needs no new registers either. An `i128` argument or retu
 in one of `v8` to `v23`, the range the pairs already come from, which at this width carries
 sixteen values rather than eight.
 
-None of it is on yet. LLVM keeps `i128` illegal unless the hidden `-riscv-revive-i128`
-option says otherwise, which is what lets one compiler produce both arrangements and be
-measured against itself; resolc reaches it through `--llvm-arg=-riscv-revive-i128`. The
-option is deleted when the width ships unconditionally.
+None of it is on by default. LLVM keeps `i128` illegal unless the hidden
+`-riscv-revive-i128` option says otherwise, which is what lets one compiler produce both
+arrangements and be measured against itself; resolc reaches it through
+`--llvm-arg=-riscv-revive-i128`. The width takes another 0.61% off corpus blob bytes on the
+stock Yul pipeline and 0.72% on newyork, and the option stays until it ships
+unconditionally.
+
+## The heap word
+
+An EVM heap word is a 256-bit access at an arbitrary byte offset, so the load and the store
+the heap helpers perform carry an alignment of one. Unless `+unaligned-scalar-mem` says the
+target can perform such an access in one instruction, the code generator splits every access
+wider than its alignment into a byte-wise sequence, so the wide load cannot reach the
+corpus's largest consumer of wide values: `__revive_load_heap_word` is then 32 byte loads
+reassembled with shifts and ORs, 132 instructions, where with the feature it is a wide load
+and a byte reversal, ten. resolc requests the feature on both pipelines;
+`RESOLC_DISABLE_UNALIGNED_SCALAR_MEM` in the environment turns it off, which is what a
+baseline measurement or a bisection needs.
 
 ## Status
 
 Experimental, and behind the `+xrevivevec` target feature, which resolc requests by
 default. Setting `RESOLC_DISABLE_WIDE_INTEGERS` in the environment compiles without the
-extension, which is how the baseline column below is produced, and what a bisection or a
-blob for a PolkaVM without the instructions uses.
+extension, which is how a baseline is produced, and what a bisection or a blob for a PolkaVM
+without the instructions uses.
 
-Over the openzeppelin contracts in `oz-tests`, PVM blobs are **50% smaller**: 301,262 bytes
-become 148,784. The custom instructions carry the entire reduction: compiling with every
-form of vectorization disabled produces byte-identical blobs, and enabling the standard
-vector extension without the custom instructions makes every contract slightly larger than
-the baseline.
-
-| contract | without | with | delta |
-|---|--:|--:|--:|
-| erc1155 | 30,649 | 16,243 | -47.0% |
-| erc20 | 42,893 | 21,903 | -48.9% |
-| erc721 | 49,423 | 23,966 | -51.5% |
-| oz_gov | 81,159 | 40,128 | -50.6% |
-| oz_rwa | 37,975 | 18,290 | -51.8% |
-| oz_simple_erc20 | 16,554 | 7,806 | -52.8% |
-| oz_stable | 39,032 | 17,721 | -54.6% |
-| proxy | 3,577 | 2,727 | -23.8% |
-| **total** | **301,262** | **148,784** | **-50.6%** |
-
-The Phase 1 report measured an earlier arrangement of the same idea and answered the width
-and addressing questions on it: `Zvl128b` against `Zvl256b` was 44 bytes, and pinning the
-vector length made no difference at all, leaving the spill slots scalable and the `csrr
-vlenb` sequences in place. The second of those no longer holds: pinning the length is now
-what removes them, because the backend was taught to act on it. It is in
+Over 32 contracts at `-Oz`, PVM blobs are **roughly half the size**: -54% on the stock Yul
+pipeline and -51% on newyork, each against the same compiler with the extension disabled.
+The numbers, and the earlier arrangement of the same idea they supersede, are in
 [Measurements](./wide_integer_analysis.md).

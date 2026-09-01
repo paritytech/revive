@@ -2,35 +2,24 @@
 
 ## Phase 2: PVM blobs
 
-The numbers below stop at the object file, because when they were taken the polkavm linker could
-not decode the new encodings. It can now, and the whole pipeline runs, so the measurement that
-matters is available: the size of the linked PVM blob.
+The measurement that matters is the size of the linked PVM blob, over 32 contracts at `-Oz`
+-- the workload fixtures in `revive-differential-tests` and a set of OpenZeppelin contracts
+-- against the same compiler with `RESOLC_DISABLE_WIDE_INTEGERS` set. The corpus goes from
+1,814,276 bytes to 833,204 on the stock Yul pipeline, **-54.08%**, and from 1,104,518 to
+540,515 on newyork, **-51.06%**. Adding the 128-bit width takes another 5,061 bytes
+(**-0.61%**) and 3,904 (**-0.72%**).
 
-Over the openzeppelin contracts in `oz-tests`, against the same compiler with `+xrevivevec`
-removed:
-
-| contract | without | with | change |
-|---|--:|--:|--:|
-| erc1155 | 30,649 | 16,514 | -46.1% |
-| erc20 | 42,893 | 21,969 | -48.8% |
-| erc721 | 49,423 | 24,128 | -51.2% |
-| oz_gov | 81,159 | 40,511 | -50.1% |
-| oz_rwa | 37,975 | 18,532 | -51.2% |
-| oz_simple_erc20 | 16,554 | 7,932 | -52.1% |
-| oz_stable | 39,032 | 17,904 | -54.1% |
-| proxy | 3,577 | 2,797 | -21.8% |
-| **total** | **301,262** | **150,287** | **-50.1%** |
-
-`proxy` gains least because almost all of it is dispatch and runtime rather than wide
-arithmetic.
+Every configuration comes out of one binary: `RESOLC_DISABLE_WIDE_INTEGERS` and
+`RESOLC_DISABLE_UNALIGNED_SCALAR_MEM` in the environment select the arms, and
+`--llvm-arg=-riscv-revive-i128` the second width.
 
 Three changes on top of phase 1 account for most of the difference between the object-level
-`-30%` and this. Wide values live in a register file of the extension's own rather than in
-`VRM2`, so no vector type is legal and the spill and copy paths are the extension's own
-instructions against fixed-size stack slots. Half that file is callee saved, so a value live
-across a call is saved once rather than at every call site. And `addmod`, `mulmod`, `exp` and
-`signextend` reach their instructions, where before revive still called the `stdlib.ll`
-routines the instructions exist to replace.
+`-30%` and this. The extension implies none of the vector extensions, so no vector type is
+legal and the spill and copy paths are the extension's own instructions against fixed-size
+stack slots. Half the register file is callee saved, so a value live across a call is saved
+once rather than at every call site. And `addmod`, `mulmod`, `exp` and `signextend` reach
+their instructions, where before revive still called the `stdlib.ll` routines the
+instructions exist to replace.
 
 ---
 
@@ -42,8 +31,7 @@ Measured on the 15 benchmark contracts under `benchmarks/single-file` (103 modul
 corpus used for the earlier carry-extension analysis, which established where revive's code size
 goes.
 Sizes are taken per section from the compiled object -- code and constant pool separately, because
-the extension moves them in opposite directions. PVM blob sizes were unavailable when this was
-written, because the polkavm linker could not yet decode the new encodings; they are above.
+the extension moves them in opposite directions. The blob figures are above.
 
 ---
 
@@ -402,13 +390,15 @@ it is a reminder that the frontend's size heuristics are calibrated against the 
 ### The 25% that are runtime calls
 
 `__revive_store_heap_word` (10,904), `__revive_load_heap_word` (5,370) and
-`__revive_load_storage_word` (1,647) dominate this group. They are memory and storage operations,
-not arithmetic, so they are not candidates for instructions -- but they are the single largest
-consumer of wide values in the corpus, and they benefit from step 0 and step 1 anyway: the value
-now arrives in a register pair instead of by reference.
+`__revive_load_storage_word` (1,647) dominate this group. They are memory operations rather than
+arithmetic, and they are the single largest consumer of wide values in the corpus: 17,921 calls,
+more than every wide arithmetic operation in the corpus except `icmp ult`.
 
-If wide memory access is ever worth an instruction of its own, this is where the volume is: 17,921
-calls, more than every wide arithmetic operation in the corpus except `icmp ult`.
+Wide memory access is what `wld` and `wst` cover, so the heap word helpers collapse to one of those
+plus a byte reversal: ten instructions for `__revive_load_heap_word` and thirteen for its store
+twin. That needs `+unaligned-scalar-mem` as well as the extension, because an EVM heap word is a
+256-bit access at an alignment of one, which the code generator otherwise splits into 32 byte
+accesses reassembled with shifts and ORs -- 132 instructions for the load helper.
 
 ---
 
@@ -417,19 +407,22 @@ calls, more than every wide arithmetic operation in the corpus except `icmp ult`
 `i256` is a legal type with its own register class, so type legalization never splits it.
 
 **Registers.** `i256` is a type `VRM2` holds, so a wide value is an LMUL=2 vector register pair --
-exactly 256 bits at VLEN=128. Copies, spills and reloads reuse RVV's own `VMV2R_V`, `VS2R_V` and
-`VL2RE8_V`, and arguments use the existing `ArgVRM2s`. An earlier revision used a parallel register
-file for this; see the future-improvement note at the end of §2. A decoder reading the ELF sees vector
-register numbers. `w4` to `w11` (encoding `v8` to `v22`) are the argument registers, mirroring `ArgVRM2s`.
+exactly 256 bits at VLEN=128. Arguments use the existing `ArgVRM2s`, so `v8` to `v23` -- eight pairs
+-- carry them, and a decoder reading the ELF sees vector register numbers. Copies, spills and
+reloads are the extension's own `revive.wmv`, `revive.wst` and `revive.wld`, because the standard
+whole-register forms need the vector extensions the extension does not imply. An earlier revision
+used a parallel register file for this; see the future-improvement note at the end of §2.
 
-**Instructions**, all in the custom-2 opcode space, `funct3` selecting operand shape:
+**Instructions**, all in the custom-2 opcode space. `funct3` groups the register forms by operand
+shape and `funct6` names the operation within a group, with the top bit of `funct7` carrying the
+width; the memory forms have no `funct6`, so they take a `funct3` per width and direction:
 
 | group | instructions |
 |---|---|
 | arithmetic | `wadd` `wsub` `wmul` `wand` `wor` `wxor` `wdivu` `wdiv` `wremu` `wrem` |
 | shifts | `wsll` `wsrl` `wsra` (amount in a GPR) |
 | compare | `wseq` `wsne` `wsltu` `wslt` (result in a GPR) |
-| move/convert | `wmv` `wtrunc` `wzext` `wsext` `wbswap` |
+| move/convert | `wmv` `wtrunc` `wzext` `wsext` `wbswap` `wcpop` `wclz` `wctz` |
 | memory | `wld` `wst` |
 | EVM-specific | `waddmod` `wmulmod` `wexp` `wsignextend` |
 
@@ -445,8 +438,8 @@ f_call:  addi sp, sp, -8 ; sd ra, 0(sp) ; call opaque ; ld ra, 0(sp) ; addi sp, 
 ```
 
 against 144 bytes of address arithmetic and copies before. Single operations collapse accordingly:
-`add i256` from 28 instructions to `revive.wadd w4, w4, w5`, and `udiv i256` from 1,040 bytes to one
-instruction.
+`add i256` from 28 instructions to `revive.wadd v8, v8, v10`, and `udiv i256` from 1,040 bytes to
+one instruction.
 
 **Supporting work**: a `Select_VRM2` pseudo for wide selects (2,036 `phi i256` in the corpus),
 constant materialization -- XLen-sized values built in a GPR and widened through target nodes,
@@ -535,8 +528,10 @@ no scalar type could be wider than an XLen register**.
 ## 7. The biggest thing left on the table
 
 **Fixed-size spill slots for `VRM2` at a pinned VLEN.** This is worth 413,712 bytes -- the whole gap
-between the current design and the separate register file measured at the end of §2 -- and unlike
-that alternative it costs no correctness.
+between the design measured here and the separate register file measured at the end of §2 -- and
+unlike that alternative it costs no correctness. It is what the extension does now: the backend
+states the 128-bit register width itself and spills with `revive.wst` and `revive.wld` against plain
+32-byte stack objects.
 
 The gap isolates cleanly: **all of it is code.** The constant pool is byte-identical between the two
 designs (160,231 either way), so nothing here is about data.
@@ -576,19 +571,17 @@ callee-saved GPR spills in the spill test), so RV64E register pressure is not th
 Implementing the fix is also what settles the attribution. If the gap closes to near zero, the
 accounting above was right; if it does not, the residual is register-allocation quality.
 
-### Open question: why VLS does not help
+### Why VLS does not help
 
 `-riscv-v-vector-bits-min=128` on top of `Zvl128b` changes nothing -- byte-identical output, and the
-same 37 `csrr` in the spill test (§3). That is the result that most needs explaining before the fix
-is attempted, because on the face of it VLS is exactly the mechanism that should make a `VRM2` slot
-a known 32 bytes.
+same 37 `csrr` in the spill test (§3) -- where on the face of it VLS is exactly the mechanism that
+should make a `VRM2` slot a known 32 bytes.
 
 What the flag actually does is make fixed-length *vector types* legal, so `<4 x i64>` and friends can
 be used instead of scalable ones. It does not appear to change how `RISCVFrameLowering` sizes or
-addresses the RVV stack region, which stays expressed in `vlenb` regardless. Whether that is a
-deliberate separation, an oversight, or something the frame lowering could honour when
-`getRealMinVLen() == getRealMaxVLen()` is the next thing to establish -- and the answer decides
-whether the fix is a small change in frame lowering or a larger one.
+addresses the RVV stack region, which stays expressed in `vlenb` regardless. The fix landed by
+another route: no vector type is legal, so a wide value never reaches that stack region, and the
+extension's own spill instructions address fixed-size slots directly.
 
 **Narrowing wide operations whose result only needs XLen bits.** EVM contracts hold `uint32`,
 `uint64` and `address` values inside 256-bit words, and once `i256` is a machine type every one is
@@ -602,46 +595,30 @@ and its operands with the scalar instruction. That is where the residual Sha256 
 
 ---
 
-## 8. What is not done
+## 8. The EVM-specific instructions
 
-**The EVM-specific instructions work, but nothing emits them yet.** `waddmod`, `wmulmod`, `wexp` and
-`wsignextend` have encodings, intrinsics and patterns, and each selects to a single instruction,
-verified:
+`waddmod`, `wmulmod`, `wexp` and `wsignextend` have encodings, intrinsics and patterns, each selects
+to a single instruction, and resolc emits the intrinsics rather than calling the hand-written
+routines in `stdlib.ll`:
 
 ```text
-revive.waddmod w4, w4, w5, w6      revive.wexp        w4, w4, w5
-revive.wmulmod w4, w4, w5, w6      revive.wsignextend w4, w4, w5
+revive.waddmod v8, v8, v10, v12      revive.wexp        v8, v8, v10
+revive.wmulmod v8, v8, v10, v12      revive.wsignextend v8, v8, v10
 ```
 
-What is missing is the resolc side: it still calls the hand-written routines in `stdlib.ll`, so the
-measurement above **excludes** this win entirely. The corpus has 57 `__mulmod`, 22 `__addmod` and
-18 `__exp` call sites; `__mulmod` is 4,534 bytes and drags in `__ulongrem` at 5,710 for the slow
+The saving is the routine bodies becoming unreferenced. The corpus has 57 `__mulmod`, 22 `__addmod`
+and 18 `__exp` call sites; `__mulmod` is 4,534 bytes and drags in `__ulongrem` at 5,710 for the slow
 path that every modulus near 2²⁵⁶ takes, and the production routines plus helpers come to 15,688
-bytes. Note this win cannot be measured through the `llc` harness at all: the saving comes from the
-routine bodies becoming unreferenced, and only the PVM linker garbage-collects them.
+bytes. Only the PVM linker garbage-collects them, so the `llc` figures in this chapter **exclude**
+this win entirely; the blob figures at the top of the chapter include it.
 
 Getting there needed one piece of LLVM plumbing worth calling out: **intrinsics could not take a
 256-bit scalar**. The type encoding LLVM uses for intrinsic signatures stopped at `IIT_I128`,
 because no in-tree target has a scalar that wide, so the declarations verified as "incorrect return
 type". Adding `IIT_I256` and its decoder case fixed it.
 
-**PVM cannot consume the output**, which is the agreed boundary for this phase. `resolc` now runs
-end-to-end against this LLVM (`VM_FEATURES` requests `+xrevivevec`, and Solidity to Yul to LLVM IR
-to RISC-V object all succeed) and then the polkavm linker rejects the encodings:
-
-```text
-polkavm linker failed: unsupported instruction in <section #0+726> ('.text') at address 0x2d6: 0x0005445b
-```
-
-`0x…5b` is custom-2. Everything up to that point works, and the emitted object is real: ERC20's
-`.text` disassembles to 387 `wld`, 180 `wst`, 52 `wtrunc`, 47 `wsrl`, 45 `wsltu`, 41 `wseq`,
-37 `wadd`, 32 `wbswap`. A consequence worth stating plainly: on this branch `resolc` cannot produce
-a blob for *any* contract, so the branch is an experiment, not something to merge as-is.
-
-What has been demonstrated through `resolc` itself is ERC20 (complete object) and
-AutomataDcapAttestationFee (all 16 modules emitted); the rest of the corpus is covered at the
-codegen level by the 103-module measurement above, which is the same compiler and the same IR, but
-driven through `llc` rather than the `resolc` front end.
+A compiled object is dense with the wide instructions: ERC20's `.text` disassembles to 387 `wld`,
+180 `wst`, 52 `wtrunc`, 47 `wsrl`, 45 `wsltu`, 41 `wseq`, 37 `wadd`, 32 `wbswap`.
 
 ---
 
@@ -657,8 +634,9 @@ Worth recording that the reasoning which produced the parallel file was partly w
 earlier prototype -- but adding `i256` to `VRM2`'s type list is a different thing and works, despite
 `VReg` sizing the class from ELEN. That possibility was dismissed by inference rather than tested.
 
-**Only 16 wide registers, all caller-saved.** None are in any callee-saved list, so every wide value
-live across a call is spilled. Giving some of them callee-saved status is likely worth measuring.
+**The wide registers are no longer all caller-saved.** Half the file -- `v0` to `v7` and `v24` to
+`v31` -- is callee saved, where the standard vector convention preserves none, so a value live
+across a call is saved once by the callee rather than at every call site.
 
 **Compile time.** Two pathologies were found and fixed -- the store-merging loop and the missing
 `extloadi64` pattern -- and every module now compiles inside the harness's 120-second limit, where
@@ -666,10 +644,10 @@ the largest previously did not. Whole-contract `resolc` runs are still slow: `Au
 ran 12 CPU-minutes past codegen without completing its link when this was last measured, before the
 constant fix. Worth re-checking and profiling before this goes near CI.
 
-**Nothing verifies semantics.** Stopping before PVM means no differential testing against EVM, so a
-wrong lowering is invisible. Every result here is a size measurement, not a correctness one. The
-mitigation worth building is a mode that lowers the wide instructions back to scalar limbs, so the
-same IR can be differentially tested.
+**Semantics are verified by the test suites rather than by the figures here.** Every result in this
+chapter is a size measurement. Correctness comes from the extension being on by default: the
+integration and differential suites compile every contract through the wide instructions and assert
+the same state changes as the EVM.
 
 ---
 

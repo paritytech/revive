@@ -132,44 +132,56 @@ reported -- but each is one instruction where a base-ISA build calls a routine:
 | exp | 1,738 | 5,558 |
 | mulmod | 1,890 | 6,805 |
 
-### Recompiler -- the trampoline dominates the compute operations
+### Recompiler -- compute goes out-of-line, at a cost of tens of nanoseconds
 
 The recompiler does not inline the wide *compute* operations; it routes each through the
 `syscall_wide` trampoline into the shared implementation the interpreter uses, so the two backends
-can never disagree about what an instruction means. That call boundary -- saving the live registers,
-crossing into the shared routine, returning -- costs about **1,700 ns** and is the same for every
-compute operation and both widths, cheap or not: `add` 1,684, `and` 1,689, `mul` 1,738, `slt` 1,682,
-`move` 1,712, `byte-swap` 1,694 at 256 bits, all within noise of each other and of their 128-bit
-counterparts.
+can never disagree about what an instruction means. That call boundary -- saving the caller-saved
+registers, calling the shared routine, returning -- is a fixed cost of about **40--60 ns**, much the
+same for every cheap compute operation and both widths: at 256 bits `add` 57.9, `and` 54.4, `mul`
+56.8, `slt` 40.1, `move` 53.8, `byte-swap` 52.5, each a small multiple of the ~23 ns the shared
+routine itself takes, plus register save/restore.
 
 Against that, the inline scalar reference is a handful of native instructions the recompiler emits
-directly -- `add` 3.4 ns, `and` 0.5 ns, `mul` 22.4 ns, `slt` 4.5 ns -- so on the recompiler the
-extension is a **loss for the cheap operations**: the wide `add` (1,700 ns) is even slower than the
-*interpreter's* wide `add` (20 ns).
+directly -- at 256 bits `add` 7.0 ns, `and` 2.5 ns, `mul` 22.4 ns, `slt` 9.9 ns -- so on the
+recompiler the cheap operations are a **modest loss**: a wide `add` (58 ns) costs about eight inline
+scalar adds, and roughly three times the *interpreter's* wide `add` (20 ns), which pays no such
+boundary because it runs in-process.
 
-Two kinds of wide instruction escape the trampoline. Loads and stores are generated inline -- so a
-bad address faults through the same guard pages a scalar access does -- and they are correspondingly
-cheap: `load` 0.6 ns, `store` 3.2 ns at 256 bits. And the iterative operations, whose own work
-dwarfs the boundary, are where the extension pays for itself even on the recompiler:
+Loads and stores escape the trampoline entirely -- generated inline, so a bad address faults through
+the same guard pages a scalar access does -- and are correspondingly cheap: `load` 3.0 ns, `store`
+1.9 ns at 256 bits. And the iterative operations, whose own work dwarfs the boundary, are where the
+extension pays for itself even on the recompiler:
 
 | op | 128-bit (ns) | 256-bit (ns) |
 |---|--:|--:|
-| div / rem | ~4,250 | ~6,950 |
-| exp | 7,302 | 8,572 |
-| addmod | 5,330 | 12,152 |
-| mulmod | 5,635 | 13,447 |
+| div / rem | ~1,030 | ~4,510 |
+| exp | 4,124 | 10,183 |
+| addmod | 1,936 | 8,997 |
+| mulmod | 3,162 | 10,783 |
 
-That the compute floor is a fixed ~1,700 ns regardless of width or operation, while the iterative
-costs scale with both, confirms the floor is the call boundary itself and not measurement noise; the
-generic and Linux sandboxes measure it identically.
+The cheap-compute cost is roughly flat across operations and only weakly dependent on width, because
+it is dominated by the fixed call boundary rather than the arithmetic; the iterative costs, by
+contrast, scale with both operation and width, as their own work does.
 
 **The reading.** The extension is an unambiguous win for the interpreter at both widths, and for the
 heavy modular arithmetic and memory traffic on both backends. For the cheap compute operations on the
-recompiler it is a loss, and the cause is specific and fixable: those operations are not inlined.
-`adc`/`sbb` are in the assembler for exactly this, and inlining a wide add would replace the 1,700 ns
-boundary with a few native instructions -- see [§7](#7-the-biggest-thing-left-on-the-table). Until
-then, routing compute through one shared routine is what keeps the recompiler and the interpreter in
-agreement, which was the correctness priority for this phase.
+recompiler it is a small loss -- tens of nanoseconds against a few -- and the cause is specific and
+fixable: those operations are not inlined. `adc`/`sbb` are in the assembler for exactly this, and
+inlining a wide add would replace the ~58 ns out-of-line call with a few native instructions -- see
+[§7](#7-the-biggest-thing-left-on-the-table). Until then, routing compute through one shared routine
+is what keeps the recompiler and the interpreter in agreement, which was the correctness priority for
+this phase.
+
+> **Measurement note.** An earlier version of this section reported a fixed ~1,700 ns floor for every
+> compute operation. That was an artifact of the benchmark harness, not the trampoline. The
+> microbench (`wide_microbench.rs`) runs as a `#[test]`, and `is_sandbox_logging_enabled()` returns
+> `cfg!(test) || …`, which forces the sandbox worker's trace logging on. With logging on,
+> `syscall_wide` emits two `write()` syscalls plus a host wake **per wide instruction** -- about
+> 1,680 ns of log I/O and a context switch -- which swamped the real cost and made every operation
+> look identical regardless of width. The numbers above are measured with worker logging off, as
+> production runs; the real trampoline cost is tens of nanoseconds. Any recompiler wide-execution
+> figure taken from a `#[test]` build is subject to the same inflation.
 
 ---
 

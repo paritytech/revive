@@ -481,3 +481,23 @@ Most contracts are unchanged (inference finds nothing to narrow); the effect con
 - **NewYork IR** needs a much faster Yul→IR stage before it can be benchmarked at scale.
 
 *Harnesses/data in `benchmarks/analysis/vsetivli-tradeoff/`: `wide_microbench.rs`, `measure_per_bench.py`, `compare_ti.py`, `per-bench-default.tsv`, `ti-compare-results.txt`, `usage-default-counts.txt`, `microbench-{interp,recomp}.txt`.*
+
+## 11. Experiment: a dedicated register file instead of RVV (XReviveW)
+
+An alternative to holding i256 in reused RVV groups (`VRM2`, width from `vtype`) is a **dedicated 16-entry file `W0–W15`** with a **fixed 256-bit width and no `vsetivli`** — the width mode is implicit, so the linker just defaults an unresolved wide op to 256 bits. This drops all the RVV coupling (no RVV-avoidance, no LMUL2 even-alignment, no machine-outliner-vs-`vtype` restriction).
+
+**Why it should be ≈neutral where it ships, then measured anyway.** The mode instruction (`vsetivli`/implicit) is linker-consumed and never reaches the blob, and the corpus has almost no wide register pressure (register-to-register moves are 1.2% of wide ops), so register-file choice can barely move shipped code. The prediction was ≈0 on the blob and the recompiler. A working `+xrevivew` prototype (LLVM new register class + calling convention + ISel + copies/spills; PolkaVM linker default-width flag) was built to check it empirically.
+
+**Result (aggregate over the 64 modules that compiled in all of ref/vec/w):**
+
+| metric | ref (scalar) | vec (RVV+vtype) | **w (dedicated file)** | w ÷ vec |
+|---|--:|--:|--:|--:|
+| `.text` (object) | 151,720 | 150,232 | **141,284** | **0.940×** |
+| blob (shipped) | 177,773 | 142,680 | **139,841** | **0.980×** |
+| interpreter µs | 135.5 | 159.3 | **151.8** | **0.953×** |
+| **recompiler µs** | 183.9 | 176.6 | **176.6** | **1.000×** |
+| gas | 20,261 | 23,865 | **23,298** | **0.976×** |
+
+**Findings.** The **recompiler — the production execution path — is at exact parity (1.000×)**, confirming the core prediction: same shipped wide-op stream ⇒ same execution. But `w` is *modestly better everywhere else*: object `.text` −6% (the `vsetivli` are simply gone), and a small consistent edge on blob (−2%, smaller in 67 of 72 head-to-head modules), interpreter (−5%) and gas (−2.4%) from tighter conversion/glue codegen (it executes ~2.4% fewer instructions). So the design is at least at parity and slightly ahead, never worse.
+
+**Caveats.** The `w` path is a lean prototype vs a production-tuned `vec`, so the ~2% blob/gas edge is partly codegen happenstance — the fundamental win is the ~6% object-code reduction and the cleaner integration, not shipped execution (recompiler is equal). It is **i256-only** (no i512/i1024, no real byte-granular `set_width`), and it has a **known gap: i256 `div`/`rem` still expand to a software limb loop** rather than selecting `revive.wdiv`, so 8 constant-division corpus modules fail to link on `w` and are excluded (division is <0.2% of corpus wide ops). Prototype on the `kvpanch/wreg_prototype` branches; data in `per-bench-wreg.tsv` (harness `measure_wreg.py`); tests in `llvm/test/CodeGen/RISCV/xrevivew.ll`.

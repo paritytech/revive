@@ -49,10 +49,10 @@ which = "8.0"
 path-slash = "0.2"
 rayon = "1.11"
 clap = { version = "4", default-features = false, features = ["derive"] }
-polkavm-common = { path = "/home/ubuntu/workspaces/polkavm/crates/polkavm-common" }
-polkavm-linker = { path = "/home/ubuntu/workspaces/polkavm/crates/polkavm-linker" }
-polkavm-disassembler = { path = "/home/ubuntu/workspaces/polkavm/crates/polkavm-disassembler" }
-polkavm = { path = "/home/ubuntu/workspaces/polkavm/crates/polkavm" }
+polkavm-common = { git = "https://github.com/paritytech/polkavm.git", branch = "kvpanch/vec_ext_custom_inst" }
+polkavm-linker = { git = "https://github.com/paritytech/polkavm.git", branch = "kvpanch/vec_ext_custom_inst" }
+polkavm-disassembler = { git = "https://github.com/paritytech/polkavm.git", branch = "kvpanch/vec_ext_custom_inst" }
+polkavm = { git = "https://github.com/paritytech/polkavm.git", branch = "kvpanch/vec_ext_custom_inst" }
 alloy-primitives = { version = "1.4", features = ["serde"] }
 alloy-sol-types = "1.4"
 alloy-genesis = "1.1.2"

@@ -471,7 +471,36 @@ Valid impact of **disabling type inference** (34 contracts that ran in both). `g
 | Balance.sol.BalanceReceiver | 538 | 538 | +0.0% | 804 | 41/28 | 41/49 |
 | **TOTAL (34)** | **40,516** | **38,888** | **-4.0%** | **40,922** | **86,377/109,172** | **113,066/117,664** |
 
-Most contracts are unchanged (inference finds nothing to narrow); the effect concentrates in arithmetic ones (`Uint128Arithmetic`: −44% blob, ~6.5× slower interp). **Type inference trades a little code size for speed** — it narrows `i256`→`i64`/`i128`, producing larger but faster code, because scalar ops avoid the expensive wide path.
+Most contracts are unchanged (inference finds nothing to narrow); the effect concentrates in arithmetic ones (`Uint128Arithmetic`: −44% blob, ~6.5× slower interp). **Type inference trades a little code size for speed** — it narrows `i256`→`i64`/`i128`, producing larger but faster code, because scalar ops avoid the expensive wide path. *(This table isolates inference by comparing TI-on vs TI-off within the NewYork pipeline.)*
+
+### Full benchmark re-measurement on the NewYork corpus (type inference ON) vs the Yul baseline
+
+The re-measurement above isolates inference *within* NewYork. The complementary question is the whole pipeline: **NewYork IR (type inference on) against the Yul-path IR** that produced §5–§8. The ref/vec/w harness (`measure_wreg.py`) was re-run against `ir-corpus-newyork`; Yul baseline in `per-bench-wreg-yul.tsv`, NewYork in `per-bench-wreg-newyork.tsv`, diff by `compare_newyork.py`.
+
+**Coverage first — the NewYork pipeline is still maturing (see the §9 head).** Its IR is fine for the base ISA but frequently crashes or times out `llc` *once the wide extension is on*:
+
+| corpus | ref (compiled / ran) | vec | w |
+|---|--:|--:|--:|
+| Yul path | 96 / 67 | 98 / 80 | 99 / 84 |
+| **NewYork (TI on)** | 96 / 68 | **37 / 36** | **51 / 51** |
+
+`ref` (no extension) is unaffected; the extension arms collapse to a minority of the corpus (`llc` core-dumps / 60 s timeouts on the rest). Note the **`w` path compiles a strict superset of `vec`** — 51 vs 37 modules (14 that `vec` crashes on, 0 the reverse) — because it avoids the fragile RVV/`vtype` codegen (reinforces §11's "cleaner integration" finding).
+
+**Where it does compile, type inference is a large win.** On the 36 modules that compile *and* run on the `vec` arm in **both** corpora (so this isolates the IR change, not the module set):
+
+| metric (vec arm, 36 shared modules) | Yul | NewYork (TI on) | NewYork ÷ Yul |
+|---|--:|--:|--:|
+| `.text` (object, bytes) | 69,668 | 45,272 | **0.65×** |
+| blob (shipped, bytes) | 64,167 | 43,699 | **0.68×** |
+| **gas** (deterministic) | 11,920 | 3,620 | **0.30×** |
+| interpreter (µs, amortized) | 80.7 | 31.5 | **0.39×** |
+| recompiler (µs, amortized) | 104.3 | 103.5 | 0.99× |
+
+Type inference narrows `i256`→`i64`/`i128` wherever it can prove the width, so the NewYork blobs carry far fewer wide ops. The effect lands squarely on **gas — the deterministic, chain-charged metric — which drops 3.3×** (−70%), with interpreter time −61% and code size ~−34%. The **recompiler is at parity** (0.99×): it was already fast on the wide ops (§5/§6c), so the win is in metered work and interpreted/code-size cost, not recompiler wall-time. This is the opposite framing to the TI-on-vs-TI-off table above (which showed TI making code *larger*): against the **Yul** baseline the whole NewYork pipeline is both smaller and cheaper.
+
+**Within the NewYork corpus**, the extension still meters more gas than scalar `ref` (vec/ref 1.19× over the 31 modules all three compiled — the residual wide ops after narrowing); the *ratio* is about the same as on Yul (1.18×, §6d), but the *absolute* gas is far lower (narrowing removed most wide ops, hence the 0.30× above). w-vs-vec stays at recompiler parity (0.99–1.01×), consistent with §11 — though the within-NewYork arm deltas are over only 31–36 modules, so treat them as indicative, not the 80-module §11 result.
+
+**Bottom line.** With type inference on, the benchmarks that survive the NewYork front-end are dramatically cheaper — **~3.3× less gas, ~2.6× faster interpreted, ~1.5× smaller** — at recompiler parity, and the dedicated-`w` register file compiles more of them than the RVV/`vtype` variant. The blocker is front-end/`llc` robustness: only 37/99 (`vec`) compile today, so this is a "where it compiles" result, not a full-corpus replacement for §6 — closing that gap is the §10 NewYork item.
 
 ## 10. Status and next
 

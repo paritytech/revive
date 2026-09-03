@@ -39,83 +39,85 @@ The wide-integer extension across **revive**, **LLVM (parity-llvm 22.1.8)** and 
 
 Each wide instruction in a tight loop; the reference is the scalar limb-chain a base-ISA build emits (extension and reference cross-checked equal). `ext` is the extension; `ref` is scalar.
 
+The recompiler column reflects the **current default: the cheap/common wide ops are inlined to native code**, while `mul`, the shifts, `min`/`max`, `bswap`, `sext_w`/`signext`, and the heavy iterative ops still route through the `syscall_wide` **trampoline** (an out-of-line call, ~50–60 ns; the div/rem/exp/mod bodies add their real limb-loop work on top). The **path** column marks which. Recompiler figures are measured with sandbox worker logging off (see the measurement note below), so they match how `resolc`/`runblob` run.
+
 ### 256-bit
 
-| op | interp ext | recomp ext | interp ref (scalar) | recomp ref (scalar) | interp ext vs ref | recomp ÷ interp (ext) |
-|---|--:|--:|--:|--:|--:|--:|
-| `add` | 20.0 | 57.9 | 317.9 | 7.0 | 15.9× | 2.9× |
-| `sub` | 20.1 | 58.3 | 306.6 | 7.1 | 15.3× | 2.9× |
-| `mul` | 36.5 | 56.8 | 1,016.6 | 22.4 | 27.9× | 1.6× |
-| `and` | 20.4 | 54.4 | 145.8 | 2.5 | 7.1× | 2.7× |
-| `or` | 20.2 | 54.4 | 144.7 | 2.5 | 7.2× | 2.7× |
-| `xor` | 20.7 | 54.5 | 145.0 | 2.5 | 7.0× | 2.6× |
-| `shl` | 23.9 | 59.8 | 202.7 | 3.4 | 8.5× | 2.5× |
-| `shr_l` | 24.4 | 57.4 | — | — | — | 2.4× |
-| `shr_a` | 24.5 | 55.9 | — | — | — | 2.3× |
-| `slt_u` | 16.4 | 40.1 | 405.1 | 9.9 | 24.7× | 2.4× |
-| `slt_s` | 17.2 | 40.6 | — | — | — | 2.4× |
-| `seq` | 16.4 | 39.8 | 234.0 | 3.4 | 14.2× | 2.4× |
-| `sne` | 16.4 | 39.8 | — | — | — | 2.4× |
-| `min_u` | 18.1 | 58.2 | — | — | — | 3.2× |
-| `min_s` | 18.2 | 55.8 | — | — | — | 3.1× |
-| `max_u` | 17.8 | 58.2 | — | — | — | 3.3× |
-| `max_s` | 17.8 | 55.8 | — | — | — | 3.1× |
-| `move` | 14.8 | 53.8 | 70.1 | 1.2 | 4.7× | 3.6× |
-| `bswap` | 17.5 | 52.5 | 102.6 | 1.9 | 5.9× | 3.0× |
-| `zext` | 15.1 | 54.4 | 47.0 | 1.1 | 3.1× | 3.6× |
-| `sext_w` | 12.4 | 52.5 | — | — | — | 4.2× |
-| `trunc` | 10.8 | 38.8 | 17.4 | 0.2 | 1.6× | 3.6× |
-| `signext` | 23.2 | 53.7 | — | — | — | 2.3× |
-| `load` | 28.3 | 3.0 | — | — | — | 0.1× |
-| `store` | 16.8 | 1.9 | — | — | — | 0.1× |
-| `div_u` | 2,782.2 | 4,497.9 | — | — | — | 1.6× |
-| `div_s` | 2,798.3 | 4,553.4 | — | — | — | 1.6× |
-| `rem_u` | 2,783.4 | 4,511.1 | — | — | — | 1.6× |
-| `rem_s` | 2,803.2 | 4,536.7 | — | — | — | 1.6× |
-| `addmod` | 5,571.6 | 8,996.8 | — | — | — | 1.6× |
-| `exp` | 5,550.1 | 10,183.2 | — | — | — | 1.8× |
-| `mulmod` | 6,788.0 | 10,782.8 | — | — | — | 1.6× |
+| op | interp ext | interp ref (scalar) | interp ext÷ref | recomp ext | recomp ref (scalar) | recomp path |
+|---|--:|--:|--:|--:|--:|:--|
+| `add` | 20.0 | 254.3 | 12.7× | 2.5 | 7.1 | inline |
+| `sub` | 20.3 | 261.7 | 12.9× | 2.5 | 7.4 | inline |
+| `and` | 20.4 | 117.5 | 5.8× | 2.5 | 2.5 | inline |
+| `or` | 20.9 | 122.8 | 5.9× | 2.5 | 2.5 | inline |
+| `xor` | 20.5 | 122.2 | 5.9× | 2.5 | 2.5 | inline |
+| `slt_u` | 16.7 | 365.5 | 21.9× | 1.3 | 8.9 | inline |
+| `slt_s` | 17.2 | — | — | 1.8 | — | inline |
+| `seq` | 16.5 | 198.3 | 12.0× | 3.1 | 3.4 | inline |
+| `sne` | 16.5 | — | — | 2.2 | — | inline |
+| `move` | 13.8 | 58.2 | 4.2× | 1.6 | 1.3 | inline |
+| `zext` | 15.2 | 45.2 | 3.0× | 1.2 | 1.2 | inline |
+| `trunc` | 10.8 | 14.4 | 1.3× | 0.0 | 0.2 | inline |
+| `load` | 28.4 | — | — | 1.9 | — | inline (native) |
+| `store` | 16.8 | — | — | 1.9 | — | inline (native) |
+| `mul` | 36.4 | 828.2 | 22.7× | 56.9 | 23.0 | trampoline |
+| `shl` | 23.9 | 165.1 | 6.9× | 61.3 | 3.8 | trampoline |
+| `shr_l` | 24.6 | — | — | 56.5 | — | trampoline |
+| `shr_a` | 24.6 | — | — | 57.9 | — | trampoline |
+| `min_u` | 18.2 | — | — | 58.1 | — | trampoline |
+| `min_s` | 17.8 | — | — | 55.7 | — | trampoline |
+| `max_u` | 17.8 | — | — | 58.1 | — | trampoline |
+| `max_s` | 18.1 | — | — | 55.8 | — | trampoline |
+| `bswap` | 17.5 | 81.6 | 4.7× | 52.5 | 1.9 | trampoline |
+| `sext_w` | 12.4 | — | — | 52.4 | — | trampoline |
+| `signext` | 21.2 | — | — | 53.7 | — | trampoline |
+| `div_u` | 2,807.2 | — | — | 4,489.9 | — | trampoline (heavy) |
+| `div_s` | 2,797.9 | — | — | 4,539.8 | — | trampoline (heavy) |
+| `rem_u` | 2,781.5 | — | — | 4,522.1 | — | trampoline (heavy) |
+| `rem_s` | 2,804.5 | — | — | 4,542.6 | — | trampoline (heavy) |
+| `addmod` | 5,574.9 | — | — | 8,996.9 | — | trampoline (heavy) |
+| `exp` | 5,551.4 | — | — | 10,191.6 | — | trampoline (heavy) |
+| `mulmod` | 6,805.7 | — | — | 10,778.3 | — | trampoline (heavy) |
 
 ### 128-bit
 
-| op | interp ext | recomp ext | interp ref (scalar) | recomp ref (scalar) | interp ext vs ref | recomp ÷ interp (ext) |
-|---|--:|--:|--:|--:|--:|--:|
-| `add` | 19.0 | 54.3 | 173.6 | 3.5 | 9.1× | 2.9× |
-| `sub` | 18.8 | 55.0 | 167.8 | 4.0 | 8.9× | 2.9× |
-| `mul` | 24.5 | 58.2 | 288.9 | 5.2 | 11.8× | 2.4× |
-| `and` | 18.1 | 47.8 | 72.7 | 1.1 | 4.0× | 2.6× |
-| `or` | 19.1 | 47.7 | 72.0 | 1.1 | 3.8× | 2.5× |
-| `xor` | 18.8 | 47.4 | 72.1 | 1.1 | 3.8× | 2.5× |
-| `shl` | 21.4 | 61.2 | 78.1 | 1.1 | 3.6× | 2.9× |
-| `shr_l` | 21.3 | 61.2 | — | — | — | 2.9× |
-| `shr_a` | 21.3 | 59.2 | — | — | — | 2.8× |
-| `slt_u` | 15.9 | 39.1 | 199.2 | 4.3 | 12.5× | 2.5× |
-| `slt_s` | 16.3 | 40.2 | — | — | — | 2.5× |
-| `seq` | 15.8 | 39.4 | 119.3 | 2.1 | 7.5× | 2.5× |
-| `sne` | 16.1 | 39.4 | — | — | — | 2.4× |
-| `min_u` | 18.1 | 58.1 | — | — | — | 3.2× |
-| `min_s` | 18.1 | 55.6 | — | — | — | 3.1× |
-| `max_u` | 17.8 | 58.2 | — | — | — | 3.3× |
-| `max_s` | 17.8 | 55.6 | — | — | — | 3.1× |
-| `move` | 14.8 | 53.8 | 35.5 | 0.5 | 2.4× | 3.6× |
-| `bswap` | 16.2 | 53.8 | 51.7 | 0.8 | 3.2× | 3.3× |
-| `zext` | 15.0 | 53.7 | 31.2 | 0.5 | 2.1× | 3.6× |
-| `sext_w` | 12.4 | 52.3 | — | — | — | 4.2× |
-| `trunc` | 10.7 | 38.7 | 17.1 | 0.3 | 1.6× | 3.6× |
-| `signext` | 23.1 | 53.8 | — | — | — | 2.3× |
-| `load` | 20.5 | 1.2 | — | — | — | 0.1× |
-| `store` | 15.4 | 1.4 | — | — | — | 0.1× |
-| `div_u` | 650.7 | 1,026.5 | — | — | — | 1.6× |
-| `div_s` | 668.5 | 1,060.7 | — | — | — | 1.6× |
-| `rem_u` | 654.6 | 1,033.9 | — | — | — | 1.6× |
-| `rem_s` | 669.1 | 1,067.9 | — | — | — | 1.6× |
-| `addmod` | 1,292.1 | 1,936.2 | — | — | — | 1.5× |
-| `exp` | 1,737.7 | 4,124.2 | — | — | — | 2.4× |
-| `mulmod` | 1,893.8 | 3,162.0 | — | — | — | 1.7× |
+| op | interp ext | interp ref (scalar) | interp ext÷ref | recomp ext | recomp ref (scalar) | recomp path |
+|---|--:|--:|--:|--:|--:|:--|
+| `add` | 17.5 | 137.1 | 7.8× | 1.2 | 3.5 | inline |
+| `sub` | 17.5 | 141.9 | 8.1× | 1.1 | 3.5 | inline |
+| `and` | 17.4 | 59.5 | 3.4× | 1.2 | 1.1 | inline |
+| `or` | 17.4 | 59.9 | 3.4× | 1.2 | 1.3 | inline |
+| `xor` | 17.5 | 59.6 | 3.4× | 0.9 | 1.2 | inline |
+| `slt_u` | 15.9 | 189.2 | 11.9× | 1.1 | 4.3 | inline |
+| `slt_s` | 16.3 | — | — | 0.9 | — | inline |
+| `seq` | 15.8 | 105.2 | 6.7× | 1.1 | 2.1 | inline |
+| `sne` | 15.8 | — | — | 1.1 | — | inline |
+| `move` | 13.1 | 28.9 | 2.2× | 0.7 | 0.6 | inline |
+| `zext` | 15.0 | 30.2 | 2.0× | 0.5 | 0.5 | inline |
+| `trunc` | 10.7 | 16.1 | 1.5× | 0.1 | 0.2 | inline |
+| `load` | 20.5 | — | — | 1.2 | — | inline (native) |
+| `store` | 13.4 | — | — | 1.2 | — | inline (native) |
+| `mul` | 23.9 | 252.4 | 10.6× | 56.5 | 5.2 | trampoline |
+| `shl` | 21.4 | 65.1 | 3.0× | 57.3 | 1.4 | trampoline |
+| `shr_l` | 21.3 | — | — | 59.6 | — | trampoline |
+| `shr_a` | 21.3 | — | — | 59.0 | — | trampoline |
+| `min_u` | 17.1 | — | — | 58.1 | — | trampoline |
+| `min_s` | 16.8 | — | — | 55.6 | — | trampoline |
+| `max_u` | 16.8 | — | — | 58.2 | — | trampoline |
+| `max_s` | 17.1 | — | — | 55.7 | — | trampoline |
+| `bswap` | 16.3 | 40.6 | 2.5× | 53.6 | 0.9 | trampoline |
+| `sext_w` | 12.4 | — | — | 52.3 | — | trampoline |
+| `signext` | 22.1 | — | — | 53.7 | — | trampoline |
+| `div_u` | 654.1 | — | — | 1,025.7 | — | trampoline (heavy) |
+| `div_s` | 685.2 | — | — | 1,060.2 | — | trampoline (heavy) |
+| `rem_u` | 670.0 | — | — | 1,032.8 | — | trampoline (heavy) |
+| `rem_s` | 672.8 | — | — | 1,068.0 | — | trampoline (heavy) |
+| `addmod` | 1,280.9 | — | — | 1,932.6 | — | trampoline (heavy) |
+| `exp` | 1,611.8 | — | — | 4,127.0 | — | trampoline (heavy) |
+| `mulmod` | 1,898.2 | — | — | 3,155.8 | — | trampoline (heavy) |
 
-On the compute ops the recompiler is ~2–4× the interpreter: it routes each through the `syscall_wide` trampoline as an **out-of-line call** (~40–60 ns: ~23 ns shared arithmetic + register save/restore), while the interpreter runs the same code inline (~15–36 ns). Against the recompiler's own **inline scalar reference** (a few ns), the extension is a modest loss for cheap ops — a wide `add` (58 ns) is ~8 inline scalar adds — which is what motivates inlining `adc`/`sbb` (§10). **Load/store invert** (generated inline on the recompiler, ~1–3 ns). One interpreted wide op replaces a whole scalar chain (the `ext vs ref` column). 128-bit speedups are smaller — a shorter chain to replace.
+**Reading it.** *Interpreter:* one wide op replaces a whole scalar limb chain, so the extension wins across the board (3–28× at 256-bit; smaller at 128-bit — a shorter chain to replace). *Recompiler:* the **inlined ops now run at or below the scalar reference** — `add` 2.5 ns vs 7.1, `slt_u` 1.3 vs 8.9, `trunc`/`zext` at or under 1 ns, bitwise at parity — because they generate native code with no call. This is the key change from the earlier trampoline-for-everything snapshot, where every wide op was ~50–60 ns and so uniformly slower than the recompiler's few-ns inline scalar. The **still-trampolined ops** (`mul`, shifts, `min`/`max`, `bswap`, `sext`) cost that ~50–60 ns crossing and remain a per-op loss versus inline scalar — the open inlining work in §10. The **heavy iterative ops** (`div`/`rem`/`exp`/`mod`) are genuinely thousands of ns of limb-loop work; the trampoline is a rounding error on them, and there is no short scalar form to beat. Whole-contract impact is §6c/§6d, where the inlined cheap ops dominate and the recompiler reaches 1.00× ref.
 
-> **Measurement correction.** An earlier version of this table reported ~1,700 ns for every recompiler compute op (a flat "84–158× interp" column). That was an artifact of the microbench harness: `wide_microbench.rs` runs as a `#[test]`, and `is_sandbox_logging_enabled()` returns `cfg!(test) || …`, forcing the sandbox worker's trace logging on — so the zygote's `syscall_wide` did two `write()` syscalls plus a host wake **per wide op** (~1,680 ns of log I/O + a context switch), width-independent, swamping the real cost. The numbers above are re-measured with worker logging off (as `resolc`/`runblob` run); the real out-of-line cost is tens of nanoseconds. The interpreter and §6 (`runblob`, not a test build) were never affected.
+> **Measurement note.** `wide_microbench.rs` runs as a `#[test]`, and `is_sandbox_logging_enabled()` returns `cfg!(test) || …`, which forces the sandbox worker's trace logging on. That adds ~1,680 ns of `write()` I/O per op **to every op that crosses the `syscall_wide` trampoline** (a flat ~1,700 ns column if left on), swamping the real trampoline cost — but it does **not** touch the inlined ops (they never cross) or the interpreter. The recompiler figures above were captured with that gate temporarily forced off, matching how `resolc`/`runblob` run; §6 (`runblob`, not a test build) was never affected.
 
 ## 5b. Recompiler native-code size per instruction (the per-instruction JIT budget)
 
@@ -484,22 +486,51 @@ Most contracts are unchanged (inference finds nothing to narrow); the effect con
 
 ## 11. Experiment: a dedicated register file instead of RVV (XReviveW)
 
-An alternative to holding i256 in reused RVV groups (`VRM2`, width from `vtype`) is a **dedicated 16-entry file `W0–W15`** with a **fixed 256-bit width and no `vsetivli`** — the width mode is implicit, so the linker just defaults an unresolved wide op to 256 bits. This drops all the RVV coupling (no RVV-avoidance, no LMUL2 even-alignment, no machine-outliner-vs-`vtype` restriction).
+The shipped extension (§1–§10) makes two coupled choices: it **reuses the RVV register groups** (`VRM2`/`VRM4`/`VRM8`, i.e. `v0–v31`) to hold i256/i512/i1024, and it **takes the width from `vtype`**, configured by a `vsetivli` that the linker consumes (§8). This experiment separates those two axes and asks whether a **dedicated register file with a fixed width** is better on the metrics that ship.
 
-**Why it should be ≈neutral where it ships, then measured anyway.** The mode instruction (`vsetivli`/implicit) is linker-consumed and never reaches the blob, and the corpus has almost no wide register pressure (register-to-register moves are 1.2% of wide ops), so register-file choice can barely move shipped code. The prediction was ≈0 on the blob and the recompiler. A working `+xrevivew` prototype (LLVM new register class + calling convention + ISel + copies/spills; PolkaVM linker default-width flag) was built to check it empirically.
+**Two axes, three points in the design space.**
 
-**Result (80 modules compiled in both vec and w; deterministic metrics as totals):**
+- *Register file:* reuse RVV (`v0–v31`, forces RVV-avoidance elsewhere, LMUL2 even-register alignment, and the machine-outliner-vs-`vtype` restriction of §8) **vs.** a dedicated file with no RVV entanglement.
+- *Width mechanism:* how a width-less opcode (custom-2 carries no width) learns its width. Three options — (a) a `vtype` mode set by `vsetivli` (**shipped `vec`**); (b) a dedicated **`revive.set_width <bytes>`** mode instruction (the originally-proposed variant, below); (c) **no mechanism at all** — fix the width and make it implicit (**this prototype, `w`**).
 
-| metric | vec (RVV+vtype) | **w (dedicated file)** | w ÷ vec |
+**What was built (`+xrevivew`, the "lean W-file").** A **dedicated 16-entry file `W0–W15`**, i256 as a legal type, and a **fixed 256-bit width with no width instruction of any kind** — no `vsetivli`, no `set_width`. Width is implicit, so the linker just defaults any unresolved wide op to 256 bits (`POLKAVM_ASSUME_W256`). This drops all RVV coupling. It required an LLVM register class + calling convention + ISel + copy/spill support, and one linker flag; scope was deliberately held to i256 (see limitations). The `W0–W15` encodings are `0,2,…,30` so the linker's existing VRM2-field decode reads them unchanged.
+
+### Calling convention
+
+i256 arguments and results pass in the dedicated file: **`W0–W7`** are the eight argument/return registers, spilling to **32-byte-aligned 32-byte stack slots** once exhausted (`RISCVCallingConv.cpp`). This mirrors the vec variant's use of the `VRM2` argument sequence, and is applied in **both** the C calling convention (`CC_RISCV`) and revive's internal fast convention (`CC_RISCV_FastCC`) — the FastCC path matters because resolc's internal functions use it, and omitting it there was an early crash. `W8–W15` are scratch/temporaries; the file is not callee-saved, so an i256 live across a call is spilled and reloaded with `revive.wst`/`wld` (covered by the `spill_i256` lit test). Because the width is fixed, there is **no width state to preserve across a call** — which is precisely the class of bug the vec variant still carries (§10, "wide instruction directly after a call has no width").
+
+### The `set_width` instruction: definition and why it is *not* here
+
+The originally-proposed variant replaced `vsetivli`/`vtype` with a dedicated mode instruction, **`revive.set_width <bytes>`** (byte count up to 64 → i512, extensible to i1024), that sets the width inherited by every following wide op until the next `set_width` — a calling convention "similar to vector" for who owns the mode, plus a **`set_width`-elimination pass modelled on LLVM's RISC-V VL/VType optimizer** to delete redundant re-sets. It is the mid-point of the width axis: variable width like `vtype`, but a first-class extension instruction instead of borrowing RVV's.
+
+**The prototype deliberately omits it**, because §7 measured width at **99.9% i256** (4,842 `i256` vs 4 `i512` across the corpus; no i128/i1024). A variable-width mechanism therefore buys almost nothing here while costing:
+
+1. **an extra instruction** on every width change (and, without elision, in straight-line runs), which the elimination pass then exists only to remove;
+2. **a whole optimizer pass** (the VL-optimizer analogue) plus the interprocedural width dataflow the linker already runs for the vec variant (`resolve_wide_widths`, §8) — the exact machinery a fixed width lets us delete;
+3. **mode state across calls** — a call boundary loses the current width unless the CC pins it, reintroducing the §10 "no width after a call" bug that fixed-width structurally cannot have;
+4. **recompiler/linker mode tracking** — every consumer must thread the current width through, the same reason `vtype` complicates the machine outliner (§8).
+
+So `set_width`'s limitation is that it pays for generality the corpus does not use. Its cost is why the lean prototype is **i256-only**: supporting i512/i1024 would require reintroducing a width mechanism — either `set_width` (b) or width-in-the-instruction like the shipped vec variant. The experiment's finding is that for a corpus that is essentially all-i256, option (c) — no mechanism — dominates both (a) and (b).
+
+### Results (80 modules that link in both `vec` and `w`)
+
+Deterministic metrics as totals over the 80-module set; `ref` (base ISA, no extension) as the baseline, over the subset that also links in `ref` (n noted). `w ÷ vec` is the head-to-head — both use the extension, so it is the clean comparison.
+
+| metric | ref (base ISA) | vec (RVV + `vtype`) | **w (dedicated file)** | w ÷ vec |
+|---|--:|--:|--:|--:|
+| `.text` (object) | 250,378 *(n=77)* | 206,280 | **191,624** | **0.929×** |
+| blob (shipped) | 177,773 *(n=64)* | 196,916 | **192,761** | **0.980×** |
+| gas (deterministic) | 20,261 *(n=64)* | 29,423 | **28,729** | **0.976×** |
+
+Wall-time as the **per-module median ratio** (aggregate totals are overhead-noise-dominated per §6c, so the median is the reliable measure; interpreter over all 80, recompiler/`ref` over the 64 that link in all arms):
+
+| backend | w ÷ vec | w ÷ ref | vec ÷ ref |
 |---|--:|--:|--:|
-| `.text` (object) | 206,280 | **191,624** | **0.929×** |
-| blob (shipped) | 196,916 | **192,761** | **0.980×** |
-| gas (deterministic) | 29,423 | **28,729** | **0.976×** |
+| interpreter | **0.998×** | 1.180× | 1.144× |
+| **recompiler** (production path) | **1.000×** | 1.002× | 0.997× |
 
-Wall-time, as the **per-module median** ratio w ÷ vec (the aggregate is skewed by a few heavy-division modules whose per-contract times swing ±50% — the overhead-dominated wall-time noise of §6c — so the median is the reliable measure): **recompiler 1.000×, interpreter 0.998×** — parity on both backends. The deterministic gas going the *other* way (−2.4%) confirms `w` is not doing more work.
+**Findings.** The **recompiler — the production execution path — is at parity** (median w÷vec 1.000×, and w÷ref 1.002× ≈ base ISA), confirming the core prediction: the width mechanism is linker-consumed and never reaches the blob, so `vec` and `w` ship the same wide-op stream and execute identically. The interpreter is likewise at parity between `vec` and `w` (0.998×). Where `w` differs from `vec` it is *smaller*: object `.text` **−7%** (the `vsetivli` are simply gone, and no RVV-alignment padding), shipped blob **−2%** (smaller in 74 of 80 modules), gas **−2.4%** (marginally fewer instructions). So dropping the RVV coupling and the width mechanism is at parity on execution and modestly ahead on size — never worse — for this all-i256 corpus.
 
-**Findings.** The **recompiler — the production execution path — is at parity** (median 1.000×), confirming the core prediction: the mode instruction is linker-consumed, so the same shipped wide-op stream executes identically. Where `w` differs it is *smaller*: object `.text` −7% (the `vsetivli` are simply gone), shipped blob −2% (smaller in 74 of 80 modules), and −2.4% gas (marginally fewer instructions). So the design is at least at parity and modestly ahead on size, never worse.
-
-**Caveats.** The `w` path is a lean prototype vs a production-tuned `vec`, so the ~2% blob/gas edge is partly codegen happenstance — the fundamental win is the ~7% object-code reduction and the cleaner integration (no RVV coupling), not shipped execution (recompiler is equal). It is **i256-only** (no i512/i1024, no real byte-granular `set_width`). Two correctness bugs found in review were fixed (neither changes the size/gas/wall-time numbers above — they only affect computed values, which `runblob` does not check): (1) i256 `div`/`rem` expanded to a software limb loop because `setMaxDivRemBitWidthSupported` was left at the default 128 for the W-path (only the vector variant raised it), so the target-independent `ExpandLargeDivRem` IR pass rewrote i256 division *before* instruction selection — raised to 256, so div/rem now select to `revive.wdiv` and the constant-division modules link; (2) the i256 register-move was encoded as `wmv1r` (128-bit), silently dropping the high half of every copied value — corrected to `wmv2r` (256-bit). Prototype on the `kvpanch/wreg_prototype` branches; data in `per-bench-wreg.tsv` (harness `measure_wreg.py`); tests in `llvm/test/CodeGen/RISCV/xrevivew.ll`.
+**Caveats.** The `w` path is a lean prototype vs a production-tuned `vec`, so the ~2% blob/gas edge is partly codegen happenstance — the fundamental win is the ~7% object-code reduction and the cleaner integration (no RVV coupling), not shipped execution (recompiler is equal). It is **i256-only** by design (no i512/i1024 — see the `set_width` discussion above for why a wider prototype would have to re-add a width mechanism). Two correctness bugs found in review were fixed (neither changes the size/gas/wall-time numbers above — they only affect computed values, which `runblob` does not check): (1) i256 `div`/`rem` expanded to a software limb loop because `setMaxDivRemBitWidthSupported` was left at the default 128 for the W-path (only the vector variant raised it), so the target-independent `ExpandLargeDivRem` IR pass rewrote i256 division *before* instruction selection — raised to 256, so div/rem now select to `revive.wdiv` and the constant-division modules link; (2) the i256 register-move was encoded as `wmv1r` (128-bit), silently dropping the high half of every copied value — corrected to `wmv2r` (256-bit). Prototype on the `kvpanch/wreg_prototype` branches; data in `per-bench-wreg.tsv` (harness `measure_wreg.py`); tests in `llvm/test/CodeGen/RISCV/xrevivew.ll`.
 
 **Value-correctness (differential).** Because gas and size cannot see a value miscompile, a differential harness (`diffcheck.py` + `runblob RUNBLOB_TRACE=1`) compares each contract's *observable values* — the host-call sequence, every storage write as key→value, and the return payload, all layout-independent — across ref/vec/w. Result: **`w` is value-identical to `vec` on all 80 modules** that run in both (0 mismatches). Honest coverage caveat: it runs with empty calldata and host calls stubbed to zero, so it exercises only the deploy/calldata-independent path and only values that reach a sink — real but not exhaustive. Measured limit: the `wmv1r`/`wmv2r` truncation bug above produces **zero** w-vs-vec differences here (the affected values reach storage through `wld`/`wst`, not the truncated register move), so it is *not* the guard for register-level bugs — the lit tests, which pin the encodings directly, are. The harness did surface real value divergences between the extension and scalar `ref` (a host-stub/byte-order confound, discussed above), confirming its detection works.

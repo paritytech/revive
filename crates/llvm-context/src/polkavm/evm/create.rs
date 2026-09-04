@@ -104,17 +104,7 @@ pub fn contract_hash<'ctx>(
 
     let parent = context.module().get_name().to_str().expect("Always valid");
 
-    let full_path = match context.yul() {
-        Some(yul_data) => yul_data
-            .resolve_path(
-                identifier
-                    .strip_suffix("_deployed")
-                    .unwrap_or(identifier.as_str()),
-            )
-            .expect("Always exists")
-            .to_owned(),
-        None => identifier.clone(),
-    };
+    let full_path = resolve_object_path(context, identifier.as_str())?;
 
     match code_type {
         CodeType::Deploy if full_path == parent => {
@@ -133,6 +123,36 @@ pub fn contract_hash<'ctx>(
         .map(Argument::value)
 }
 
+/// Resolves the object `identifier` a `dataoffset` or `datasize` refers to.
+///
+/// Every object `resolc` compiles is a contract, and each is keyed by its own identifier. Two Yul
+/// constructs therefore have no representation here and are reported instead of asserted on:
+/// sibling objects that are not contracts, and the dotted `outer.inner` notation for reaching a
+/// nested object, whose separator never appears in an identifier.
+fn resolve_object_path(context: &Context, identifier: &str) -> anyhow::Result<String> {
+    let Some(yul_data) = context.yul() else {
+        return Ok(identifier.to_owned());
+    };
+
+    let key = identifier.strip_suffix("_deployed").unwrap_or(identifier);
+    if let Some(path) = yul_data.resolve_path(key) {
+        return Ok(path.to_owned());
+    }
+
+    if key.contains('.') {
+        anyhow::bail!(
+            "the object `{identifier}` can not be resolved: `resolc` does not support the dotted \
+             notation for addressing a nested Yul object"
+        );
+    }
+
+    anyhow::bail!(
+        "the object `{identifier}` can not be resolved: `resolc` expects every Yul object to be a \
+         contract of its own, so an object referenced by `dataoffset` or `datasize` must be one of \
+         the compiled contracts"
+    )
+}
+
 /// Translates the deploy call header size instruction. the header consists of
 /// the hash of the bytecode of the contract whose instance is being created.
 /// Represents `datasize` in Yul and `PUSH #[$]` in the EVM legacy assembly.
@@ -146,16 +166,8 @@ pub fn header_size<'ctx>(
 
     let parent = context.module().get_name().to_str().expect("Always valid");
 
-    let full_path = match context.yul() {
-        Some(yul_data) => yul_data
-            .resolve_path(
-                identifier
-                    .strip_suffix("_deployed")
-                    .unwrap_or(identifier.as_str()),
-            )
-            .unwrap_or_else(|| panic!("ICE: {identifier} not found {yul_data:?}")),
-        None => identifier.as_str(),
-    };
+    let full_path = resolve_object_path(context, identifier.as_str())?;
+    let full_path = full_path.as_str();
 
     match code_type {
         CodeType::Deploy if full_path == parent => {

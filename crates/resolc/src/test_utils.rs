@@ -137,7 +137,7 @@ pub fn build_solidity_with_options(
     )?;
     build.check_errors()?;
 
-    let build = build.link(linker_symbols, &debug_config);
+    let build = build.link(linker_symbols, &debug_config, &Default::default());
     build.check_errors()?;
     build.write_to_standard_json(&mut output, &solc_version)?;
     output.check_errors()?;
@@ -298,7 +298,7 @@ pub fn build_yul<T: ToString + Display>(
     build.take_and_write_warnings();
     build.check_errors()?;
 
-    let mut build = build.link(Default::default(), &DEBUG_CONFIG);
+    let mut build = build.link(Default::default(), &DEBUG_CONFIG, &Default::default());
     build.take_and_write_warnings();
     build.check_errors()?;
 
@@ -348,7 +348,7 @@ pub fn build_yul_standard_json(
     )?;
     build.check_errors()?;
 
-    let build = build.link(Default::default(), &Default::default());
+    let build = build.link(Default::default(), &Default::default(), &Default::default());
     build.check_errors()?;
     build.write_to_standard_json(&mut output, &solc.version()?)?;
 
@@ -587,7 +587,7 @@ pub fn compile_yul_blob_with_options(
     .expect("yul should compile");
     build.take_and_write_warnings();
     build.check_errors().expect("yul build should succeed");
-    let mut build = build.link(Default::default(), &DEBUG_CONFIG);
+    let mut build = build.link(Default::default(), &DEBUG_CONFIG, &Default::default());
     build.take_and_write_warnings();
     build.check_errors().expect("yul link should succeed");
 

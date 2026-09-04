@@ -15,6 +15,7 @@ use rayon::iter::ParallelIterator;
 use revive_common::EVMVersion;
 use revive_common::MetadataHash;
 use revive_common::EXIT_CODE_SUCCESS;
+use revive_linker::limits::DeploymentLimits;
 use revive_llvm_context::DebugConfig;
 use revive_llvm_context::OptimizerSettings;
 use revive_solc_json_interface::CombinedJsonSelector;
@@ -94,6 +95,7 @@ pub fn yul<T: Compiler>(
     debug_config: DebugConfig,
     llvm_arguments: &[String],
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+    deployment_limits: DeploymentLimits,
     use_newyork: bool,
 ) -> anyhow::Result<Build> {
     let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
@@ -114,7 +116,7 @@ pub fn yul<T: Compiler>(
     build.take_and_write_warnings();
     build.check_errors()?;
 
-    let mut build = build.link(linker_symbols, &debug_config);
+    let mut build = build.link(linker_symbols, &debug_config, &deployment_limits);
     build.take_and_write_warnings();
     build.check_errors()?;
     Ok(build)
@@ -140,6 +142,7 @@ pub fn standard_output<T: Compiler>(
     debug_config: DebugConfig,
     llvm_arguments: Vec<String>,
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+    deployment_limits: DeploymentLimits,
     use_newyork: bool,
 ) -> anyhow::Result<Build> {
     let solc_version = solc.version()?;
@@ -196,7 +199,7 @@ pub fn standard_output<T: Compiler>(
     build.take_and_write_warnings();
     build.check_errors()?;
 
-    let mut build = build.link(linker_symbols, &debug_config);
+    let mut build = build.link(linker_symbols, &debug_config, &deployment_limits);
     build.take_and_write_warnings();
     build.check_errors()?;
 
@@ -209,6 +212,7 @@ pub fn standard_output<T: Compiler>(
 pub fn standard_json<T: Compiler>(
     solc: &T,
     metadata_hash: MetadataHash,
+    deployment_limits: DeploymentLimits,
     messages: &mut Vec<SolcStandardJsonOutputError>,
     json_path: Option<PathBuf>,
     base_path: Option<String>,
@@ -293,7 +297,7 @@ pub fn standard_json<T: Compiler>(
         solc_output.write_and_exit(prune_output);
     }
 
-    let build = build.link(linker_symbols, &debug_config);
+    let build = build.link(linker_symbols, &debug_config, &deployment_limits);
     build.write_to_standard_json(&mut solc_output, &solc_version)?;
     solc_output.write_and_exit(prune_output);
 }
@@ -321,6 +325,7 @@ pub fn combined_json<T: Compiler>(
     overwrite: bool,
     llvm_arguments: Vec<String>,
     memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+    deployment_limits: DeploymentLimits,
     use_newyork: bool,
 ) -> anyhow::Result<()> {
     let selectors = CombinedJsonSelector::from_cli(format.as_str())
@@ -371,6 +376,7 @@ pub fn combined_json<T: Compiler>(
         debug_config,
         llvm_arguments,
         memory_config,
+        deployment_limits,
         use_newyork,
     )?
     .write_to_combined_json(&mut combined_json)?;

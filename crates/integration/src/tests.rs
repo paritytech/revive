@@ -3141,6 +3141,95 @@ fn load_forward_copy_invalidation() {
     run_differential(actions);
 }
 
+/// The values a 256-bit division or remainder is most likely to get wrong: the limb
+/// boundaries, the signed extremes, and above all a divisor at or over 2^255, where the
+/// running remainder overflows when it is doubled.
+#[cfg(test)]
+fn wide_boundary_values() -> Vec<U256> {
+    let one = U256::from(1u64);
+    vec![
+        U256::ZERO,
+        one,
+        U256::from(7u64),
+        U256::MAX,
+        U256::MAX - one,
+        one << 255,
+        (one << 255) + one,
+        (one << 255) - one,
+        one << 64,
+        (one << 64) - one,
+        one << 128,
+        (one << 128) - one,
+        one << 192,
+        (one << 192) - one,
+    ]
+}
+
+#[cfg(test)]
+fn op_probe_call(op: u64, a: U256, b: U256, c: U256) -> SpecsAction {
+    let mut data = Vec::with_capacity(128);
+    data.extend_from_slice(&U256::from(op).to_be_bytes::<32>());
+    data.extend_from_slice(&a.to_be_bytes::<32>());
+    data.extend_from_slice(&b.to_be_bytes::<32>());
+    data.extend_from_slice(&c.to_be_bytes::<32>());
+    Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: None,
+        storage_deposit_limit: None,
+        data,
+    }
+}
+
+/// Differential cross-product of `div`, `mod`, `sdiv` and `smod` over the boundary values,
+/// against the solc-EVM reference. `op_boundary_sweep` picks its tuples by hand and so
+/// covers only a few divisors; the whole product is what catches a lost carry, which shows
+/// up for divisors at or over 2^255 and nowhere else.
+#[test]
+fn wide_division_boundary_sweep() {
+    let mut actions = instantiate_yul("contracts/OpProbe.yul", "OpProbe");
+
+    for op in [10, 11, 5, 6] {
+        for a in wide_boundary_values() {
+            for b in wide_boundary_values() {
+                actions.push(op_probe_call(op, a, b, U256::ZERO));
+            }
+        }
+    }
+
+    run_differential(actions);
+}
+
+/// The same for `addmod` and `mulmod`, which reduce an intermediate wider than 256 bits and
+/// so have the same overflow to get wrong, one limb further up.
+#[test]
+fn wide_modular_boundary_sweep() {
+    let mut actions = instantiate_yul("contracts/OpProbe.yul", "OpProbe");
+
+    let one = U256::from(1u64);
+    let moduli = [
+        U256::ZERO,
+        one,
+        U256::from(7u64),
+        one << 255,
+        (one << 255) + one,
+        U256::MAX,
+    ];
+
+    for op in [8, 9] {
+        for a in wide_boundary_values() {
+            for b in [U256::MAX, one << 255, one << 128, U256::from(3u64)] {
+                for c in moduli {
+                    actions.push(op_probe_call(op, a, b, c));
+                }
+            }
+        }
+    }
+
+    run_differential(actions);
+}
+
 /// Differential value-sweep over EVM edge-case semantics for the risky opcodes
 /// (shifts >= 256, byte/signextend index boundaries, signed div/mod overflow,
 /// exp wrap, addmod/mulmod with arbitrary-precision intermediates and n == 0,

@@ -2,7 +2,7 @@
   "name": "erc20-hardhat",
   "private": true,
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@nomicfoundation/hardhat-toolbox": "^7.0.0",
     "@parity/hardhat-polkadot": "^0.3.0",
     "hardhat": "^2.26.0"
   },

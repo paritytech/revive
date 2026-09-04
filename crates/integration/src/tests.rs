@@ -159,6 +159,217 @@ fn ulongrem_fuzz() {
     run_differential(actions);
 }
 
+/// Differential fuzz of the unsigned 256-bit `div`/`mod` routing. Non-provable
+/// i256 `udiv`/`urem` are rewritten by `lower_wide_division` into calls
+/// to the stdlib `__udivrem256` (128-bit-digit Knuth long division), via the
+/// `__udiv256`/`__urem256` wrappers. `__udivrem256` has two paths: `full`
+/// (divisor >= 2^128, exercising the qhat estimate and its correction steps)
+/// and `twoone` (divisor < 2^128, a single 128-bit digit). A divisor of zero
+/// is short-circuited to 0 by the caller's guard per EVM semantics. The
+/// keccak-derived stream feeds full-width dividends while alternating the two
+/// paths, and the fixed vectors pin the boundary cases the random stream never
+/// hits: dividend < / = / > divisor, divisors at 2^128 +/- 1, a power of two,
+/// and zero.
+#[test]
+fn div_mod_fuzz() {
+    use alloy_primitives::keccak256;
+
+    let one = U256::from(1u64);
+    let two_128 = one << 128;
+
+    let mut cases: Vec<(U256, U256)> = vec![
+        (U256::from(7u64), U256::MAX), // dividend < divisor: quotient 0
+        (U256::MAX, U256::MAX),        // dividend == divisor: quotient 1, remainder 0
+        (U256::MAX, two_128 - one),    // divisor just below 2^128: twoone boundary
+        (U256::MAX, two_128),          // divisor 2^128: full path, minimal high digit
+        (U256::MAX, two_128 + one),    // divisor just above 2^128: qhat correction
+        (U256::MAX, one << 200),       // power-of-two divisor in the full range
+        (U256::MAX, U256::ZERO),       // divisor zero: guarded, returns 0
+    ];
+
+    for i in 0u64..256 {
+        let derive = |tag: &[u8]| -> U256 {
+            let mut buf = Vec::with_capacity(8 + tag.len());
+            buf.extend_from_slice(&i.to_be_bytes());
+            buf.extend_from_slice(tag);
+            U256::from_be_bytes::<32>(keccak256(&buf).0)
+        };
+        let n = derive(b"n");
+        let d_raw = derive(b"d");
+        // Even i: divisor in [2^128, 2^256), the full multi-digit path.
+        // Odd i: divisor in [0, 2^128), the twoone single-digit path.
+        let d = if i % 2 == 0 {
+            d_raw | two_128
+        } else {
+            d_raw >> 128
+        };
+        cases.push((n, d));
+    }
+
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+    for (n, d) in cases {
+        for data in [
+            Contract::division_arithmetics_div(n, d).calldata,
+            Contract::division_arithmetics_mod(n, d).calldata,
+        ] {
+            actions.push(Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data,
+            });
+        }
+    }
+
+    run_differential(actions);
+}
+
+/// Differential fuzz of the signed 256-bit `sdiv`/`smod` routing. Non-provable
+/// i256 `sdiv`/`srem` are rewritten into calls to the stdlib `__sdiv256`/
+/// `__srem256`, which reduce to the unsigned routine via sign-magnitude. Fixed
+/// vectors pin the signed edges (`INT_MIN`, the `INT_MIN / -1` overflow, `-1`
+/// and `0` divisors, mixed signs, `|n| < |d|`); the keccak stream covers
+/// full-width signed operands, alternating the divisor so `|d|` exercises both
+/// the `full` and `twoone` paths of the underlying `__udivrem256`.
+#[test]
+fn sdiv_smod_fuzz() {
+    use alloy_primitives::keccak256;
+
+    let mut cases: Vec<(I256, I256)> = vec![
+        (I256::MIN, I256::MINUS_ONE), // overflow: SDIV = INT_MIN, SMOD = 0
+        (I256::MIN, I256::try_from(2).unwrap()),
+        (I256::MAX, I256::MINUS_ONE),
+        (I256::try_from(-7).unwrap(), I256::try_from(3).unwrap()),
+        (I256::try_from(7).unwrap(), I256::try_from(-3).unwrap()),
+        (I256::try_from(-7).unwrap(), I256::try_from(-3).unwrap()),
+        (I256::try_from(3).unwrap(), I256::try_from(7).unwrap()), // |n| < |d|
+        (I256::MIN, I256::MIN),                                   // n == d
+        (I256::try_from(5).unwrap(), I256::ZERO),                 // divisor 0: guarded, returns 0
+    ];
+
+    for i in 0u64..256 {
+        let derive = |tag: &[u8]| -> U256 {
+            let mut buf = Vec::with_capacity(8 + tag.len());
+            buf.extend_from_slice(&i.to_be_bytes());
+            buf.extend_from_slice(tag);
+            U256::from_be_bytes::<32>(keccak256(&buf).0)
+        };
+        let n = I256::from_raw(derive(b"n"));
+        let d_raw = derive(b"d");
+        // Even i: full-width signed divisor (|d| usually >= 2^128, the full
+        // path). Odd i: small-magnitude divisor (|d| < 2^127, the twoone path),
+        // sign taken from bit 0 so negative small divisors are covered.
+        let d = if i % 2 == 0 {
+            I256::from_raw(d_raw)
+        } else {
+            let small = I256::from_raw(d_raw >> 129);
+            if d_raw.bit(0) {
+                -small
+            } else {
+                small
+            }
+        };
+        cases.push((n, d));
+    }
+
+    let mut actions = instantiate("contracts/DivisionArithmetics.sol", "DivisionArithmetics");
+    for (n, d) in cases {
+        for data in [
+            Contract::division_arithmetics_sdiv(n, d).calldata,
+            Contract::division_arithmetics_smod(n, d).calldata,
+        ] {
+            actions.push(Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data,
+            });
+        }
+    }
+
+    run_differential(actions);
+}
+
+/// Differential coverage of division, remainder, and mulmod by the SAME
+/// compile-time constant inside one contract, across constant magnitudes the
+/// suite otherwise never exercises. Guards the bug class where a constant-
+/// specialization pass reuses a per-constant helper across optimization phases
+/// (e.g. if `x % C` was to be compiled into an unconditional trap whenever
+/// `mulmod(x, y, C)` shares the constant), and pins the sharp eligibility
+/// boundaries of the in-tree Barrett rung: 2**255 (power of two: div/rem fold
+/// to shifts, mulmod takes the inline mask rewrite) and 2**255 - 1 (255 bits:
+/// div/rem Barrett-eligible, mulmod is not Barrett-rewritten). Fixed
+/// operands pin 0, 1, C - 1, C, C + 1, and 2^256 - 1 per constant, plus the
+/// largest multiple M = C * floor(MAX / C) and M +/- 1 (M deterministically
+/// fires the division helpers' single correction); a keccak stream adds
+/// full-width pairs.
+#[test]
+fn div_mod_mulmod_const_mix() {
+    use alloy_primitives::keccak256;
+
+    /// One helper contract under test: its calldata constructor and the
+    /// compile-time constant it divides by.
+    type ConstMixHelper = (fn(U256, U256) -> Contract, U256);
+
+    let one = U256::from(1u64);
+    let helpers: [ConstMixHelper; 9] = [
+        (Contract::const_mix_three, U256::from(3u64)),
+        (Contract::const_mix_two_pow64_plus_one, (one << 64) + one),
+        (Contract::const_mix_two_pow128_minus_one, (one << 128) - one),
+        (Contract::const_mix_two_pow128_plus_one, (one << 128) + one),
+        (Contract::const_mix_two_pow200, one << 200),
+        (Contract::const_mix_two_pow255, one << 255),
+        (Contract::const_mix_two_pow255_minus_one, (one << 255) - one),
+        (
+            Contract::const_mix_two_pow255_plus_three,
+            (one << 255) + U256::from(3u64),
+        ),
+        (Contract::const_mix_max, U256::MAX),
+    ];
+
+    let mut actions = instantiate("contracts/DivModMulmodConst.sol", "DivModMulmodConst");
+    for (index, (helper, constant)) in helpers.iter().enumerate() {
+        let largest_multiple = *constant * (U256::MAX / *constant);
+        let mut operands = vec![
+            (U256::ZERO, U256::MAX),
+            (one, one),
+            (constant.wrapping_sub(one), U256::MAX),
+            (*constant, *constant),
+            (constant.wrapping_add(one), constant.wrapping_sub(one)),
+            (U256::MAX, U256::MAX),
+            (largest_multiple, U256::MAX),
+            (largest_multiple.wrapping_sub(one), U256::MAX),
+            (largest_multiple.wrapping_add(one), U256::MAX),
+        ];
+        for i in 0u64..8 {
+            let derive = |tag: &[u8]| -> U256 {
+                let mut buf = Vec::with_capacity(16 + tag.len());
+                buf.extend_from_slice(&(index as u64).to_be_bytes());
+                buf.extend_from_slice(&i.to_be_bytes());
+                buf.extend_from_slice(tag);
+                U256::from_be_bytes::<32>(keccak256(&buf).0)
+            };
+            operands.push((derive(b"x"), derive(b"y")));
+        }
+        for (x, y) in operands {
+            actions.push(Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: None,
+                storage_deposit_limit: None,
+                data: helper(x, y).calldata,
+            });
+        }
+    }
+
+    run_differential(actions);
+}
+
 #[test]
 fn bitwise_byte() {
     let mut actions = instantiate("contracts/Bitwise.sol", "Bitwise");
@@ -1031,6 +1242,9 @@ fn unsigned_division_half_const() {
         (U256::ZERO, U256::MAX),
         (five, two),
         (one, U256::ZERO),
+        // 2^256 - 1 over a small constant drives the Barrett quotient
+        // estimate to q - 1, firing the helper's single correction.
+        (U256::MAX, five),
     ];
     for (n, d) in pairs {
         push_call(
@@ -1936,7 +2150,7 @@ fn invalid_opcode_works() {
 /// holds the only `sdiv i256` we emit, and InstCombine rewrites it to
 /// `udiv i256` (then to `udiv i64`) once it sees the AND-masks prove the
 /// operands non-negative. The latent risk: revive's
-/// `narrow_divrem_instructions` (crates/llvm-context/src/polkavm/context/mod.rs)
+/// `lower_wide_division` (crates/llvm-context/src/polkavm/context/mod.rs)
 /// would, given a surviving `sdiv i256 (and a, M), (and b, M)`, rewrite it
 /// to `sext (sdiv i64 (trunc..), (trunc..))`, which flips sign for any
 /// operand whose bit (n-1) is set. If LLVM ever stops folding sdiv → udiv

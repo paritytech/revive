@@ -16,6 +16,8 @@
   - [The newyork optimizer](./developer_guide/newyork_optimizer.md)
     - [IR reference](./developer_guide/newyork_ir.md)
   - [PVM and the pallet-revive runtime target](./developer_guide/target.md)
+  - [The wide integer extension](./developer_guide/wide_integer_extension.md)
+    - [Measurements](./developer_guide/wide_integer_analysis.md)
   - [Testing strategy](./developer_guide/testing.md)
   - [Code coverage](./developer_guide/coverage.md)
   - [Cross compilation](./developer_guide/cross_compilation.md)

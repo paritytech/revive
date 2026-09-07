@@ -233,7 +233,15 @@ impl TypeInference {
     /// This is the single source of truth shared by codegen ([`crate::LlvmCodegen`])
     /// and the IR printer, so dumps reflect exactly the width used to emit code.
     pub fn inferred_width(&self, id: ValueId) -> BitWidth {
-        self.get(id).min_width
+        // A value inference never recorded a constraint for is a full 256-bit EVM word: only narrow
+        // when inference actually proved a smaller width. The default `TypeConstraint`'s `I1`
+        // min_width is the narrowing lattice's bottom, not a codegen default — returning it here
+        // would let codegen truncate every un-inferred value to a single bit (which is exactly what
+        // happens with inference disabled).
+        match self.constraints.get(&id.0) {
+            Some(constraint) => constraint.min_width,
+            None => BitWidth::I256,
+        }
     }
 
     /// Computes the widest width needed by any use site of this value.
@@ -372,7 +380,12 @@ impl TypeInference {
     /// objects in the tree have overlapping ValueId/FunctionId namespaces
     /// (each object's translator allocates IDs starting from 0).
     pub fn infer_object_tree(&mut self, object: &Object) {
-        self.infer_object(object);
+        // Experiment toggle: with `NEWYORK_NO_TYPE_INFERENCE` set, skip inferring narrower types so
+        // every value stays at the i256 default and no narrowing pass has anything to act on. The
+        // subobject structure is still walked so `sub_inferences` stays one-per-subobject.
+        if std::env::var_os("NEWYORK_NO_TYPE_INFERENCE").is_none() {
+            self.infer_object(object);
+        }
 
         for subobject in &object.subobjects {
             let mut sub_inference = TypeInference::new();

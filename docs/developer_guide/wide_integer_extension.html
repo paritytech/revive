@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Installation - revive compiler book</title>
+        <title>The wide integer extension - revive compiler book</title>
 
 
         <!-- Custom HTML head -->
@@ -174,37 +174,51 @@
 
                 <div id="mdbook-content" class="content">
                     <main>
-                        <h1 id="installation"><a class="header" href="#installation">Installation</a></h1>
-<p>Building Solidity contracts for PolkaVM requires installing the following two compilers:</p>
-<ul>
-<li><code>solc</code>: The <a href="https://github.com/argotorg/solidity">Ethereum Solidity reference compiler</a> implementation.</li>
-<li><code>resolc</code>: The revive Solidity compiler YUL frontend and PolkaVM code generator.</li>
-</ul>
-<h2 id="resolc-binary-releases"><a class="header" href="#resolc-binary-releases"><code>resolc</code> binary releases</a></h2>
-<p><code>resolc</code> is supported an all major operating systems and installation is straightforward.
-Please find our <a href="https://paritytech.github.io/resolc-bin/">binary releases</a> for the following platforms:</p>
-<ul>
-<li>Linux (MUSL)</li>
-<li>MacOS (universal)</li>
-<li>Windows</li>
-<li>Wasm via emscripten</li>
-</ul>
-<h2 id="installing-the-solc-dependency"><a class="header" href="#installing-the-solc-dependency">Installing the <code>solc</code> dependency</a></h2>
-<p><code>resolc</code> uses <code>solc</code> during the compilation process, please refer to the <a href="https://docs.soliditylang.org/en/latest/installing-solidity.html">Ethereum Solidity documentation</a> for installation instructions.</p>
-<h2 id="revive-npm-package"><a class="header" href="#revive-npm-package"><code>revive</code> NPM package</a></h2>
-<p>We distribute the revive compiler as <a href="https://github.com/paritytech/revive/tree/main/js/resolc">node.js module</a>.</p>
-<h2 id="buidling-resolc-from-source"><a class="header" href="#buidling-resolc-from-source">Buidling <code>resolc</code> from source</a></h2>
-<p>Please follow the build <a href="https://github.com/paritytech/revive?tab=readme-ov-file#building-from-source">instructions in the revive <code>README.md</code></a>.</p>
+                        <h1 id="the-wide-integer-extension-xrevivevec"><a class="header" href="#the-wide-integer-extension-xrevivevec">The wide integer extension (XReviveVec)</a></h1>
+<h2 id="the-problem"><a class="header" href="#the-problem">The problem</a></h2>
+<p>EVM words are 256 bits. RISC-V registers are 64. Every EVM operation therefore becomes a chain of
+four <code>i64</code> limbs, and because RISC-V has no carry flag each carry has to be materialised in a
+register: an <code>sltu</code> to produce it and another to consume it.</p>
+<p>That expansion dominates revive’s code size. Across the 15 benchmark contracts, <code>i256</code> accounts for
+a quarter of all LLVM IR reaching the backend, and one <code>add i256</code> costs 56 bytes where the scalar
+add costs 2. <code>icmp ult i256</code> costs 86, because the expansion walks limbs from the top and branches
+at each one.</p>
+<p>The calling convention makes it worse. Anything wider than two registers is passed <em>by reference</em>
+and returned through a hidden pointer, so a call taking three 256-bit arguments spends 192 bytes of
+stack frame and 56 instructions marshalling values before the callee starts.</p>
+<h2 id="the-approach"><a class="header" href="#the-approach">The approach</a></h2>
+<p><code>XReviveVec</code> makes <code>i256</code> a machine type. It is added to the <code>VRM2</code> register class, so at VLEN=128 a
+wide value is an LMUL=2 vector register pair, and each wide operation selects to a single
+instruction in the custom-2 opcode space instead of a limb chain. Wide arguments travel in those
+registers rather than by reference.</p>
+<pre><code>add i256      30 instructions  -&gt;  revive.wadd v8, v8, v10
+icmp ult      22 instructions  -&gt;  revive.wsltu a0, v8, v10
+3-arg call    56 instructions  -&gt;  9 instructions, no marshalling
+              192-byte frame        16-byte frame
+</code></pre>
+<p>The instructions are scalar in meaning: they read neither <code>vtype</code> nor <code>vl</code>, and their width is fixed
+by the opcode rather than by a preceding <code>vsetvli</code>. The vector registers are used because they are
+the registers wide enough to hold the values, and because the register allocator then knows these
+operands overlap ordinary vector values.</p>
+<h2 id="status"><a class="header" href="#status">Status</a></h2>
+<p>Experimental, and behind the <code>+xrevivevec</code> target feature. PVM cannot yet decode the custom-2
+encodings, so <code>resolc</code> compiles through code generation and then fails at the PolkaVM linker; the
+measurements below stop at the object file.</p>
+<p>Over the 15 benchmark contracts (103 modules): <strong>−30% code, −26% including the constant pool</strong>, with
+every contract improving except <code>Sha256</code>.</p>
+<p>The full analysis – per-benchmark results, the VLEN and VLA/VLS comparisons, what the extension
+does not cover, and the work still on the table – is in
+<a href="./wide_integer_analysis.html">Measurements</a>.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../user_guide.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../developer_guide/target.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../user_guide/cli.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../developer_guide/wide_integer_analysis.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -214,11 +228,11 @@ Please find our <a href="https://paritytech.github.io/resolc-bin/">binary releas
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../user_guide.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../developer_guide/target.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../user_guide/cli.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../developer_guide/wide_integer_analysis.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>

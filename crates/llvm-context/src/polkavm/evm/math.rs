@@ -13,7 +13,7 @@ pub fn add_mod<'ctx>(
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     Ok(context
         .build_call(
-            context.llvm_runtime().add_mod,
+            context.intrinsics().revive_add_mod,
             &[
                 operand_1.as_basic_value_enum(),
                 operand_2.as_basic_value_enum(),
@@ -33,7 +33,7 @@ pub fn mul_mod<'ctx>(
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     Ok(context
         .build_call(
-            context.llvm_runtime().mul_mod,
+            context.intrinsics().revive_mul_mod,
             &[
                 operand_1.as_basic_value_enum(),
                 operand_2.as_basic_value_enum(),
@@ -52,7 +52,7 @@ pub fn exponent<'ctx>(
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     Ok(context
         .build_call(
-            context.llvm_runtime().exp,
+            context.intrinsics().revive_exp,
             &[value.as_basic_value_enum(), exponent.as_basic_value_enum()],
             "exp_call",
         )
@@ -60,6 +60,9 @@ pub fn exponent<'ctx>(
 }
 
 /// Translates the `signextend` instruction.
+///
+/// The intrinsic takes the value first and the byte index second -- the shift operand
+/// order, not the EVM opcode's -- so `bytes` is passed second.
 pub fn sign_extend<'ctx>(
     context: &mut Context<'ctx>,
     bytes: inkwell::values::IntValue<'ctx>,
@@ -67,8 +70,8 @@ pub fn sign_extend<'ctx>(
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
     Ok(context
         .build_call(
-            context.llvm_runtime().sign_extend,
-            &[bytes.as_basic_value_enum(), value.as_basic_value_enum()],
+            context.intrinsics().revive_sign_extend,
+            &[value.as_basic_value_enum(), bytes.as_basic_value_enum()],
             "sign_extend_call",
         )
         .expect("Always exists"))

@@ -64,8 +64,12 @@ install-cargo-llvm-cov:
 install-revive-runner:
 	cargo install --locked --force --path crates/runner --no-default-features
 
+# Scoped to the workspace rather than `--all`: while the polkavm and polkadot-sdk
+# dependencies are local path overrides, `--all` walks into those checkouts and
+# reformats code this repository does not own. Every workspace member is still
+# covered.
 format:
-	cargo fmt --all --check
+	cargo fmt --check
 
 clippy:
 	cargo clippy --all-features --workspace --tests --benches -- --deny warnings

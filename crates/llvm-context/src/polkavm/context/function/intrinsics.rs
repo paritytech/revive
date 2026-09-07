@@ -18,6 +18,14 @@ pub struct Intrinsics<'ctx> {
     pub byte_swap_eth_address: FunctionDeclaration<'ctx>,
     /// Counts leading zeroes.
     pub count_leading_zeros: FunctionDeclaration<'ctx>,
+    /// `(a + b) % n`, computed without truncating the sum.
+    pub wide_add_mod: Option<FunctionDeclaration<'ctx>>,
+    /// `(a * b) % n`, computed on the full 512-bit product.
+    pub wide_mul_mod: Option<FunctionDeclaration<'ctx>>,
+    /// Exponentiation, wrapping.
+    pub wide_exponent: Option<FunctionDeclaration<'ctx>>,
+    /// Sign extends its first operand from the byte its second names.
+    pub wide_sign_extend: Option<FunctionDeclaration<'ctx>>,
 }
 
 impl<'ctx> Intrinsics<'ctx> {
@@ -32,6 +40,25 @@ impl<'ctx> Intrinsics<'ctx> {
 
     /// The corresponding intrinsic function name.
     pub const FUNCTION_COUNT_LEADING_ZEROS: &'static str = "llvm.ctlz.i256";
+
+    /// The corresponding intrinsic function name.
+    ///
+    /// This and the three below come with the wide integer extension. They are looked up rather
+    /// than assumed, because a build linked against an LLVM without the extension still has to
+    /// compile: the EVM operations they stand for then go back to their `stdlib.ll` routines.
+    /// The lookup happens only when [`crate::wide_integer_extension_enabled`] holds, since that
+    /// is also what puts the feature into the target machine: an intrinsic declared without the
+    /// feature would select nothing.
+    pub const FUNCTION_WIDE_ADD_MOD: &'static str = "llvm.riscv.revive.addmod";
+
+    /// The corresponding intrinsic function name.
+    pub const FUNCTION_WIDE_MUL_MOD: &'static str = "llvm.riscv.revive.mulmod";
+
+    /// The corresponding intrinsic function name.
+    pub const FUNCTION_WIDE_EXPONENT: &'static str = "llvm.riscv.revive.exp";
+
+    /// The corresponding intrinsic function name.
+    pub const FUNCTION_WIDE_SIGN_EXTEND: &'static str = "llvm.riscv.revive.signextend";
 
     /// A shortcut constructor.
     pub fn new(
@@ -76,12 +103,56 @@ impl<'ctx> Intrinsics<'ctx> {
             word_type.fn_type(&[word_type.into(), llvm.bool_type().into()], false),
         );
 
+        let modular_type = word_type.fn_type(
+            &[word_type.into(), word_type.into(), word_type.into()],
+            false,
+        );
+        let binary_type = word_type.fn_type(&[word_type.into(), word_type.into()], false);
+        let (wide_add_mod, wide_mul_mod, wide_exponent, wide_sign_extend) =
+            if crate::wide_integer_extension_enabled() {
+                (
+                    Self::try_declare(module, Self::FUNCTION_WIDE_ADD_MOD, modular_type),
+                    Self::try_declare(module, Self::FUNCTION_WIDE_MUL_MOD, modular_type),
+                    Self::try_declare(module, Self::FUNCTION_WIDE_EXPONENT, binary_type),
+                    Self::try_declare(module, Self::FUNCTION_WIDE_SIGN_EXTEND, binary_type),
+                )
+            } else {
+                (None, None, None, None)
+            };
+
         Self {
             trap,
             byte_swap_word,
             byte_swap_eth_address,
             count_leading_zeros,
+            wide_add_mod,
+            wide_mul_mod,
+            wide_exponent,
+            wide_sign_extend,
         }
+    }
+
+    /// Whether this module compiles with the wide integer extension.
+    ///
+    /// True when the linked LLVM provides the extension and the target machine requests
+    /// it: the intrinsics are only declared when both hold, so the presence of one of
+    /// them answers for the whole arrangement.
+    pub fn has_wide_integer_extension(&self) -> bool {
+        self.wide_add_mod.is_some()
+    }
+
+    /// Declares the intrinsic if the linked LLVM has it, and returns nothing if it does not.
+    ///
+    /// Only the extension's own intrinsics go through this: they take no argument types to
+    /// select on, so the declaration is by name alone.
+    pub fn try_declare(
+        module: &inkwell::module::Module<'ctx>,
+        name: &str,
+        r#type: inkwell::types::FunctionType<'ctx>,
+    ) -> Option<FunctionDeclaration<'ctx>> {
+        let intrinsic = inkwell::intrinsics::Intrinsic::find(name)?;
+        let value = intrinsic.get_declaration(module, &[])?;
+        Some(FunctionDeclaration::new(r#type, value))
     }
 
     /// Finds the specified LLVM intrinsic function in the target and returns its declaration.

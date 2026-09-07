@@ -563,3 +563,66 @@ Wall-time as the **per-module median ratio** (aggregate totals are overhead-nois
 **Caveats.** The `w` path is a lean prototype vs a production-tuned `vec`, so the ~2% blob/gas edge is partly codegen happenstance — the fundamental win is the ~7% object-code reduction and the cleaner integration (no RVV coupling), not shipped execution (recompiler is equal). It is **i256-only** by design (no i512/i1024 — see the `set_width` discussion above for why a wider prototype would have to re-add a width mechanism). Two correctness bugs found in review were fixed (neither changes the size/gas/wall-time numbers above — they only affect computed values, which `runblob` does not check): (1) i256 `div`/`rem` expanded to a software limb loop because `setMaxDivRemBitWidthSupported` was left at the default 128 for the W-path (only the vector variant raised it), so the target-independent `ExpandLargeDivRem` IR pass rewrote i256 division *before* instruction selection — raised to 256, so div/rem now select to `revive.wdiv` and the constant-division modules link; (2) the i256 register-move was encoded as `wmv1r` (128-bit), silently dropping the high half of every copied value — corrected to `wmv2r` (256-bit). Prototype on the `kvpanch/wreg_prototype` branches; data in `per-bench-wreg.tsv` (harness `measure_wreg.py`); tests in `llvm/test/CodeGen/RISCV/xrevivew.ll`.
 
 **Value-correctness (differential).** Because gas and size cannot see a value miscompile, a differential harness (`diffcheck.py` + `runblob RUNBLOB_TRACE=1`) compares each contract's *observable values* — the host-call sequence, every storage write as key→value, and the return payload, all layout-independent — across ref/vec/w. Result: **`w` is value-identical to `vec` on all 80 modules** that run in both (0 mismatches). Honest coverage caveat: it runs with empty calldata and host calls stubbed to zero, so it exercises only the deploy/calldata-independent path and only values that reach a sink — real but not exhaustive. Measured limit: the `wmv1r`/`wmv2r` truncation bug above produces **zero** w-vs-vec differences here (the affected values reach storage through `wld`/`wst`, not the truncated register move), so it is *not* the guard for register-level bugs — the lit tests, which pin the encodings directly, are. The harness did surface real value divergences between the extension and scalar `ref` (a host-stub/byte-order confound, discussed above), confirming its detection works.
+
+## 12. Real production contracts (top mainnet contracts by usage)
+
+§5–§11 use revive's integration corpus (toy contracts: generic ERC20, Fibonacci, Storage …). This section re-runs the ref/vec/w measurements on **real, most-used Ethereum-mainnet contracts**, fetched verified from Sourcify and compiled with `resolc` (`fetch_compile.py`). None overlap the integration corpus, so nothing is skipped for duplication.
+
+**Hard toolchain gate — `resolc` supports only solc 0.8.0–0.8.36.** Exactly the contracts most people mean by "most-used" are pre-0.8 and **cannot be compiled by this toolchain at all**. The canonical top set:
+
+| rank-ish (by usage) | contract | solc | in scope? |
+|---|---|---|--:|
+| USDT | TetherToken | 0.4.18 | ❌ pre-0.8 |
+| USDC | FiatTokenV2_2 | 0.6.12 | ❌ pre-0.8 |
+| WETH9 | WETH9 | 0.4.19 | ❌ pre-0.8 |
+| Uniswap V2 Router | UniswapV2Router02 | 0.6.6 | ❌ pre-0.8 |
+| Uniswap V3 Router | SwapRouter02 | 0.7.6 | ❌ pre-0.8 |
+| DAI | Dai | 0.5.12 | ❌ pre-0.8 |
+| Multicall3 | Multicall3 | 0.8.12 | ✅ |
+| Permit2 | Permit2 | 0.8.17 | ✅ |
+| Seaport 1.6 | Seaport | 0.8.24 | ⚠️ compiles-fail (below) |
+| ERC-4337 EntryPoint | EntryPoint | 0.8.17 / 0.8.23 | ✅ compiles |
+| Uniswap Universal Router | UniversalRouter | 0.8.26 | ✅ |
+| Uniswap V4 PoolManager | PoolManager | 0.8.26 | ✅ compiles |
+
+So the measured set is the **most-used 0.8.x contracts** (canonical 0.8.x ones + high-usage fill-ups to reach ten): Multicall3, Permit2, EntryPoint v0.6 & v0.7, Universal Router, Uniswap V4 PoolManager, 1inch AggregationRouterV6, Morpho Blue, Ethena USDe, Ethena sUSDe. All are heavy wide-integer users — unlike the toy corpus, every one carries thousands of `i256` IR ops (Multicall3 974 → 1inch 8,423), i.e. real production code genuinely exercises the extension.
+
+**Coverage — the largest real contracts stress the extension toolchain.** Of the 10, the full compile→link→run pipeline completes for far fewer than on the toy corpus:
+
+| outcome | modules |
+|---|---|
+| ran in all three arms (ref+vec+w) | **4** — Multicall3, Permit2, 1inch V6, Ethena USDe |
+| ran in vec+w (ref link-failed) | +1 — Morpho Blue |
+| ran in w only | +1 — Universal Router (ref `llc`-fail, vec link-fail) |
+| `llc` compile-fail (all arms) | Uniswap V4 PoolManager, Ethena sUSDe |
+| `polkatool` link-fail (all arms) | EntryPoint v0.6, EntryPoint v0.7 |
+
+Two honest observations: (1) large real contracts hit `llc` crashes and linker limits the toy corpus never exercised — a robustness gap, not a perf result; (2) the **`w` arm is again the most robust** — it is the *only* arm that completes Universal Router (ref won't compile, vec won't link), echoing §9/§11.
+
+**Results (the 4 contracts measurable in all three arms; deterministic metrics as totals).** ref = base ISA, no extension.
+
+| metric | ref | vec | w | vec ÷ ref | w ÷ ref |
+|---|--:|--:|--:|--:|--:|
+| `.text` (object) | 695,570 | 660,210 | 630,598 | 0.949× | **0.907×** |
+| **blob (shipped)** | 744,110 | 540,187 | 527,025 | **0.726×** | **0.708×** |
+| gas (deterministic) | 3,180 | 3,333 | 3,312 | 1.048× | 1.042× |
+| interpreter (µs) | 16.2 | 17.0 | 18.9 | 1.05× | 1.17× |
+| recompiler (µs) | 12.8 | 14.4 | 14.4 | 1.12× | 1.12× |
+
+Per-contract shipped blob (ref → vec → w), the headline metric:
+
+| contract | ref | vec | w | vec ÷ ref |
+|---|--:|--:|--:|--:|
+| Multicall3 | 48,805 | 32,441 | 31,501 | 0.665× |
+| Ethena USDe | 94,738 | 69,002 | 67,293 | 0.728× |
+| 1inch V6 | 450,889 | 326,388 | 317,940 | 0.724× |
+| Permit2 | 149,678 | 112,356 | 110,291 | 0.751× |
+
+**Findings — the extension helps *more* on real code than on the toy corpus.**
+- **Shipped blob shrinks ~27% with the extension** (vec/ref 0.73×, w/ref 0.71×), a bigger win than the ~20% on the toy corpus (§6a). Real contracts carry far more i256 limb-chain arithmetic, and one wide op replaces a whole chain — so the more real the code, the more the extension removes.
+- **Gas overhead is only ~+4–5%** (vec/ref 1.05×), versus **+18%** on the toy corpus (§6d). The toy corpus was dominated by convert-heavy deploy code that over-weighted the cheap wide ops; real contracts spend their gas on genuine wide arithmetic where the extension's per-op cost is justified, so the metered overhead nearly vanishes.
+- **`w` stays smaller than `vec`** (object 0.907× vs 0.949× of ref; blob 0.708× vs 0.726×) and at recompiler parity — consistent with §11 on real code.
+- Wall-time (interp/recomp) is noisy at n=4 and dominated by the 3.3 MB 1inch module (per-call overhead per §6c); treat the deterministic blob/gas as the reliable signal.
+- **The blocker is toolchain robustness on large contracts**, not the extension's value: closing the `llc`/linker gaps (and the pre-0.8 solc gap) would let the remaining blue-chips be measured.
+
+*Corpus in `benchmarks/ir-corpus-real/` (10 verified-mainnet contracts, compiled from Sourcify sources); harness `measure_wreg.py`; data `per-bench-wreg-real.tsv`; fetch/compile driver `fetch_compile.py`; per-contract compile status `real-compile-status.tsv`.*

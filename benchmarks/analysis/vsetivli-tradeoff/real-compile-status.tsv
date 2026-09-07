@@ -1,0 +1,10 @@
+Permit2	0x000000000022D473030F116dDEE9F6B43aC78BA3	Permit2	0.8.17+commit.8df45f5f	OK	real_Permit2.Permit2.optimized.ll	966133B
+EntryPoint_v06	0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789	EntryPoint	0.8.17+commit.8df45f5f	OK	real_EntryPoint_v06.EntryPoint.optimized.ll	2119620B
+EntryPoint_v07	0x0000000071727De22E5E9d8BAf0edAc6f37da032	EntryPoint	0.8.23+commit.f704f362	OK	real_EntryPoint_v07.EntryPoint.optimized.ll	1479589B
+Seaport16	0x0000000000000068F116a894984e2DB1123eB395	Seaport	0.8.24+commit.e11b9ed9	COMPILE_FAIL	    |                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UniversalRouter	0x66a9893cC07D91D95644AEDD05D03f95e1dBA8Af	UniversalRouter	0.8.26+commit.8a97fa7a	OK	real_UniversalRouter.UniversalRouter.optimized.ll	1411691B
+UniV4PoolMgr	0x000000000004444c5dc75cB358380D2e3dE08A90	PoolManager	0.8.26+commit.8a97fa7a	OK	real_UniV4PoolMgr.PoolManager.optimized.ll	1445804B
+OneInchV6	0x111111125421cA6dc452d289314280a0f8842A65	AggregationRouterV6	0.8.23+commit.f704f362	OK	real_OneInchV6.AggregationRouterV6.optimized.ll	47217B
+MorphoBlue	0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb	Morpho	0.8.19+commit.7dd6d404	OK	real_MorphoBlue.Morpho.optimized.ll	1621460B
+EthenaUSDe	0x4c9EDD5852cd905f086C759E8383e09bff1E68B3	USDe	0.8.19+commit.7dd6d404	OK	real_EthenaUSDe.USDe.optimized.ll	761042B
+BlurExchange	0x000000000000Ad05Ccc4F10045630fb830B95127	BlurExchange	0.8.17+commit.8df45f5f	OK	real_BlurExchange.BlurExchange.optimized.ll	47193B

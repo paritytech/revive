@@ -1,0 +1,31 @@
+module	arm	compile_s	text	blob	gas	interp_ns	recomp_ns	exports	error
+real_EntryPoint_v06.EntryPoint.optimized.ll	ref	1.9129877835512161	301506						link
+real_EntryPoint_v06.EntryPoint.optimized.ll	vec	2.1079385932534933	321150						link
+real_EntryPoint_v06.EntryPoint.optimized.ll	w	1.9268224481493235	312230						link
+real_EntryPoint_v07.EntryPoint.optimized.ll	ref	1.40232402831316	224288						link
+real_EntryPoint_v07.EntryPoint.optimized.ll	vec	1.5819186586886644	224556						link
+real_EntryPoint_v07.EntryPoint.optimized.ll	w	1.4219490308314562	219034						link
+real_EthenaUSDe.USDe.optimized.ll	ref	0.5996570251882076	91096	94738	324	2163	3205	2	
+real_EthenaUSDe.USDe.optimized.ll	vec	0.6192959733307362	85704	69002	358	1491	3205	2	
+real_EthenaUSDe.USDe.optimized.ll	w	0.5579126346856356	81982	67293	354	2243	3235	2	
+real_MorphoBlue.Morpho.optimized.ll	ref	1.5432834830135107	219534						link
+real_MorphoBlue.Morpho.optimized.ll	vec	1.4986912701278925	207468	168513	925	5247	3434	2	
+real_MorphoBlue.Morpho.optimized.ll	w	1.3076684698462486	197792	163616	920	5248	3074	2	
+real_Multicall3.Multicall3.optimized.ll	ref	0.3230526205152273	44448	48805	181	1422	3144	2	
+real_Multicall3.Multicall3.optimized.ll	vec	0.3061009328812361	39274	32441	229	1011	3195	2	
+real_Multicall3.Multicall3.optimized.ll	w	0.2769828662276268	37304	31501	227	1050	3195	2	
+real_OneInchV6.AggregationRouterV6.optimized.ll	ref	2.7908507399260998	418876	450889	2118	9094	2384	2	
+real_OneInchV6.AggregationRouterV6.optimized.ll	vec	2.9789476823061705	389498	326388	2126	11938	3955	2	
+real_OneInchV6.AggregationRouterV6.optimized.ll	w	2.612056652083993	370002	317940	2118	11848	3925	2	
+real_Permit2.Permit2.optimized.ll	ref	0.9678465034812689	141150	149678	557	3525	4116	2	
+real_Permit2.Permit2.optimized.ll	vec	1.0640689600259066	145734	112356	620	2543	4076	2	
+real_Permit2.Permit2.optimized.ll	w	0.9526788536459208	141310	110291	613	3785	4026	2	
+real_UniV4PoolMgr.PoolManager.optimized.ll	ref								compile
+real_UniV4PoolMgr.PoolManager.optimized.ll	vec								compile
+real_UniV4PoolMgr.PoolManager.optimized.ll	w								compile
+real_UniversalRouter.UniversalRouter.optimized.ll	ref								compile
+real_UniversalRouter.UniversalRouter.optimized.ll	vec	1.2910330798476934	175526						link
+real_UniversalRouter.UniversalRouter.optimized.ll	w	1.168898856267333	166914	140323	414	2323	3495	2	
+real_sUSDe.StakedUSDeV2.optimized.ll	ref								compile
+real_sUSDe.StakedUSDeV2.optimized.ll	vec								compile
+real_sUSDe.StakedUSDeV2.optimized.ll	w								compile

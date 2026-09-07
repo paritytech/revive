@@ -28,5 +28,6 @@ mod tests {
         let module = crate::module(&context, "stdlib").unwrap();
 
         assert!(module.get_function("__signextend").is_some());
+        assert!(module.get_function("__mulmod_barrett").is_some());
     }
 }

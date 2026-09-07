@@ -472,6 +472,18 @@ sol!(
         function modLhsMax(uint256 d) external pure returns (uint256);
     }
 
+    contract DivModMulmodConst {
+        function mixThree(uint256 x, uint256 y) external pure returns (uint256 q, uint256 r, uint256 m);
+        function mixTwoPow64PlusOne(uint256 x, uint256 y) external pure returns (uint256 q, uint256 r, uint256 m);
+        function mixTwoPow128MinusOne(uint256 x, uint256 y) external pure returns (uint256 q, uint256 r, uint256 m);
+        function mixTwoPow128PlusOne(uint256 x, uint256 y) external pure returns (uint256 q, uint256 r, uint256 m);
+        function mixTwoPow200(uint256 x, uint256 y) external pure returns (uint256 q, uint256 r, uint256 m);
+        function mixTwoPow255(uint256 x, uint256 y) external pure returns (uint256 q, uint256 r, uint256 m);
+        function mixTwoPow255MinusOne(uint256 x, uint256 y) external pure returns (uint256 q, uint256 r, uint256 m);
+        function mixTwoPow255PlusThree(uint256 x, uint256 y) external pure returns (uint256 q, uint256 r, uint256 m);
+        function mixMax(uint256 x, uint256 y) external pure returns (uint256 q, uint256 r, uint256 m);
+    }
+
     contract SmodConst {
         function smodRhsZero(int256 n) external pure returns (int256);
         function smodRhsOne(int256 n) external pure returns (int256);
@@ -493,6 +505,16 @@ sol!(
         function smodLhsMax(int256 d) external pure returns (int256);
     }
 );
+
+case!("DivModMulmodConst.sol", DivModMulmodConst, mixThreeCall, const_mix_three, x: U256, y: U256);
+case!("DivModMulmodConst.sol", DivModMulmodConst, mixTwoPow64PlusOneCall, const_mix_two_pow64_plus_one, x: U256, y: U256);
+case!("DivModMulmodConst.sol", DivModMulmodConst, mixTwoPow128MinusOneCall, const_mix_two_pow128_minus_one, x: U256, y: U256);
+case!("DivModMulmodConst.sol", DivModMulmodConst, mixTwoPow128PlusOneCall, const_mix_two_pow128_plus_one, x: U256, y: U256);
+case!("DivModMulmodConst.sol", DivModMulmodConst, mixTwoPow200Call, const_mix_two_pow200, x: U256, y: U256);
+case!("DivModMulmodConst.sol", DivModMulmodConst, mixTwoPow255Call, const_mix_two_pow255, x: U256, y: U256);
+case!("DivModMulmodConst.sol", DivModMulmodConst, mixTwoPow255MinusOneCall, const_mix_two_pow255_minus_one, x: U256, y: U256);
+case!("DivModMulmodConst.sol", DivModMulmodConst, mixTwoPow255PlusThreeCall, const_mix_two_pow255_plus_three, x: U256, y: U256);
+case!("DivModMulmodConst.sol", DivModMulmodConst, mixMaxCall, const_mix_max, x: U256, y: U256);
 
 sol!(
     contract Send {

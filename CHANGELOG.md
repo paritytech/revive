@@ -6,6 +6,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 
 ### Fixed
 - `--newyork`: A bug in dead call value analysis. [#589](https://github.com/paritytech/revive/pull/589)
+- Yul objects that `resolc` cannot represent, a sibling object that is not a contract and the dotted notation for a nested object, aborted the compiler instead of being reported. [#PR](https://github.com/paritytech/revive/pull/PR)
 
 ## v1.4.0
 

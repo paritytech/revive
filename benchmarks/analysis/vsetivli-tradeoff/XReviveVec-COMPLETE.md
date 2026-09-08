@@ -618,6 +618,32 @@ Per-contract shipped blob (ref → vec → w), the headline metric:
 | 1inch V6 | 450,889 | 326,388 | 317,940 | 0.724× |
 | Permit2 | 149,678 | 112,356 | 110,291 | 0.751× |
 
+**Per-benchmark wall-time (µs, amortized best-of).** Blanks are arms that didn't complete. Treat these as indicative (n is small and per-call overhead dominates, §6c) — the deterministic blob/gas above are the reliable signal.
+
+*Interpreter:*
+
+| contract | ref | vec | w | vec/ref | w/ref | w/vec |
+|---|--:|--:|--:|--:|--:|--:|
+| Multicall3 | 1.42 | 1.01 | 1.05 | 0.71× | 0.74× | 1.04× |
+| Permit2 | 3.52 | 2.54 | 3.79 | 0.72× | 1.07× | 1.49× |
+| Ethena USDe | 2.16 | 1.49 | 2.24 | 0.69× | 1.04× | 1.50× |
+| Morpho Blue | — | 5.25 | 5.25 | — | — | 1.00× |
+| 1inch V6 | 9.09 | 11.94 | 11.85 | 1.31× | 1.30× | 0.99× |
+| Universal Router | — | — | 2.32 | — | — | — |
+
+*Recompiler (production path):*
+
+| contract | ref | vec | w | vec/ref | w/ref | w/vec |
+|---|--:|--:|--:|--:|--:|--:|
+| Multicall3 | 3.14 | 3.19 | 3.19 | 1.02× | 1.02× | 1.00× |
+| Permit2 | 4.12 | 4.08 | 4.03 | 0.99× | 0.98× | 0.99× |
+| Ethena USDe | 3.21 | 3.21 | 3.23 | 1.00× | 1.01× | 1.01× |
+| Morpho Blue | — | 3.43 | 3.07 | — | — | 0.90× |
+| 1inch V6 | 2.38 | 3.96 | 3.92 | 1.66× | 1.65× | 0.99× |
+| Universal Router | — | — | 3.50 | — | — | — |
+
+Two patterns stand out. (1) On the small/mid contracts the **recompiler is at parity** (Multicall3/Permit2/Ethena all 0.98–1.02× ref), while the **interpreter is notably *faster* with `vec`** (0.69–0.72× ref — one wide op replaces a whole scalar limb chain). (2) The **1inch outlier goes the other way** — recompiler 1.66× and interpreter 1.31× ref — because it is by far the most wide-op-dense contract (8,423 i256 IR lines, 3.3 MB): its many *un-inlined* wide ops (`mul`/shift/`div`/`mod`) each pay the ~50 ns `syscall_wide` trampoline crossing (§5), which is exactly the case the §10 "inline more wide ops" work targets. `w` tracks `vec` on the recompiler (parity, and 0.90× on Morpho Blue) but is slower than `vec` in the *interpreter* on Permit2/Ethena (w/vec ~1.5×) — a real but interpreter-only, small-n effect.
+
 **Findings — the extension helps *more* on real code than on the toy corpus.**
 - **Shipped blob shrinks ~27% with the extension** (vec/ref 0.73×, w/ref 0.71×), a bigger win than the ~20% on the toy corpus (§6a). Real contracts carry far more i256 limb-chain arithmetic, and one wide op replaces a whole chain — so the more real the code, the more the extension removes.
 - **Gas overhead is only ~+4–5%** (vec/ref 1.05×), versus **+18%** on the toy corpus (§6d). The toy corpus was dominated by convert-heavy deploy code that over-weighted the cheap wide ops; real contracts spend their gas on genuine wide arithmetic where the extension's per-op cost is justified, so the metered overhead nearly vanishes.

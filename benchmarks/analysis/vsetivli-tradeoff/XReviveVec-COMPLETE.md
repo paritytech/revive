@@ -585,7 +585,23 @@ Wall-time as the **per-module median ratio** (aggregate totals are overhead-nois
 | Uniswap Universal Router | UniversalRouter | 0.8.26 | ✅ |
 | Uniswap V4 PoolManager | PoolManager | 0.8.26 | ✅ compiles |
 
-So the measured set is the **most-used 0.8.x contracts** (canonical 0.8.x ones + high-usage fill-ups to reach ten): Multicall3, Permit2, EntryPoint v0.6 & v0.7, Universal Router, Uniswap V4 PoolManager, 1inch AggregationRouterV6, Morpho Blue, Ethena USDe, Ethena sUSDe. All are heavy wide-integer users — unlike the toy corpus, every one carries thousands of `i256` IR ops (Multicall3 974 → 1inch 8,423), i.e. real production code genuinely exercises the extension.
+So the measured set is the **most-used 0.8.x contracts** (canonical 0.8.x ones + high-usage fill-ups to reach ten). What each does:
+
+| contract | what it does |
+|---|---|
+| **Multicall3** | Batches many read-only calls into one, aggregating results — used by nearly every dapp frontend/indexer to read chain state in a single RPC round-trip. |
+| **Permit2** (Uniswap) | Universal token-approval layer: EIP-712 signature-based approvals and transfers, so a user approves once and any integrated protocol can pull tokens. |
+| **EntryPoint v0.6 / v0.7** (ERC-4337) | Account-abstraction singleton: validates and executes bundles of UserOperations (smart-wallet txs), handling gas prepayment and refunds. |
+| **Universal Router** (Uniswap) | Single router that composes V2/V3/V4 swaps and NFT buys in one call by decoding a command stream. |
+| **Uniswap V4 PoolManager** | The singleton holding all V4 pools; manages liquidity, swaps, and hook callbacks with flash accounting. |
+| **1inch AggregationRouterV6** | DEX aggregator router that splits/routes a trade across many liquidity sources for best execution. |
+| **Morpho Blue** | Minimal immutable lending primitive: isolated markets (one collateral, one loan asset) with supply/borrow/liquidate and interest accrual. |
+| **Ethena USDe** | Synthetic-dollar stablecoin (ERC20) backed by delta-hedged collateral; mint/redeem + transfers. |
+| **Ethena sUSDe** (StakedUSDeV2) | Yield-bearing staking vault (ERC-4626) for USDe: deposit, accrue yield, cooldown-based withdrawal. |
+
+(For context, the pre-0.8 contracts that can't be compiled: **USDT/USDC/DAI** are stablecoin ERC20 tokens; **WETH9** wraps ETH as an ERC20; **Uniswap V2/V3 routers** are AMM swap routers.)
+
+All are heavy wide-integer users — unlike the toy corpus, every one carries thousands of `i256` IR ops (Multicall3 974 → 1inch 8,423), i.e. real production code genuinely exercises the extension.
 
 **Coverage — the largest real contracts stress the extension toolchain.** Of the 10, the full compile→link→run pipeline completes for far fewer than on the toy corpus:
 

@@ -609,14 +609,33 @@ Two honest observations: (1) large real contracts hit `llc` crashes and linker l
 | interpreter (µs) | 16.2 | 17.0 | 18.9 | 1.05× | 1.17× |
 | recompiler (µs) | 12.8 | 14.4 | 14.4 | 1.12× | 1.12× |
 
-Per-contract shipped blob (ref → vec → w), the headline metric:
+**Per-benchmark code size.** Object `.text` is available for every contract that compiled (8), the shipped blob only for those that also linked (5). The two tell different stories: `.text` is roughly *flat* vs ref (the `vsetivli` + wide ops can even make it slightly larger), but the shipped **blob shrinks ~27%** because the linker consumes the `vsetivli`, one wide op replaces a whole scalar limb-chain, and dead code is stripped.
 
-| contract | ref | vec | w | vec ÷ ref |
-|---|--:|--:|--:|--:|
-| Multicall3 | 48,805 | 32,441 | 31,501 | 0.665× |
-| Ethena USDe | 94,738 | 69,002 | 67,293 | 0.728× |
-| 1inch V6 | 450,889 | 326,388 | 317,940 | 0.724× |
-| Permit2 | 149,678 | 112,356 | 110,291 | 0.751× |
+*Object `.text` (bytes):*
+
+| contract | ref | vec | w | vec/ref | w/ref | w/vec |
+|---|--:|--:|--:|--:|--:|--:|
+| Multicall3 | 44,448 | 39,274 | 37,304 | 0.884× | 0.839× | 0.950× |
+| Permit2 | 141,150 | 145,734 | 141,310 | 1.032× | 1.001× | 0.970× |
+| Ethena USDe | 91,096 | 85,704 | 81,982 | 0.941× | 0.900× | 0.957× |
+| Morpho Blue | 219,534 | 207,468 | 197,792 | 0.945× | 0.901× | 0.953× |
+| 1inch V6 | 418,876 | 389,498 | 370,002 | 0.930× | 0.883× | 0.950× |
+| Universal Router | — | 175,526 | 166,914 | — | — | 0.951× |
+| EntryPoint v0.6 | 301,506 | 321,150 | 312,230 | 1.065× | 1.036× | 0.972× |
+| EntryPoint v0.7 | 224,288 | 224,556 | 219,034 | 1.001× | 0.977× | 0.975× |
+| **TOTAL (n=7 all arms)** | **1,440,898** | **1,413,384** | **1,359,654** | **0.981×** | **0.944×** | **0.962×** |
+
+*Shipped blob (bytes) — the headline metric:*
+
+| contract | ref | vec | w | vec/ref | w/ref | w/vec |
+|---|--:|--:|--:|--:|--:|--:|
+| Multicall3 | 48,805 | 32,441 | 31,501 | 0.665× | 0.645× | 0.971× |
+| Permit2 | 149,678 | 112,356 | 110,291 | 0.751× | 0.737× | 0.982× |
+| Ethena USDe | 94,738 | 69,002 | 67,293 | 0.728× | 0.710× | 0.975× |
+| Morpho Blue | — | 168,513 | 163,616 | — | — | 0.971× |
+| 1inch V6 | 450,889 | 326,388 | 317,940 | 0.724× | 0.705× | 0.974× |
+| Universal Router | — | — | 140,323 | — | — | — |
+| **TOTAL (n=4 all arms)** | **744,110** | **540,187** | **527,025** | **0.726×** | **0.708×** | **0.976×** |
 
 **Per-benchmark wall-time (µs, amortized best-of).** Blanks are arms that didn't complete. Treat these as indicative (n is small and per-call overhead dominates, §6c) — the deterministic blob/gas above are the reliable signal.
 

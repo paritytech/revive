@@ -686,4 +686,22 @@ Two patterns stand out. (1) On the small/mid contracts the **recompiler is at pa
 - Wall-time (interp/recomp) is noisy at n=4 and dominated by the 3.3 MB 1inch module (per-call overhead per §6c); treat the deterministic blob/gas as the reliable signal.
 - **The blocker is toolchain robustness on large contracts**, not the extension's value: closing the `llc`/linker gaps (and the pre-0.8 solc gap) would let the remaining blue-chips be measured.
 
-*Corpus in `benchmarks/ir-corpus-real/` (10 verified-mainnet contracts, compiled from Sourcify sources); harness `measure_wreg.py`; data `per-bench-wreg-real.tsv`; fetch/compile driver `fetch_compile.py`; per-contract compile status `real-compile-status.tsv`.*
+### Why gas goes up (+4–5%) — decomposed
+
+Gas rose modestly with the extension (vec/ref 1.05×) but very unevenly per contract (Multicall3 +27%, Permit2/Ethena +11%, 1inch +0.4%). To attribute it exactly rather than guess, `runblob RUNBLOB_GASDECOMP=1` re-runs each blob under cost models that zero one wide-op class at a time; since gas metering never changes control flow, `full − z_<class>` is precisely the gas that class contributed to the executed stream. The naive model charges **1 gas per scalar instruction** and work-proportional costs for wide ops (`WIDE_MEMORY=6`, `WIDE_LINEAR=16`, `WIDE_CONVERT=2`, …).
+
+| contract | ref | vec | Δ | vec scalar-only | wide **memory** | wide linear | wide convert | mul/div/mod |
+|---|--:|--:|--:|--:|--:|--:|--:|--:|
+| Multicall3 | 181 | 229 | +48 (+27%) | 165 | **+48** | +16 | 0 | 0 |
+| Permit2 | 557 | 620 | +63 (+11%) | 454 | **+150** | +16 | 0 | 0 |
+| Ethena USDe | 324 | 358 | +34 (+11%) | 300 | **+42** | +16 | 0 | 0 |
+| 1inch V6 | 2,118 | 2,126 | +8 (+0.4%) | 2,002 | **+72** | +48 | +4 | 0 |
+
+Reading a row: the extension moves work out of scalar instructions (vec's scalar-only gas is *below* ref — e.g. Multicall3 165 < 181) into wide ops; the net Δ is the wide-op gas minus that scalar saving (Multicall3: (165−181) + 48 + 16 = +48). Findings:
+
+- **The increase is dominated by wide load/store (`wld`/`wst`), not arithmetic and not converts.** Memory is the largest wide-gas class in every contract; `z_convert` barely moves the total (0 on three of four), so the §6d "extra convert ops" story — true on the toy deploy corpus — is **not** what drives real contracts.
+- **Root cause: the extension moves full 256-bit words even for values that fit in 64 bits.** A `wld`/`wst` costs 6 gas and touches all 32 bytes; the scalar build loads/stores only the limbs a small value actually needs. Multicall3 is the extreme — it shuffles many small values held in 256-bit storage slots, so it pays wide-memory gas with almost no wide *arithmetic* to offset it → +27%.
+- **Genuine wide arithmetic offsets the cost.** Where a contract does real 256-bit math, the wide ops delete long scalar limb-chains, dropping vec's scalar-only gas far below ref (1inch 2,002 vs 2,118, −116) — enough to nearly cancel the wide-op gas, so 1inch nets +0.4%. The +4–5% aggregate is just the corpus mix of memory-bound vs arithmetic-bound contracts.
+- **This is a cost-model/codegen artifact, not extra real work — and it is exactly what narrowing removes.** Type inference (§9 NewYork) narrows `i256`→`i64` where provable, turning full-width `wld`/`wst` back into cheap scalar loads; that is why NewYork cut gas 3.3× (§9). Lowering `WIDE_MEMORY` toward the 4-limb scalar cost, or applying the §7 narrowing transform, would close most of the residual.
+
+*Corpus in `benchmarks/ir-corpus-real/` (10 verified-mainnet contracts, compiled from Sourcify sources); harness `measure_wreg.py`; data `per-bench-wreg-real.tsv`; fetch/compile driver `fetch_compile.py`; per-contract compile status `real-compile-status.tsv`; gas decomposition via `runblob RUNBLOB_GASDECOMP=1`.*

@@ -115,7 +115,7 @@ jobs:
       # device name on Windows, so that checkout cannot succeed there. The
       # builder uses no workspace crate, so narrow the workspace to it (the
       # narrowed resolve no longer matches Cargo.lock, hence no `--locked`).
-      - name: Install LLVM Builder
+      - name: Narrow the Workspace to the Builder (Windows)
         if: ${{ matrix.host == 'windows' }}
         shell: bash
         run: |
@@ -124,6 +124,13 @@ jobs:
             exit 1
           }
           sed -i 's|^members = \["crates/\*"\]$|members = ["crates/llvm-builder"]|' Cargo.toml
+
+      # The MSVC environment set up above makes rustc invoke `link.exe` by name,
+      # and `bash` puts Git's own `link.exe` ahead of the MSVC one on PATH, so
+      # leave cargo in the default shell.
+      - name: Install LLVM Builder
+        if: ${{ matrix.host == 'windows' }}
+        run: |
           cargo install --force --path crates/llvm-builder
 
       - name: Install LLVM Builder

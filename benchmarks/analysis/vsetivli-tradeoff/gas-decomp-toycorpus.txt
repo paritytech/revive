@@ -1,0 +1,30 @@
+  ... 20/99
+  ... 40/99
+  ... 60/99
+
+=== toy corpus gas decomposition: 64 modules ran in both ref and vec ===
+ref  total gas: 20,261
+vec  total gas: 23,865  (1.178x ref)
+  vec scalar-only gas:     16,041  (scalar delta vs ref: -4,220)
+  total wide-op gas:       7,824
+    memory  : +3,810
+    convert : +2,814
+    linear  : +1,200
+    move    : +0
+    mul     : +0
+    divrem  : +0
+    modexp  : +0
+
+net increase (vec-ref): +3,604
+
+top 10 modules by absolute gas increase (ref -> vec):
+  CallGas.sol.Other                           542 ->    857  (+315, 1.58x)
+  ERC20.sol.ERC20                             917 ->   1187  (+270, 1.29x)
+  FmpDynRevertBug.sol.FmpDynRevertBug         352 ->    473  (+121, 1.34x)
+  PanicInterveneBug.sol.PanicInterveneBug     502 ->    620  (+118, 1.24x)
+  PanicCodeBug.sol.PanicCodeBug               400 ->    508  (+108, 1.27x)
+  FmpRangeProofBug.sol.FmpRangeProofBug       612 ->    702  (+90, 1.15x)
+  FmpDynStoreBug.sol.FmpDynStoreBug           683 ->    773  (+90, 1.13x)
+  FmpCrossObjectBug.sol.FmpCrossObjectBug     744 ->    832  (+88, 1.12x)
+  FmpRevertBug.sol.FmpRevertBug               278 ->    363  (+85, 1.31x)
+  MemoryBounds.sol.MemoryBounds               312 ->    395  (+83, 1.27x)

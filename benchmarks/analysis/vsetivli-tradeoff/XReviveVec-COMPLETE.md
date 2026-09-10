@@ -402,7 +402,22 @@ Gas is deterministic and backend-independent — what a chain charges. An earlie
 
 The "scalar it replaces" column is the approximate 64-bit-instruction count a base-ISA build's routine executes for the same 256-bit operation. The iterative ops are genuinely in the thousands: `dispatch` runs shift-and-subtract division as **n·64 = 256 iterations** each doing O(n) limb work (~2,600 primitive ops); the fused modular forms build a 512-bit intermediate and reduce it bit by bit (~5,000); `exp` is square-and-multiply, up to 256 iterations of two modular multiplies (~8,000). Those large costs are kept — they are the real work.
 
-**Result:** aggregate ext/ref gas drops from **2.47× → 1.18×** (median 1.18×, min 0.96× — one contract now *below* ref, max 1.58×). The residual ~18% is not metering — it is the extra convert ops the codegen emits (values promoted to i256 then truncated back; the narrowing transform in §7 would remove them), so gas now tracks actual work. Heavy arithmetic keeps its large, correct costs.
+**Result:** aggregate ext/ref gas drops from **2.47× → 1.18×** (median 1.18×, min 0.96× — one contract now *below* ref, max 1.58×). Heavy arithmetic keeps its large, correct costs.
+
+**Where the residual +18% comes from — decomposed** (`runblob RUNBLOB_GASDECOMP=1` across the 64-module corpus; `full − z_<class>` is each class's exact executed gas). Note gas is **independent of recompiler lowering** — inline, trampoline, and interpreter all charge identically (empirically 1187 gas for ERC20 in all three), so this is `ext` vs `ref`, not "inline vs ref".
+
+| component | gas | share of wide gas |
+|---|--:|--:|
+| ref total | 20,261 | — |
+| vec total | 23,865 (**1.178×**) | — |
+| — vec scalar-only | 16,041 (**−4,220** vs ref) | wide ops absorb scalar work |
+| — wide **memory** (`wld`/`wst`) | **+3,810** | **49%** |
+| — wide **convert** (`wzext`/`wtrunc`) | **+2,814** | **36%** |
+| — wide linear (`wadd`/`wseq`/…) | +1,200 | 15% |
+| — move / mul / div / mod | +0 | 0% |
+| **net (vec − ref)** | **+3,604** | = 7,824 wide − 4,220 scalar |
+
+So the driver is **wide load/store, then converts** — not "converts" alone as an earlier version of this note claimed. Two mechanisms: (1) `wld`/`wst` cost 6 gas and move a full 256-bit word even when the value fits in 64 bits, where the scalar build touches only the limbs it needs (memory is the most frequent wide op, §7); (2) this deploy-path corpus promotes narrow constants to i256 (`wzext`) and truncates back (`wtrunc`), extra ops with no scalar counterpart. Both are codegen/cost-model artifacts, not extra real work, and are exactly what the §7/§9 narrowing removes. **On real contracts (§12) memory dominates and converts are ~0** — the convert term is specific to constructor-heavy toy code; the memory term is universal.
 
 ## 7. Wide-instruction usage and width
 
@@ -706,7 +721,7 @@ Gas rose modestly with the extension (vec/ref 1.05×) but very unevenly per cont
 
 Reading a row: the extension moves work out of scalar instructions (vec's scalar-only gas is *below* ref — e.g. Multicall3 165 < 181) into wide ops; the net Δ is the wide-op gas minus that scalar saving (Multicall3: (165−181) + 48 + 16 = +48). Findings:
 
-- **The increase is dominated by wide load/store (`wld`/`wst`), not arithmetic and not converts.** Memory is the largest wide-gas class in every contract; `z_convert` barely moves the total (0 on three of four), so the §6d "extra convert ops" story — true on the toy deploy corpus — is **not** what drives real contracts.
+- **The increase is dominated by wide load/store (`wld`/`wst`), not arithmetic and not converts.** Memory is the largest wide-gas class in every contract; `z_convert` barely moves the total (0 on three of four). Memory is the top driver on the toy corpus too (§6d), but there converts are a strong second (deploy code promoting constants to i256); on real contracts converts are ~0 — the memory term is universal, the convert term is constructor-specific.
 - **Root cause: the extension moves full 256-bit words even for values that fit in 64 bits.** A `wld`/`wst` costs 6 gas and touches all 32 bytes; the scalar build loads/stores only the limbs a small value actually needs. Multicall3 is the extreme — it shuffles many small values held in 256-bit storage slots, so it pays wide-memory gas with almost no wide *arithmetic* to offset it → +27%.
 - **Genuine wide arithmetic offsets the cost.** Where a contract does real 256-bit math, the wide ops delete long scalar limb-chains, dropping vec's scalar-only gas far below ref (1inch 2,002 vs 2,118, −116) — enough to nearly cancel the wide-op gas, so 1inch nets +0.4%. The +4–5% aggregate is just the corpus mix of memory-bound vs arithmetic-bound contracts.
 - **This is a cost-model/codegen artifact, not extra real work — and it is exactly what narrowing removes.** Type inference (§9 NewYork) narrows `i256`→`i64` where provable, turning full-width `wld`/`wst` back into cheap scalar loads; that is why NewYork cut gas 3.3× (§9). Lowering `WIDE_MEMORY` toward the 4-limb scalar cost, or applying the §7 narrowing transform, would close most of the residual.

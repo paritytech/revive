@@ -119,6 +119,31 @@ The recompiler column reflects the **current default: cheap/common wide ops inli
 
 > **Measurement note.** `wide_microbench.rs` runs as a `#[test]`, where `is_sandbox_logging_enabled()` (`cfg!(test) || …`) forces worker trace logging on — adding ~1,680 ns of `write()` I/O per op **to every trampoline crossing** (a flat ~1,700 ns column if left on), but not to inlined ops or the interpreter. The recompiler figures were captured with that gate forced off, matching `resolc`/`runblob`; §6 (`runblob`, not a test build) was never affected.
 
+### 5a. Per-instruction gas (deterministic): extension vs scalar
+
+The gas analogue of the ns/op tables — what a chain charges, deterministic and backend-independent. `ext gas` is the wide op's `WIDE_*` cost (§6d); `ref gas` is the scalar limb chain a base-ISA build emits (1 gas/instruction). Measured by `wide_microbench_gas` (differencing the unrolled blob against an empty body); data in `microbench-gas.txt`. Only the 13 ops with a scalar reference show a ratio; the rest are ext-only.
+
+| op | ext | ref @256 | ext÷ref @256 | ref @128 | ext÷ref @128 |
+|---|--:|--:|--:|--:|--:|
+| `add`/`sub` | 16 | 33 | **0.48×** | 17 | 0.94× |
+| `and`/`or`/`xor` | 16 | 16 | 1.00× | 8 | 2.00× |
+| `mul` | 56 | 105 | **0.53×** | 29 | 1.93× |
+| `slt_u` | 16 | 43 | **0.37×** | 23 | 0.70× |
+| `seq` | 16 | 22 | 0.73× | 14 | 1.14× |
+| `shl` | 16 | 21 | 0.76× | 9 | 1.78× |
+| `bswap` | 16 | 12 | 1.33× | 6 | 2.67× |
+| `move` | 4 | 8 | **0.50×** | 4 | 1.00× |
+| `zext` | 2 | 6 | **0.33×** | 4 | 0.50× |
+| `trunc` | 2 | 2 | 1.00× | 2 | 1.00× |
+| `load`/`store` | 6 | *(≈4: 4 limbs)* | ~1.5× | *(≈2)* | ~3× |
+| `div_u`/`rem_u` | 3,100 | — | — | — | — |
+| `div_s`/`rem_s` | 3,200 | — | — | — | — |
+| `mul_mod`/`add_mod` | 6,300 | — | — | — | — |
+| `exp` | 8,000 | — | — | — | — |
+| `min`/`max`/`sext`/`signext`/shifts | 16 (2 for `sext`) | — | — | — | — |
+
+**At 256-bit (the 99.9% width) the extension is gas-cheaper for the ops that do work** — `add`/`sub` 0.48×, `mul` 0.53×, `slt_u` 0.37×, `zext` 0.33×, `move` 0.50× — at parity for bitwise, and worse only for `bswap` (1.33×). **The exception is memory:** `load`/`store` cost 6 but replace a ~4-instruction 4-limb scalar access (~1.5×) — the per-op gap §12 identifies as the whole-contract gas driver, since §7 shows memory dominates the wide-op mix. **At 128-bit the advantage shrinks or inverts** (bitwise 2.0×, `bswap` 2.7×): `WIDE_LINEAR=16` is calibrated to the 4-limb 256-bit chain, so it over-charges a 2-limb one — moot in practice (corpus is all-i256).
+
 ## 5b. Recompiler native-code size per instruction (the per-instruction JIT budget)
 
 The recompiler emits native x86-64 per guest instruction into a slot bounded by **`VM_COMPILER_MAXIMUM_INSTRUCTION_LENGTH` = 96 B** (raised from 69 to admit the inline wide lowerings). This is a **runner-side JIT limit — not the VM ABI or the on-chain blob**: a wide op is one blob instruction however the recompiler lowers it. The bytes below are per-instruction emission on the **trampoline path** (the fallback, forced by `POLKAVM_DISABLE_WIDE_INLINE`): compute ops are a fixed call site (the shared trampoline body is emitted once, off-budget) so are width-independent; load/store are inline and grow with width. The cheap/common compute ops now default to inline native code instead (table below, §6c).

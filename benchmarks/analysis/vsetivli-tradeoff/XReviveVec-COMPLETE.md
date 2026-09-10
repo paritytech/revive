@@ -121,28 +121,28 @@ The recompiler column reflects the **current default: cheap/common wide ops inli
 
 ### 5a. Per-instruction gas (deterministic): extension vs scalar
 
-The gas analogue of the ns/op tables — what a chain charges, deterministic and backend-independent. `ext gas` is the wide op's `WIDE_*` cost (§6d); `ref gas` is the scalar limb chain a base-ISA build emits (1 gas/instruction). Measured by `wide_microbench_gas` (differencing the unrolled blob against an empty body); data in `microbench-gas.txt`. Only the 13 ops with a scalar reference show a ratio; the rest are ext-only.
+The gas analogue of the ns/op tables — what a chain charges, deterministic and backend-independent. `ext gas` is the wide op's `WIDE_*` cost (§6d); `ref gas` is the scalar limb chain a base-ISA build emits (1 gas/instruction). Measured by `wide_microbench_gas`; data in `microbench-gas.txt`. **Recalibrated** so every one-64-bit-op-per-limb wide op costs `N × 1 = 4` at the 256-bit width (N = 4 limbs) — never more than the scalar chain it replaces (`WIDE_LINEAR 16→4`, `WIDE_MEMORY 6→4`; §6d). Superlinear ops keep their costs.
 
 | op | ext | ref @256 | ext÷ref @256 | ref @128 | ext÷ref @128 |
 |---|--:|--:|--:|--:|--:|
-| `add`/`sub` | 16 | 33 | **0.48×** | 17 | 0.94× |
-| `and`/`or`/`xor` | 16 | 16 | 1.00× | 8 | 2.00× |
-| `mul` | 56 | 105 | **0.53×** | 29 | 1.93× |
-| `slt_u` | 16 | 43 | **0.37×** | 23 | 0.70× |
-| `seq` | 16 | 22 | 0.73× | 14 | 1.14× |
-| `shl` | 16 | 21 | 0.76× | 9 | 1.78× |
-| `bswap` | 16 | 12 | 1.33× | 6 | 2.67× |
+| `add`/`sub` | 4 | 33 | **0.12×** | 17 | 0.24× |
+| `and`/`or`/`xor` | 4 | 16 | **0.25×** | 8 | 0.50× |
+| `slt_u` | 4 | 43 | **0.09×** | 23 | 0.17× |
+| `seq` | 4 | 22 | **0.18×** | 14 | 0.29× |
+| `shl` | 4 | 21 | **0.19×** | 9 | 0.44× |
+| `bswap` | 4 | 12 | **0.33×** | 6 | 0.67× |
 | `move` | 4 | 8 | **0.50×** | 4 | 1.00× |
+| `load`/`store` | 4 | ≈4 (4 limbs) | **≈1.0×** | ≈2 | ≈2× |
 | `zext` | 2 | 6 | **0.33×** | 4 | 0.50× |
 | `trunc` | 2 | 2 | 1.00× | 2 | 1.00× |
-| `load`/`store` | 6 | *(≈4: 4 limbs)* | ~1.5× | *(≈2)* | ~3× |
+| `min`/`max`/`sext`/`signext`/shifts | 4 (2 for `sext`) | — | — | — | — |
+| `mul` | 56 | 105 | **0.53×** | 29 | 1.93× |
 | `div_u`/`rem_u` | 3,100 | — | — | — | — |
 | `div_s`/`rem_s` | 3,200 | — | — | — | — |
 | `mul_mod`/`add_mod` | 6,300 | — | — | — | — |
 | `exp` | 8,000 | — | — | — | — |
-| `min`/`max`/`sext`/`signext`/shifts | 16 (2 for `sext`) | — | — | — | — |
 
-**At 256-bit (the 99.9% width) the extension is gas-cheaper for the ops that do work** — `add`/`sub` 0.48×, `mul` 0.53×, `slt_u` 0.37×, `zext` 0.33×, `move` 0.50× — at parity for bitwise, and worse only for `bswap` (1.33×). **The exception is memory:** `load`/`store` cost 6 but replace a ~4-instruction 4-limb scalar access (~1.5×) — the per-op gap §12 identifies as the whole-contract gas driver, since §7 shows memory dominates the wide-op mix. **At 128-bit the advantage shrinks or inverts** (bitwise 2.0×, `bswap` 2.7×): `WIDE_LINEAR=16` is calibrated to the 4-limb 256-bit chain, so it over-charges a 2-limb one — moot in practice (corpus is all-i256).
+**After the recalibration, at 256-bit every linear wide op is gas-cheaper than the scalar chain it replaces** (0.09×–0.53×), and `load`/`store` are now **≈neutral** (4 vs ~4 limb loads) instead of the earlier 1.5× that had driven the whole-contract increase (§6d/§12). The only ratio above 1 is `mul` at **128-bit** (1.93×) — it is superlinear (O(N²)) so the `N × 64-bit` ceiling doesn't apply, and its single width-independent cost (56) is calibrated to the 256-bit chain (105), where it is 0.53×; i128 is unused in practice (§7).
 
 ## 5b. Recompiler native-code size per instruction (the per-instruction JIT budget)
 
@@ -387,39 +387,38 @@ Full per-benchmark table (µs, median-of-5-sweeps; treat individual rows as ±15
 
 ### 6d. Gas: extension vs base ISA (after recalibration)
 
-**How gas is charged (code path).** A `CostModel` (`polkavm/src/gas.rs`) holds one `Cost` per opcode; the default `naive()` is 1 gas/scalar-op plus work-proportional wide costs (`with_wide_costs`: `WIDE_MEMORY=6`, `WIDE_LINEAR=16`, `WIDE_CONVERT=2`, …). At module build a `GasVisitor` walks the code and sums `cost_for_opcode` into a **per-basic-block** cost (`calculate_for_block`). At runtime each block's cost is deducted **on entry**: the interpreter's `charge_gas` handler (`gas -= block_cost`, `NotEnoughGas` if short), and the recompiler's per-block `emit_gas_metering_stub` (`sub [vmctx.gas], block_cost`, read back by `extract_gas_cost`). Same cost model + same block sums on both backends ⇒ gas is **deterministic, backend-independent, and independent of inline vs trampoline** (codegen doesn't change a block's opcode set). `GasMeteringKind::Sync` (used here) aborts at the overrunning block.
+**How gas is charged (code path).** A `CostModel` (`polkavm/src/gas.rs`) holds one `Cost` per opcode; the default `naive()` is 1 gas/scalar-op plus work-proportional wide costs (`with_wide_costs`: `WIDE_MEMORY=4`, `WIDE_LINEAR=4`, `WIDE_CONVERT=2`, `WIDE_MULTIPLY=56`, …). At module build a `GasVisitor` walks the code and sums `cost_for_opcode` into a **per-basic-block** cost (`calculate_for_block`). At runtime each block's cost is deducted **on entry**: the interpreter's `charge_gas` handler (`gas -= block_cost`, `NotEnoughGas` if short), and the recompiler's per-block `emit_gas_metering_stub` (`sub [vmctx.gas], block_cost`, read back by `extract_gas_cost`). Same cost model + same block sums on both backends ⇒ gas is **deterministic, backend-independent, and independent of inline vs trampoline** (codegen doesn't change a block's opcode set). `GasMeteringKind::Sync` (used here) aborts at the overrunning block.
 
-Gas is what a chain charges. An earlier model added a fixed `WIDE_MARSHAL = 8` per wide op (modelling the crossing), over-metering the cheap convert/memory/move ops 6–24× and giving a **+2.47×** regression. Costs are now recalibrated to the scalar limb chain (scalar = 1 gas/instruction), no trampoline term:
+Gas is what a chain charges. Two recalibrations brought it down: first removing an old fixed `WIDE_MARSHAL = 8` marshal term (which over-metered cheap ops 6–24× → **+2.47×**), then capping every **one-64-bit-op-per-limb** wide op at `N × (64-bit op cost) = N × 1 = 4` at the 256-bit width (N = 4 limbs) — so a wide op never costs more than doing it limb-by-limb in scalar. Superlinear ops (mul O(N²), div/rem/mod/exp iterative) can't be bounded by `N × 64-bit` and keep costs ≤ their real scalar chains.
 
-| wide op class | old gas | new gas | scalar it replaces (256-bit) |
-|---|--:|--:|--:|
-| `trunc`/`zext`/`sext` (convert) | 12 | **2** | ~1–4 |
-| `move` | 24 | **4** | ~4 |
-| `load`/`store` (memory) | 24 | **6** | ~4–5 |
-| `add`/`sub`/bitwise/min/max/cmp/shift/bswap (linear) | 24 | **16** | ~8–32 |
-| `mul` | 64 | 56 | ~64 |
-| `div`/`rem` | 3100/3200 | 3100/3200 | ~2,600 |
-| `addmod`/`mulmod` | 6300 | 6300 | ~5,000 |
-| `exp` | 8000 | 8000 | ~8,000 |
+| wide op class | marshal-era | interim | **now** | scalar chain @256 (§5a) |
+|---|--:|--:|--:|--:|
+| `trunc`/`zext`/`sext` (convert) | 12 | 2 | **2** | 2–6 |
+| `move` | 24 | 4 | **4** | 8 |
+| `load`/`store` (memory) | 24 | 6 | **4** | ~4 |
+| `add`/`sub`/bitwise/min/max/cmp/shift/`bswap` (linear) | 24 | 16 | **4** | 12–43 |
+| `mul` (superlinear, exempt) | 64 | 56 | **56** | 105 |
+| `div`/`rem` | 3100/3200 | 3100/3200 | **3100/3200** | ~2,600–4,000 |
+| `addmod`/`mulmod` | 6300 | 6300 | **6300** | ~5,000 |
+| `exp` | 8000 | 8000 | **8000** | ~8,000 |
 
-The "scalar it replaces" column is the approximate 64-bit-instruction count a base-ISA build's routine executes for the same 256-bit operation. The iterative ops are genuinely in the thousands: `dispatch` runs shift-and-subtract division as **n·64 = 256 iterations** each doing O(n) limb work (~2,600 primitive ops); the fused modular forms build a 512-bit intermediate and reduce it bit by bit (~5,000); `exp` is square-and-multiply, up to 256 iterations of two modular multiplies (~8,000). Those large costs are kept — they are the real work.
+Every non-superlinear class is now `≤ N × 64-bit` (4), and each is ≤ its measured scalar chain (§5a). The iterative ops keep their large absolute costs — a division or modular multiply is genuinely thousands of primitive ops.
 
-**Result:** aggregate ext/ref gas drops from **2.47× → 1.18×** (median 1.18×, min 0.96× — one contract now *below* ref, max 1.58×). Heavy arithmetic keeps its large, correct costs.
+**Result:** aggregate ext/ref gas: **2.47× → 1.18× (interim) → 1.07× (now)**. On real contracts (§12) it goes to **0.993×** — below the base ISA.
 
-**Where the residual +18% comes from — decomposed** (`runblob RUNBLOB_GASDECOMP=1` across the 64-module corpus; `full − z_<class>` is each class's exact executed gas). Note gas is **independent of recompiler lowering** — inline, trampoline, and interpreter all charge identically (empirically 1187 gas for ERC20 in all three), so this is `ext` vs `ref`, not "inline vs ref".
+**Residual +7% decomposed** (`runblob RUNBLOB_GASDECOMP=1` over the 64-module corpus; `full − z_<class>` is each class's exact executed gas). Gas is **independent of recompiler lowering** — inline, trampoline, and interpreter charge identically (empirically 1187 for ERC20 in all three), so this is `ext` vs `ref`, not "inline vs ref".
 
-| component | gas | share of wide gas |
+| component | interim (16/6) | **now (4/4)** |
 |---|--:|--:|
-| ref total | 20,261 | — |
-| vec total | 23,865 (**1.178×**) | — |
-| — vec scalar-only | 16,041 (**−4,220** vs ref) | wide ops absorb scalar work |
-| — wide **memory** (`wld`/`wst`) | **+3,810** | **49%** |
-| — wide **convert** (`wzext`/`wtrunc`) | **+2,814** | **36%** |
-| — wide linear (`wadd`/`wseq`/…) | +1,200 | 15% |
-| — move / mul / div / mod | +0 | 0% |
-| **net (vec − ref)** | **+3,604** | = 7,824 wide − 4,220 scalar |
+| ref total | 20,261 | 20,261 |
+| vec total | 23,865 (1.178×) | **21,695 (1.071×)** |
+| — vec scalar-only | 16,041 (−4,220) | 16,041 (−4,220) |
+| — wide **memory** (`wld`/`wst`) | +3,810 | **+2,540** |
+| — wide **convert** (`wzext`/`wtrunc`) | +2,814 | **+2,814** |
+| — wide linear | +1,200 | **+300** |
+| **net (vec − ref)** | +3,604 | **+1,434** |
 
-So the driver is **wide load/store, then converts** — not "converts" alone as an earlier version of this note claimed. Two mechanisms: (1) `wld`/`wst` cost 6 gas and move a full 256-bit word even when the value fits in 64 bits, where the scalar build touches only the limbs it needs (memory is the most frequent wide op, §7); (2) this deploy-path corpus promotes narrow constants to i256 (`wzext`) and truncates back (`wtrunc`), extra ops with no scalar counterpart. Both are codegen/cost-model artifacts, not extra real work, and are exactly what the §7/§9 narrowing removes. **On real contracts (§12) memory dominates and converts are ~0** — the convert term is specific to constructor-heavy toy code; the memory term is universal.
+After the recalibration the residual is **convert-dominated** (`wzext`/`wtrunc`, +2,814) — this deploy-path corpus promotes narrow constants to i256 and truncates back, extra ops with no scalar counterpart, correctly priced at 2 each and removable only by narrowing (§9), not cost-tuning. Memory drops to +2,540 (now ~neutral per op) and linear to +300. So the earlier "converts" intuition was right about the *residual* — it just took removing the memory/linear miscalibration to expose it. **On real contracts converts are ~0 and memory is neutral, so `ext` gas is now 0.993× ref** (§12).
 
 ## 7. Wide-instruction usage and width
 
@@ -532,7 +531,7 @@ The complementary question to the table above: the whole pipeline — **NewYork 
 | interpreter (µs, amortized) | 80.7 | 31.5 | **0.39×** |
 | recompiler (µs, amortized) | 104.3 | 103.5 | 0.99× |
 
-Narrowing `i256`→`i64`/`i128` leaves far fewer wide ops, so the win lands on **gas — down 3.3×** (−70%), interpreter −61%, code size −34%; the **recompiler is at parity** (0.99×, already fast on wide ops per §5/§6c). This is the opposite of the TI-on-vs-off table (which showed TI larger): against the **Yul** baseline the whole NewYork pipeline is both smaller and cheaper. Within NewYork the extension still meters vec/ref 1.19× (≈ Yul's 1.18×, §6d) but on far lower absolute gas; w-vs-vec stays at recompiler parity (indicative — only 31–36 modules).
+Narrowing `i256`→`i64`/`i128` leaves far fewer wide ops, so the win lands on **gas — down 3.3×** (−70%), interpreter −61%, code size −34%; the **recompiler is at parity** (0.99×, already fast on wide ops per §5/§6c). This is the opposite of the TI-on-vs-off table (which showed TI larger): against the **Yul** baseline the whole NewYork pipeline is both smaller and cheaper. (These NewYork gas numbers were measured before the §6d `WIDE_MEMORY/LINEAR` recalibration, so both the Yul and NewYork absolute gas would now be lower; the NewYork-vs-Yul *ratio* holds since both shift together.) w-vs-vec stays at recompiler parity (indicative — only 31–36 modules).
 
 **Bottom line.** Where the NewYork front-end compiles, benchmarks are dramatically cheaper (**~3.3× less gas, ~2.6× faster interp, ~1.5× smaller**) at recompiler parity, and `w` compiles more of them than `vec`. The blocker is `llc` robustness (only 37/99 `vec` compile) — a "where it compiles" result, not a full-corpus replacement for §6 (the §10 NewYork item).
 
@@ -541,7 +540,7 @@ Narrowing `i256`→`i64`/`i128` leaves far fewer wide ops, so the win lands on *
 - Working end to end on both backends; full polkavm suite passes.
 - **Inline cheap wide compute in the recompiler — DONE, default.** `add`/`sub`/`and`/`or`/`xor`, `slt_u/s`, `seq`/`sne`, `trunc`/`zext`/`move` emit inline native (only `rcx`); heavy, shift/`min`/`max`/`bswap`/`sext`, and i512+ stay on the trampoline. Needed the 69→96 B cap raise. Effect: **1.00× ref, −23% vs trampoline** (§6c); ERC20 regression erased. Kill switch `POLKAVM_DISABLE_WIDE_INLINE`. Open: shifts/`min`/`max`/`bswap`/`sext` need assembler primitives; i512+ needs a further cap raise.
 - **i512+ wide load/store fixed — DONE.** The >i256 copy loop advanced pointers with a 32-bit `add`, truncating the >4 GiB wide-file pointer and faulting; now 64-bit, with regression coverage (only i256 was previously exercised).
-- **Machine outliner disabled** (§8); **gas recalibrated** (§6d): the marshal term gave +2.47×, now +1.18× (residual = convert ops the §7 narrowing would remove).
+- **Machine outliner disabled** (§8); **gas recalibrated** (§6d): dropping the marshal term (+2.47×→1.18×) then capping linear/memory ops at N×64-bit (→1.07× toy, **0.993× real**); residual is convert ops the §7/§9 narrowing would remove.
 - **Open bug:** a wide instruction right after a call has no dataflow-supplied width (3 XENCrypto modules).
 - **NewYork IR** needs a faster Yul→IR stage before scale benchmarking (§9).
 
@@ -574,6 +573,8 @@ Deterministic metrics as totals over the 80-module set; `ref` (base ISA, no exte
 | `.text` (object) | 250,378 *(n=77)* | 206,280 | **191,624** | **0.929×** |
 | blob (shipped) | 177,773 *(n=64)* | 196,916 | **192,761** | **0.980×** |
 | gas (deterministic) | 20,261 *(n=64)* | 29,423 | **28,729** | **0.976×** |
+
+*(The `vec`/`w` gas totals predate the §6d `WIDE_MEMORY/LINEAR` recalibration; both arms use the same costs so the **w÷vec 0.976×** ratio — the point of this experiment — is unaffected, only the absolute totals would now be lower.)*
 
 Wall-time as the **per-module median ratio** (aggregate totals are overhead-noise-dominated per §6c, so the median is the reliable measure; interpreter over all 80, recompiler/`ref` over the 64 that link in all arms):
 
@@ -645,7 +646,7 @@ Two honest observations: (1) large real contracts hit `llc` crashes and linker l
 |---|--:|--:|--:|--:|--:|
 | `.text` (object) | 695,570 | 660,210 | 630,598 | 0.949× | **0.907×** |
 | **blob (shipped)** | 744,110 | 540,187 | 527,025 | **0.726×** | **0.708×** |
-| gas (deterministic) | 3,180 | 3,333 | 3,312 | 1.048× | 1.042× |
+| gas (deterministic) | 3,180 | 3,157 | 3,136 | **0.993×** | **0.986×** |
 | interpreter (µs) | 16.2 | 17.0 | 18.9 | 1.05× | 1.17× |
 | recompiler (µs) | 12.8 | 14.4 | 14.4 | 1.12× | 1.12× |
 
@@ -705,27 +706,27 @@ Two patterns stand out. (1) On the small/mid contracts the **recompiler is at pa
 
 **Findings — the extension helps *more* on real code than on the toy corpus.**
 - **Shipped blob shrinks ~27% with the extension** (vec/ref 0.73×, w/ref 0.71×), a bigger win than the ~20% on the toy corpus (§6a). Real contracts carry far more i256 limb-chain arithmetic, and one wide op replaces a whole chain — so the more real the code, the more the extension removes.
-- **Gas overhead is only ~+4–5%** (vec/ref 1.05×), versus **+18%** on the toy corpus (§6d). The toy corpus was dominated by convert-heavy deploy code that over-weighted the cheap wide ops; real contracts spend their gas on genuine wide arithmetic where the extension's per-op cost is justified, so the metered overhead nearly vanishes.
+- **Gas is now ≈neutral: vec/ref 0.993×** (below the base ISA), after recalibrating `WIDE_MEMORY 6→4` and `WIDE_LINEAR 16→4` (§6d). Before the recalibration it was +4.8%; the toy corpus similarly went +18% → +7%. Real contracts spend gas on genuine wide arithmetic that deletes scalar limb-chains, so once memory/linear are priced at the scalar cost the extension breaks even or wins.
 - **`w` stays smaller than `vec`** (object 0.907× vs 0.949× of ref; blob 0.708× vs 0.726×) and at recompiler parity — consistent with §11 on real code.
 - Wall-time (interp/recomp) is noisy at n=4 and dominated by the 3.3 MB 1inch module (per-call overhead per §6c); treat the deterministic blob/gas as the reliable signal.
 - **The blocker is toolchain robustness on large contracts**, not the extension's value: closing the `llc`/linker gaps (and the pre-0.8 solc gap) would let the remaining blue-chips be measured.
 
-### Why gas goes up (+4–5%) — decomposed
+### Gas is ≈neutral (0.993×) — decomposed, before and after the recalibration
 
-Gas rose modestly with the extension (vec/ref 1.05×) but very unevenly per contract (Multicall3 +27%, Permit2/Ethena +11%, 1inch +0.4%). To attribute it exactly rather than guess, `runblob RUNBLOB_GASDECOMP=1` re-runs each blob under cost models that zero one wide-op class at a time; since gas metering never changes control flow, `full − z_<class>` is precisely the gas that class contributed to the executed stream. The naive model charges **1 gas per scalar instruction** and work-proportional costs for wide ops (`WIDE_MEMORY=6`, `WIDE_LINEAR=16`, `WIDE_CONVERT=2`, …).
+`runblob RUNBLOB_GASDECOMP=1` re-runs each blob under cost models that zero one wide-op class at a time; since gas metering never changes control flow, `full − z_<class>` is exactly that class's executed gas. Gas is **independent of recompiler lowering** (inline/trampoline/interpreter charge identically). Per contract, before (`WIDE_MEMORY=6`, `WIDE_LINEAR=16`) and after (`4`/`4`) the recalibration:
 
-| contract | ref | vec | Δ | vec scalar-only | wide **memory** | wide linear | wide convert | mul/div/mod |
-|---|--:|--:|--:|--:|--:|--:|--:|--:|
-| Multicall3 | 181 | 229 | +48 (+27%) | 165 | **+48** | +16 | 0 | 0 |
-| Permit2 | 557 | 620 | +63 (+11%) | 454 | **+150** | +16 | 0 | 0 |
-| Ethena USDe | 324 | 358 | +34 (+11%) | 300 | **+42** | +16 | 0 | 0 |
-| 1inch V6 | 2,118 | 2,126 | +8 (+0.4%) | 2,002 | **+72** | +48 | +4 | 0 |
+| contract | ref | vec (was 6/16) | vec (now 4/4) | now ÷ ref |
+|---|--:|--:|--:|--:|
+| Multicall3 | 181 | 229 (+27%) | 201 | 1.11× |
+| Ethena USDe | 324 | 358 (+11%) | 332 | 1.02× |
+| Permit2 | 557 | 620 (+11%) | 558 | 1.00× |
+| 1inch V6 | 2,118 | 2,126 (+0.4%) | 2,066 | **0.98×** |
+| **total (4)** | **3,180** | **3,333 (1.048×)** | **3,157 (0.993×)** | **0.993×** |
 
-Reading a row: the extension moves work out of scalar instructions (vec's scalar-only gas is *below* ref — e.g. Multicall3 165 < 181) into wide ops; the net Δ is the wide-op gas minus that scalar saving (Multicall3: (165−181) + 48 + 16 = +48). Findings:
+Aggregate wide-op gas now decomposes to **memory +208, convert +4, linear +24**, offset by **−259** scalar (wide ops delete scalar limb-chains) → **net −23** (0.993×). Findings:
 
-- **The increase is dominated by wide load/store (`wld`/`wst`), not arithmetic and not converts.** Memory is the largest wide-gas class in every contract; `z_convert` barely moves the total (0 on three of four). Memory is the top driver on the toy corpus too (§6d), but there converts are a strong second (deploy code promoting constants to i256); on real contracts converts are ~0 — the memory term is universal, the convert term is constructor-specific.
-- **Root cause: the extension moves full 256-bit words even for values that fit in 64 bits.** A `wld`/`wst` costs 6 gas and touches all 32 bytes; the scalar build loads/stores only the limbs a small value actually needs. Multicall3 is the extreme — it shuffles many small values held in 256-bit storage slots, so it pays wide-memory gas with almost no wide *arithmetic* to offset it → +27%.
-- **Genuine wide arithmetic offsets the cost.** Where a contract does real 256-bit math, the wide ops delete long scalar limb-chains, dropping vec's scalar-only gas far below ref (1inch 2,002 vs 2,118, −116) — enough to nearly cancel the wide-op gas, so 1inch nets +0.4%. The +4–5% aggregate is just the corpus mix of memory-bound vs arithmetic-bound contracts.
-- **This is a cost-model/codegen artifact, not extra real work — and it is exactly what narrowing removes.** Type inference (§9 NewYork) narrows `i256`→`i64` where provable, turning full-width `wld`/`wst` back into cheap scalar loads; that is why NewYork cut gas 3.3× (§9). Lowering `WIDE_MEMORY` toward the 4-limb scalar cost, or applying the §7 narrowing transform, would close most of the residual.
+- **After the fix the extension is gas-neutral-to-favorable.** The dominant driver was wide `load`/`store` priced at 6 vs the ~4-instruction scalar 4-limb access; at 4 that gap closes. 1inch (arithmetic-heavy) is now *below* ref (0.98×) because its wide ops delete more scalar work than they add; Multicall3 (small values shuffled through 256-bit slots, little real wide math) is the only one still >1 (1.11×).
+- **Residual is tiny and memory-shaped, removed by narrowing.** The remaining per-op memory cost reflects that a wide `wld`/`wst` still moves a full 256-bit word even for a 64-bit value; type inference (§9 NewYork) narrows `i256`→`i64` and turns it back into a scalar load — why NewYork cut gas 3.3× (§9).
+- **Converts are ~0 on real contracts** (unlike the toy deploy corpus, §6d) — real measured paths do genuine arithmetic, not constructor-time constant promotion.
 
 *Corpus in `benchmarks/ir-corpus-real/` (10 verified-mainnet contracts, compiled from Sourcify sources); harness `measure_wreg.py`; data `per-bench-wreg-real.tsv`; fetch/compile driver `fetch_compile.py`; per-contract compile status `real-compile-status.tsv`; gas decomposition via `runblob RUNBLOB_GASDECOMP=1`.*

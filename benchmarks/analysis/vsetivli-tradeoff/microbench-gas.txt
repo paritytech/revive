@@ -1,36 +1,37 @@
 # Per-instruction gas: extension (one wide op) vs the scalar limb chain a base-ISA build emits.
-# Naive cost model: 1 gas per scalar instruction; wide ops carry their work-proportional WIDE_* cost.
-# Gas is deterministic and backend-independent. Measured by wide_microbench_gas (differencing the
-# unrolled blob against the same blob with an empty body to isolate one op). ext-only ops have no
-# scalar reference.
+# Naive cost model: 1 gas per scalar instruction; wide ops carry work-proportional WIDE_* cost.
+# RECALIBRATED so every one-64-bit-op-per-limb wide op costs N x 1 = 4 at the 256-bit width (N=4
+# limbs), i.e. no more than the scalar chain it replaces: WIDE_LINEAR 16->4, WIDE_MEMORY 6->4,
+# WIDE_MOVE=4, WIDE_CONVERT=2. Superlinear ops keep their costs (mul 56 <= 105 scalar; div/rem/mod/exp
+# iterative). Gas is deterministic and backend-independent. Measured by wide_microbench_gas.
 
 === wide microbenchmark GAS: 128-bit (gas per op) ===
 op          ext gas    ref gas    ext÷ref
-add            16.0       17.0      0.94x
-sub            16.0       17.0      0.94x
-and            16.0        8.0      2.00x
-or             16.0        8.0      2.00x
-xor            16.0        8.0      2.00x
-mul            56.0       29.0      1.93x
+add             4.0       17.0      0.24x
+sub             4.0       17.0      0.24x
+and             4.0        8.0      0.50x
+or              4.0        8.0      0.50x
+xor             4.0        8.0      0.50x
+mul            56.0       29.0      1.93x   (superlinear; cost is calibrated to 256-bit, i128 unused)
 move            4.0        4.0      1.00x
-bswap          16.0        6.0      2.67x
-shl            16.0        9.0      1.78x
-shr_l          16.0          -          -
-shr_a          16.0          -          -
-slt_u          16.0       23.0      0.70x
-slt_s          16.0          -          -
-seq            16.0       14.0      1.14x
-sne            16.0          -          -
-min_u          16.0          -          -
-min_s          16.0          -          -
-max_u          16.0          -          -
-max_s          16.0          -          -
+bswap           4.0        6.0      0.67x
+shl             4.0        9.0      0.44x
+shr_l           4.0          -          -
+shr_a           4.0          -          -
+slt_u           4.0       23.0      0.17x
+slt_s           4.0          -          -
+seq             4.0       14.0      0.29x
+sne             4.0          -          -
+min_u           4.0          -          -
+min_s           4.0          -          -
+max_u           4.0          -          -
+max_s           4.0          -          -
 zext            2.0        4.0      0.50x
 sext_w          2.0          -          -
 trunc           2.0        2.0      1.00x
-signext        16.0          -          -
-load            6.0          -          -
-store           6.0          -          -
+signext         4.0          -          -
+load            4.0          -          -
+store           4.0          -          -
 div_u        3100.0          -          -
 div_s        3200.0          -          -
 rem_u        3100.0          -          -
@@ -41,31 +42,31 @@ mulmod       6300.0          -          -
 
 === wide microbenchmark GAS: 256-bit (gas per op) ===
 op          ext gas    ref gas    ext÷ref
-add            16.0       33.0      0.48x
-sub            16.0       33.0      0.48x
-and            16.0       16.0      1.00x
-or             16.0       16.0      1.00x
-xor            16.0       16.0      1.00x
+add             4.0       33.0      0.12x
+sub             4.0       33.0      0.12x
+and             4.0       16.0      0.25x
+or              4.0       16.0      0.25x
+xor             4.0       16.0      0.25x
 mul            56.0      105.0      0.53x
 move            4.0        8.0      0.50x
-bswap          16.0       12.0      1.33x
-shl            16.0       21.0      0.76x
-shr_l          16.0          -          -
-shr_a          16.0          -          -
-slt_u          16.0       43.0      0.37x
-slt_s          16.0          -          -
-seq            16.0       22.0      0.73x
-sne            16.0          -          -
-min_u          16.0          -          -
-min_s          16.0          -          -
-max_u          16.0          -          -
-max_s          16.0          -          -
+bswap           4.0       12.0      0.33x
+shl             4.0       21.0      0.19x
+shr_l           4.0          -          -
+shr_a           4.0          -          -
+slt_u           4.0       43.0      0.09x
+slt_s           4.0          -          -
+seq             4.0       22.0      0.18x
+sne             4.0          -          -
+min_u           4.0          -          -
+min_s           4.0          -          -
+max_u           4.0          -          -
+max_s           4.0          -          -
 zext            2.0        6.0      0.33x
 sext_w          2.0          -          -
 trunc           2.0        2.0      1.00x
-signext        16.0          -          -
-load            6.0          -          -
-store           6.0          -          -
+signext         4.0          -          -
+load            4.0          -          -
+store           4.0          -          -
 div_u        3100.0          -          -
 div_s        3200.0          -          -
 rem_u        3100.0          -          -

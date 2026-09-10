@@ -8,8 +8,6 @@ on:
       - "docs/**"
       - "tooling-projects/**"
   pull_request:
-    # TODO: Temporarily adding `cl/custom-ops` to trigger tests in PRs targeting that branch.
-    branches: ["main", "cl/custom-ops"]
     types: [opened, synchronize]
     paths-ignore:
       - "**.md"

@@ -3,8 +3,6 @@ on:
   push:
     branches: ["main"]
   pull_request:
-    # TODO: Temporarily adding `cl/custom-ops` to trigger tests in PRs targeting that branch.
-    branches: ["main", "cl/custom-ops"]
     types: [opened, synchronize]
 
 concurrency:

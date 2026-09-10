@@ -1,67 +1,20 @@
-# Toy-corpus per-benchmark gas vs ref, RECALIBRATED costs (WIDE_MEMORY=4, WIDE_LINEAR=4).
-# 64 modules; AGGREGATE ref=20261 vec=21695 (1.0708x) w=21128 (1.0428x)
-benchmark                                       ref    vec      w  vec/ref   w/ref
-CallGas.sol.Other                               542    741    708   1.367x  1.306x
-FmpRevertBug.sol.FmpRevertBug                   278    315    303   1.133x  1.090x
-PanicCodeBug.sol.PanicCodeBug                   400    452    438   1.130x  1.095x
-FmpDynRevertBug.sol.FmpDynRevertBug             352    393    377   1.116x  1.071x
-PanicInterveneBug.sol.PanicInterveneBug         502    560    544   1.116x  1.084x
-Baseline.sol.Baseline                           167    186    180   1.114x  1.078x
-MemoryBounds.sol.MemoryBounds                   312    347    335   1.112x  1.074x
-ConstReturnOverflowBug.sol.ConstReturnOverflowBug    170    189    183   1.112x  1.076x
-UnalignedMloadNativeBug.sol.UnalignedMload      179    198    192   1.106x  1.073x
-UnalignedMStoreBug.sol.UnalignedMStoreBug       179    198    192   1.106x  1.073x
-Call.sol.Callee                                 184    202    196   1.098x  1.065x
-Selfdestruct.sol.SelfdestructTester             172    188    182   1.093x  1.058x
-ReturnDataOob.sol.Callee                        185    202    196   1.092x  1.059x
-MCopy.sol.MCopy                                 185    202    196   1.092x  1.059x
-StructDeleteStorage.sol.StructDeleteStorage     277    302    294   1.090x  1.061x
-Fibonacci.sol.FibonacciIterative                277    302    294   1.090x  1.061x
-Transaction.sol.TransactionOrigin               278    303    295   1.090x  1.061x
-EncodePackedHash.sol.EncodePackedHash           297    323    315   1.088x  1.061x
-UnalignedMStore8Bug.sol.UnalignedMStore8Bug     286    311    303   1.087x  1.059x
-SubTypeValidation.sol.SubTypeValidation         286    311    303   1.087x  1.059x
-ParamMload.sol.ParamMload                       286    311    303   1.087x  1.059x
-MStore8.sol.MStore8                             286    311    303   1.087x  1.059x
-Fibonacci.sol.FibonacciRecursive                286    311    303   1.087x  1.059x
-Factorial.sol.Factorial                         288    313    305   1.087x  1.059x
-Context.sol.Context                             288    313    305   1.087x  1.059x
-Block.sol.Block                                 288    313    305   1.087x  1.059x
-SubUnderflowZext.sol.SubUnderflowZext           278    302    294   1.086x  1.058x
-Storage.sol.Storage                             291    316    308   1.086x  1.058x
-CopyOverlapBug.sol.CopyOverlapBug               292    317    309   1.086x  1.058x
-RevertDataOob.sol.RevertDataOob                 293    318    310   1.085x  1.058x
-MCopyOverlap.sol.MCopyOverlap                   294    319    311   1.085x  1.058x
-AddModMulMod.sol.AddModMulMod                   287    311    303   1.084x  1.056x
-Fibonacci.sol.FibonacciBinet                    288    312    304   1.083x  1.056x
-Events.sol.Events                               292    316    308   1.082x  1.055x
-TryCatchCatchReturn.sol.TryCatchCatchReturn     293    317    309   1.082x  1.055x
-DelegateCaller.sol.DelegateCaller               293    317    309   1.082x  1.055x
-CustomErrorArgs.sol.CustomErrorArgs             282    305    297   1.082x  1.053x
-CallerOriginAliasing.sol.CallerOriginAliasing    295    319    311   1.081x  1.054x
-ExtCode.sol.ExtCode                             292    315    307   1.079x  1.051x
-AddressPredictor.sol.Predicted                  318    343    334   1.079x  1.050x
-BaseFee.sol.BaseFee                             365    389    382   1.066x  1.047x
-Coinbase.sol.Coinbase                           365    388    382   1.063x  1.047x
-FmpRangeProofBug.sol.FmpRangeProofBug           612    642    624   1.049x  1.020x
-ERC20.sol.ERC20                                 917    961    923   1.048x  1.007x
-Library.sol.L                                   325    339    340   1.043x  1.046x
-Send.sol.Send                                   250    259    255   1.036x  1.020x
-Value.sol.ValueTester                           262    271    267   1.034x  1.019x
-Transfer.sol.Transfer                           279    288    284   1.032x  1.018x
-FmpCrossObjectBug.sol.FmpCrossObjectBug         744    768    748   1.032x  1.005x
-FunctionPointer.sol.FunctionPointer             389    401    384   1.031x  0.987x
-FmpDynStoreBug.sol.FmpDynStoreBug               683    703    686   1.029x  1.004x
-KeccakFuseBug.sol.KeccakFuseBug                 415    426    407   1.027x  0.981x
-Immutables.sol.ImmutablesTester                 304    312    308   1.026x  1.013x
-BlockHash.sol.BlockHash                         193    198    195   1.026x  1.010x
-Create2.sol.CreateA                             147    150    148   1.020x  1.007x
-Create.sol.CreateA                              147    150    148   1.020x  1.007x
-Balance.sol.BalanceReceiver                     147    150    148   1.020x  1.007x
-GasLimit.sol.GasLimit                           157    160    158   1.019x  1.006x
-GasPrice.sol.GasPrice                           158    161    159   1.019x  1.006x
-GasLeft.sol.GasLeft                             160    163    161   1.019x  1.006x
-FunctionType.sol.FunctionType                   576    577    567   1.002x  0.984x
-FmpNativeStoreBug.sol.FmpNativeStoreBug         603    601    585   0.997x  0.970x
-LayoutAt.sol.LayoutAt                           423    420    413   0.993x  0.976x
-MLoad.sol.MLoad                                 322    294    292   0.913x  0.907x
+modules compared (ref & vec gas): 64
+AGGREGATE gas: ref=20261  vec=20288  vec/ref=1.0013
+  (w subset n=64): ref=20261 w=19721 w/ref=0.9733
+  vec>ref: 41   vec==ref: 0   vec<ref: 23
+
+top 8 worst (vec/ref) and top 5 best:
+  CallGas.sol.Other                          ref=  542 vec=  697  1.286x
+  FmpRevertBug.sol.FmpRevertBug              ref=  278 vec=  293  1.054x
+  FmpDynRevertBug.sol.FmpDynRevertBug        ref=  352 vec=  369  1.048x
+  Baseline.sol.Baseline                      ref=  167 vec=  175  1.048x
+  PanicCodeBug.sol.PanicCodeBug              ref=  400 vec=  419  1.048x
+  ConstReturnOverflowBug.sol.ConstReturnOverflowBug ref=  170 vec=  178  1.047x
+  UnalignedMloadNativeBug.sol.UnalignedMload ref=  179 vec=  187  1.045x
+  UnalignedMStoreBug.sol.UnalignedMStoreBug  ref=  179 vec=  187  1.045x
+  ...
+  Balance.sol.BalanceReceiver                ref=  147 vec=  139  0.946x
+  FunctionType.sol.FunctionType              ref=  576 vec=  544  0.944x
+  FmpNativeStoreBug.sol.FmpNativeStoreBug    ref=  603 vec=  568  0.942x
+  LayoutAt.sol.LayoutAt                      ref=  423 vec=  398  0.941x
+  MLoad.sol.MLoad                            ref=  322 vec=  283  0.879x

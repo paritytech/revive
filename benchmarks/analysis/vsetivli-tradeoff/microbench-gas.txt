@@ -28,7 +28,7 @@ max_u           4.0          -          -
 max_s           4.0          -          -
 zext            2.0        4.0      0.50x
 sext_w          2.0          -          -
-trunc           2.0        2.0      1.00x
+trunc           1.0        2.0      0.50x
 signext         4.0          -          -
 load            4.0          -          -
 store           4.0          -          -
@@ -63,7 +63,7 @@ max_u           4.0          -          -
 max_s           4.0          -          -
 zext            2.0        6.0      0.33x
 sext_w          2.0          -          -
-trunc           2.0        2.0      1.00x
+trunc           1.0        2.0      0.50x
 signext         4.0          -          -
 load            4.0          -          -
 store           4.0          -          -

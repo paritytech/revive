@@ -149,7 +149,23 @@ jobs:
           upload-artifact-name: hash-comparison-result
 
   run-e2e-tests:
+    name: run-e2e-tests (${{ matrix.engine }})
     needs: build-linux
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: interpreter
+            rustflags: "-Awarnings"
+            expectations-file-path: ./revive/.github/assets/revive-dev-node-polkavm-resolc.json
+            upload-artifact-suffix: ""
+          # TODO: This is a temporary second leg on the JIT (x86-64 recompiler) node
+          # build while developing the wide instructions. The leg runs without an
+          # expectations file until a baseline is recorded from its uploaded report.
+          - engine: jit
+            rustflags: "-Awarnings --cfg revive_jit"
+            expectations-file-path: ""
+            upload-artifact-suffix: "-jit"
     runs-on: parity-large
     timeout-minutes: 60
     env:
@@ -157,8 +173,9 @@ jobs:
       # obtained from the crate's .cargo_vcs_info.json via:
       # curl -sL -A "user-agent" https://crates.io/api/v1/crates/polkadot-sdk/<VERSION>/download | tar xzO polkadot-sdk-<VERSION>/.cargo_vcs_info.json
       # Current version: 2604.2.0
-      POLKADOT_SDK_REF: "54095b130013902aaaa33a69dbbf980144764afb"
-      RUSTFLAGS: "-Awarnings"
+      # TODO: Temporarily using an SDK reference for the in-development wide instructions.
+      POLKADOT_SDK_REF: "cccda66077e90ab9e103dbd8622da67795813f1f"
+      RUSTFLAGS: ${{ matrix.rustflags }}
     steps:
       - name: Checkout revive
         uses: actions/checkout@v6
@@ -223,7 +240,8 @@ jobs:
           solc-version: ${{ env.SOLC_VERSION }}
           allowed-modes: ${{ env.E2E_ALLOWED_MODES }}
           use-compilation-caches: false
-          expectations-file-path: ./revive/.github/assets/revive-dev-node-polkavm-resolc.json
+          expectations-file-path: ${{ matrix['expectations-file-path'] }}
+          upload-artifact-suffix: ${{ matrix['upload-artifact-suffix'] }}
           # Use a sane value which is fast enough to make the tests run fast but not too
           # fast that it overwhelms the node.
           concurrency-number-of-concurrent-tasks: 1000

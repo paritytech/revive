@@ -174,7 +174,7 @@ jobs:
       # curl -sL -A "user-agent" https://crates.io/api/v1/crates/polkadot-sdk/<VERSION>/download | tar xzO polkadot-sdk-<VERSION>/.cargo_vcs_info.json
       # Current version: 2604.2.0
       # TODO: Temporarily using an SDK reference for the in-development wide instructions.
-      POLKADOT_SDK_REF: "cccda66077e90ab9e103dbd8622da67795813f1f"
+      POLKADOT_SDK_REF: "083cbefcb9a064b9cc1a161705c084e314edd9dc"
       RUSTFLAGS: ${{ matrix.rustflags }}
     steps:
       - name: Checkout revive

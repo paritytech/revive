@@ -5,7 +5,8 @@ on:
     tags:
       - "v*"
   pull_request:
-    branches: ["main"]
+    # TODO: Temporarily adding `cl/custom-ops` to trigger tests in PRs targeting that branch.
+    branches: ["main", "cl/custom-ops"]
     types: [opened, synchronize, labeled, unlabeled]
     paths-ignore:
       - "**.md"

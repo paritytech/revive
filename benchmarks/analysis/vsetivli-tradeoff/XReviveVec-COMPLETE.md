@@ -387,7 +387,9 @@ Full per-benchmark table (µs, median-of-5-sweeps; treat individual rows as ±15
 
 ### 6d. Gas: extension vs base ISA (after recalibration)
 
-Gas is deterministic and backend-independent — what a chain charges. An earlier model added a fixed `WIDE_MARSHAL = 8` per wide op (modelling the crossing), over-metering the cheap convert/memory/move ops 6–24× and giving a **+2.47×** regression. Costs are now recalibrated to the scalar limb chain (naive model: scalar = 1 gas/instruction), no trampoline term:
+**How gas is charged (code path).** A `CostModel` (`polkavm/src/gas.rs`) holds one `Cost` per opcode; the default `naive()` is 1 gas/scalar-op plus work-proportional wide costs (`with_wide_costs`: `WIDE_MEMORY=6`, `WIDE_LINEAR=16`, `WIDE_CONVERT=2`, …). At module build a `GasVisitor` walks the code and sums `cost_for_opcode` into a **per-basic-block** cost (`calculate_for_block`). At runtime each block's cost is deducted **on entry**: the interpreter's `charge_gas` handler (`gas -= block_cost`, `NotEnoughGas` if short), and the recompiler's per-block `emit_gas_metering_stub` (`sub [vmctx.gas], block_cost`, read back by `extract_gas_cost`). Same cost model + same block sums on both backends ⇒ gas is **deterministic, backend-independent, and independent of inline vs trampoline** (codegen doesn't change a block's opcode set). `GasMeteringKind::Sync` (used here) aborts at the overrunning block.
+
+Gas is what a chain charges. An earlier model added a fixed `WIDE_MARSHAL = 8` per wide op (modelling the crossing), over-metering the cheap convert/memory/move ops 6–24× and giving a **+2.47×** regression. Costs are now recalibrated to the scalar limb chain (scalar = 1 gas/instruction), no trampoline term:
 
 | wide op class | old gas | new gas | scalar it replaces (256-bit) |
 |---|--:|--:|--:|

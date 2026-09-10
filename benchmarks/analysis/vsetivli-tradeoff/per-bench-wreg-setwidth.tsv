@@ -1,0 +1,298 @@
+module	arm	compile_s	text	blob	gas	interp_ns	recomp_ns	exports	error
+crates_integration_contracts_AddModMulMod.sol.AddModMulMod.optimized.ll	ref	0.04481874592602253	2424	2866	287	2112	3295	2	
+crates_integration_contracts_AddModMulMod.sol.AddModMulMod.optimized.ll	vec	0.053777631372213364	2480	2347	311	2092	3224	2	
+crates_integration_contracts_AddModMulMod.sol.AddModMulMod.optimized.ll	w	0.05123057961463928	2352	2270	303	2202	2894	2	
+crates_integration_contracts_AddModMulMod.sol.AddModMulModTester.optimized.ll	ref	0.06451767310500145	4596						link
+crates_integration_contracts_AddModMulMod.sol.AddModMulModTester.optimized.ll	vec	0.059140145778656006	4560						link
+crates_integration_contracts_AddModMulMod.sol.AddModMulModTester.optimized.ll	w	0.06408416293561459	4224						link
+crates_integration_contracts_AddressPredictor.sol.AddressPredictor.optimized.ll	ref	0.09042705595493317	7920						link
+crates_integration_contracts_AddressPredictor.sol.AddressPredictor.optimized.ll	vec	0.07237591035664082	6506						link
+crates_integration_contracts_AddressPredictor.sol.AddressPredictor.optimized.ll	w	0.06091363728046417	5878						link
+crates_integration_contracts_AddressPredictor.sol.Predicted.optimized.ll	ref	0.049373820424079895	2296	2736	318	1413	3004	2	
+crates_integration_contracts_AddressPredictor.sol.Predicted.optimized.ll	vec	0.05186178348958492	2394	2397	343	2563	2884	2	
+crates_integration_contracts_AddressPredictor.sol.Predicted.optimized.ll	w	0.04185524955391884	2296	2326	334	2573	2874	2	
+crates_integration_contracts_ArrayProbe.sol.ArrayProbe.optimized.ll	ref	0.08341956324875355	8156						link
+crates_integration_contracts_ArrayProbe.sol.ArrayProbe.optimized.ll	vec	0.05517333745956421	4636	4623	314	2793	2853	2	
+crates_integration_contracts_ArrayProbe.sol.ArrayProbe.optimized.ll	w	0.05256359092891216	4076	4457	306	2203	1923	2	
+crates_integration_contracts_Balance.sol.Balance.optimized.ll	ref	0.06461206451058388	3982						link
+crates_integration_contracts_Balance.sol.Balance.optimized.ll	vec	0.06400627456605434	4292						link
+crates_integration_contracts_Balance.sol.Balance.optimized.ll	w	0.0540000107139349	3992						link
+crates_integration_contracts_Balance.sol.BalanceReceiver.optimized.ll	ref	0.036181461066007614	1226	1033	147	1461	2703	2	
+crates_integration_contracts_Balance.sol.BalanceReceiver.optimized.ll	vec	0.03971368446946144	1300	988	150	1932	2735	2	
+crates_integration_contracts_Balance.sol.BalanceReceiver.optimized.ll	w	0.042444437742233276	1288	981	148	750	2683	2	
+crates_integration_contracts_BaseFee.sol.BaseFee.optimized.ll	ref	0.04117492213845253	1354	1228	365	2613	2804	2	
+crates_integration_contracts_BaseFee.sol.BaseFee.optimized.ll	vec	0.044134533032774925	1426	1165	389	1912	2754	2	
+crates_integration_contracts_BaseFee.sol.BaseFee.optimized.ll	w	0.037134261801838875	1404	1153	382	2393	3096	2	
+crates_integration_contracts_Baseline.sol.Baseline.optimized.ll	ref	0.03558620251715183	1374	1273	167	831	2864	2	
+crates_integration_contracts_Baseline.sol.Baseline.optimized.ll	vec	0.03908059746026993	1502	1261	186	1542	2814	2	
+crates_integration_contracts_Baseline.sol.Baseline.optimized.ll	w	0.04469793103635311	1470	1241	180	931	3144	2	
+crates_integration_contracts_Bitwise.sol.Bitwise.optimized.ll	ref	0.03716515749692917	1626						link
+crates_integration_contracts_Bitwise.sol.Bitwise.optimized.ll	vec	0.041422346606850624	1690	1420	302	1572	2854	2	
+crates_integration_contracts_Bitwise.sol.Bitwise.optimized.ll	w	0.04527868703007698	1638	1389	294	3385	2865	2	
+crates_integration_contracts_Block.sol.Block.optimized.ll	ref	0.049551649019122124	2106	2430	288	2192	2934	2	
+crates_integration_contracts_Block.sol.Block.optimized.ll	vec	0.04242005944252014	2244	2159	313	2363	1892	2	
+crates_integration_contracts_Block.sol.Block.optimized.ll	w	0.04103308543562889	2150	2097	305	3073	2884	2	
+crates_integration_contracts_BlockHash.sol.BlockHash.optimized.ll	ref	0.040891820564866066	2112	2385	193	1582	2723	2	
+crates_integration_contracts_BlockHash.sol.BlockHash.optimized.ll	vec	0.04242145083844662	2222	2037	198	951	2674	2	
+crates_integration_contracts_BlockHash.sol.BlockHash.optimized.ll	w	0.04022643528878689	2134	1986	195	1612	2734	2	
+crates_integration_contracts_Call.sol.Callee.optimized.ll	ref	0.04601225629448891	2896	3476	184	1562	2864	2	
+crates_integration_contracts_Call.sol.Callee.optimized.ll	vec	0.05339381471276283	2828	2747	202	1722	2855	2	
+crates_integration_contracts_Call.sol.Callee.optimized.ll	w	0.049570707604289055	2694	2671	196	2262	2844	2	
+crates_integration_contracts_Call.sol.Caller.optimized.ll	ref	0.07976579666137695	6130						link
+crates_integration_contracts_Call.sol.Caller.optimized.ll	vec	0.0625359509140253	5388						link
+crates_integration_contracts_Call.sol.Caller.optimized.ll	w	0.058359215036034584	4956						link
+crates_integration_contracts_CallGas.sol.CallGas.optimized.ll	ref	0.05158674158155918	3486						link
+crates_integration_contracts_CallGas.sol.CallGas.optimized.ll	vec	0.050206540152430534	3454						link
+crates_integration_contracts_CallGas.sol.CallGas.optimized.ll	w	0.049519892781972885	3290						link
+crates_integration_contracts_CallGas.sol.Other.optimized.ll	ref	0.04510161839425564	2874	3381	542	4546	3755	2	
+crates_integration_contracts_CallGas.sol.Other.optimized.ll	vec	0.04823171906173229	2866	2856	741	4877	3635	2	
+crates_integration_contracts_CallGas.sol.Other.optimized.ll	w	0.051922883838415146	2640	2746	708	4897	3656	2	
+crates_integration_contracts_CallerOriginAliasing.sol.CallerOriginAliasing.optimized.ll	ref	0.05438876152038574	3476	4739	295	3023	1923	2	
+crates_integration_contracts_CallerOriginAliasing.sol.CallerOriginAliasing.optimized.ll	vec	0.053622033447027206	3660	3089	319	2143	2904	2	
+crates_integration_contracts_CallerOriginAliasing.sol.CallerOriginAliasing.optimized.ll	w	0.05585556849837303	3220	3198	311	2123	1923	2	
+crates_integration_contracts_Coinbase.sol.Coinbase.optimized.ll	ref	0.043380072340369225	1370	1254	365	1472	2744	2	
+crates_integration_contracts_Coinbase.sol.Coinbase.optimized.ll	vec	0.03867636248469353	1478	1215	388	1912	2824	2	
+crates_integration_contracts_Coinbase.sol.Coinbase.optimized.ll	w	0.039135873317718506	1458	1208	382	1592	2794	2	
+crates_integration_contracts_Computation.sol.Computation.optimized.ll	ref								compile
+crates_integration_contracts_Computation.sol.Computation.optimized.ll	vec	0.04597228392958641	2382	2126	311	2353	2884	2	
+crates_integration_contracts_Computation.sol.Computation.optimized.ll	w	0.049565672874450684	2292	2069	303	3114	2903	2	
+crates_integration_contracts_ConstReturnOverflowBug.sol.ConstReturnOverflowBug.optimized.ll	ref	0.03913123719394207	1404	1402	170	831	2815	2	
+crates_integration_contracts_ConstReturnOverflowBug.sol.ConstReturnOverflowBug.optimized.ll	vec	0.04601422883570194	1546	1397	189	2102	2834	2	
+crates_integration_contracts_ConstReturnOverflowBug.sol.ConstReturnOverflowBug.optimized.ll	w	0.04506676457822323	1502	1362	183	1542	1873	2	
+crates_integration_contracts_Context.sol.Context.optimized.ll	ref	0.05011066049337387	2272	2776	288	1281	2914	2	
+crates_integration_contracts_Context.sol.Context.optimized.ll	vec	0.050805190578103065	2388	2257	313	2073	2884	2	
+crates_integration_contracts_Context.sol.Context.optimized.ll	w	0.04188542068004608	2278	2188	305	2333	2834	2	
+crates_integration_contracts_CopyOverlapBug.sol.CopyOverlapBug.optimized.ll	ref	0.04049803875386715	2036	2285	292	2523	2884	2	
+crates_integration_contracts_CopyOverlapBug.sol.CopyOverlapBug.optimized.ll	vec	0.048885853961110115	2166	2048	317	1622	2874	2	
+crates_integration_contracts_CopyOverlapBug.sol.CopyOverlapBug.optimized.ll	w	0.040151068940758705	2096	2007	309	1622	2874	2	
+crates_integration_contracts_Create.sol.CreateA.optimized.ll	ref	0.0343118105083704	1226	1035	147	730	2714	2	
+crates_integration_contracts_Create.sol.CreateA.optimized.ll	vec	0.04259583540260792	1300	989	150	1241	2713	2	
+crates_integration_contracts_Create.sol.CreateA.optimized.ll	w	0.035329291597008705	1288	982	148	740	2253	2	
+crates_integration_contracts_Create.sol.CreateB.optimized.ll	ref	0.05036316439509392	2580						link
+crates_integration_contracts_Create.sol.CreateB.optimized.ll	vec	0.05403102934360504	2780						link
+crates_integration_contracts_Create.sol.CreateB.optimized.ll	w	0.051446566358208656	2630						link
+crates_integration_contracts_Create2.sol.CreateA.optimized.ll	ref	0.03416314348578453	1226	1035	147	1171	2704	2	
+crates_integration_contracts_Create2.sol.CreateA.optimized.ll	vec	0.03746509552001953	1300	989	150	1381	2714	2	
+crates_integration_contracts_Create2.sol.CreateA.optimized.ll	w	0.04306935705244541	1288	982	148	851	2674	2	
+crates_integration_contracts_Create2.sol.CreateB.optimized.ll	ref	0.054450634866952896	3044						link
+crates_integration_contracts_Create2.sol.CreateB.optimized.ll	vec	0.046480847522616386	2960						link
+crates_integration_contracts_Create2.sol.CreateB.optimized.ll	w	0.04466058313846588	2798						link
+crates_integration_contracts_Crypto.sol.TestSha3.optimized.ll	ref	0.044441331177949905	2702	3062	185	1532	2874	2	
+crates_integration_contracts_Crypto.sol.TestSha3.optimized.ll	vec	0.04496322572231293	2608						link
+crates_integration_contracts_Crypto.sol.TestSha3.optimized.ll	w	0.042509302496910095	2510	2346	196	1101	2843	2	
+crates_integration_contracts_CustomErrorArgs.sol.CustomErrorArgs.optimized.ll	ref	0.04757764749228954	2050	2301	282	2422	2894	2	
+crates_integration_contracts_CustomErrorArgs.sol.CustomErrorArgs.optimized.ll	vec	0.040921254083514214	2090	2015	305	2022	2884	2	
+crates_integration_contracts_CustomErrorArgs.sol.CustomErrorArgs.optimized.ll	w	0.03876972571015358	1972	1944	297	3004	2875	2	
+crates_integration_contracts_Delegate.sol.Logic.optimized.ll	ref	0.06154518015682697	4102	5095	578	2313	3105	2	
+crates_integration_contracts_Delegate.sol.Logic.optimized.ll	vec								compile
+crates_integration_contracts_Delegate.sol.Logic.optimized.ll	w	0.04820490442216396	3340	3604	567	6128	3174	2	
+crates_integration_contracts_Delegate.sol.Tester.optimized.ll	ref	0.08339831978082657	8032						link
+crates_integration_contracts_Delegate.sol.Tester.optimized.ll	vec	0.06757370941340923	6354						link
+crates_integration_contracts_Delegate.sol.Tester.optimized.ll	w	0.06592769920825958	5754						link
+crates_integration_contracts_DelegateCaller.sol.DelegateCaller.optimized.ll	ref	0.052060551941394806	2580	3076	293	1352	2875	2	
+crates_integration_contracts_DelegateCaller.sol.DelegateCaller.optimized.ll	vec	0.04709118790924549	2662	2708	317	2443	2885	2	
+crates_integration_contracts_DelegateCaller.sol.DelegateCaller.optimized.ll	w	0.04862438701093197	2552	2660	309	2092	2894	2	
+crates_integration_contracts_DivisionArithmetics.sol.DivisionArithmetics.optimized.ll	ref	0.10182596556842327	9842						link
+crates_integration_contracts_DivisionArithmetics.sol.DivisionArithmetics.optimized.ll	vec	0.04994347505271435	3278	3160	315	1652	2874	2	
+crates_integration_contracts_DivisionArithmetics.sol.DivisionArithmetics.optimized.ll	w	0.055396366864442825	2998	3172	307	2053	2904	2	
+crates_integration_contracts_DivisionArithmeticsConst.sol.DivConst.optimized.ll	ref	0.08485837280750275	6930						link
+crates_integration_contracts_DivisionArithmeticsConst.sol.DivConst.optimized.ll	vec	0.05035425163805485	3394	3270	314	2083	2924	2	
+crates_integration_contracts_DivisionArithmeticsConst.sol.DivConst.optimized.ll	w	0.04801957122981548	3060	3164	306	2033	2834	2	
+crates_integration_contracts_DivisionArithmeticsConst.sol.ModConst.optimized.ll	ref	0.09020984172821045	7770						link
+crates_integration_contracts_DivisionArithmeticsConst.sol.ModConst.optimized.ll	vec	0.05821198783814907	3386	3276	314	2373	3215	2	
+crates_integration_contracts_DivisionArithmeticsConst.sol.ModConst.optimized.ll	w	0.04806732386350632	3082	3150	306	1391	2885	2	
+crates_integration_contracts_DivisionArithmeticsConst.sol.SdivConst.optimized.ll	ref	0.16327703185379505	17878						link
+crates_integration_contracts_DivisionArithmeticsConst.sol.SdivConst.optimized.ll	vec	0.06408203579485416	4984	4951	314	2372	3195	2	
+crates_integration_contracts_DivisionArithmeticsConst.sol.SdivConst.optimized.ll	w	0.061121901497244835	4296	4743	306	2314	2895	2	
+crates_integration_contracts_DivisionArithmeticsConst.sol.SmodConst.optimized.ll	ref	0.16955588944256306	18176						link
+crates_integration_contracts_DivisionArithmeticsConst.sol.SmodConst.optimized.ll	vec	0.06808844022452831	4728	4677	314	3746	2905	2	
+crates_integration_contracts_DivisionArithmeticsConst.sol.SmodConst.optimized.ll	w	0.06438845954835415	4120	4633	306	2033	1932	2	
+crates_integration_contracts_ERC20.sol.ERC20.optimized.ll	ref	0.12734506092965603	15228	20793	917	7922	3884	2	
+crates_integration_contracts_ERC20.sol.ERC20.optimized.ll	vec	0.09207218885421753	10724	10693	961	8984	3995	2	
+crates_integration_contracts_ERC20.sol.ERC20.optimized.ll	w	0.09030440263450146	8640	11164	923	6950	4006	2	
+crates_integration_contracts_ERC20.sol.ERC20Tester.optimized.ll	ref	0.09450607933104038	8918						link
+crates_integration_contracts_ERC20.sol.ERC20Tester.optimized.ll	vec	0.08284402079880238	8810						link
+crates_integration_contracts_ERC20.sol.ERC20Tester.optimized.ll	w	0.076954685151577	7410						link
+crates_integration_contracts_EncodePackedHash.sol.EncodePackedHash.optimized.ll	ref	0.06711786054074764	5636	7495	297	1501	2925	2	
+crates_integration_contracts_EncodePackedHash.sol.EncodePackedHash.optimized.ll	vec	0.05949724465608597	4806	4711	323	3354	2875	2	
+crates_integration_contracts_EncodePackedHash.sol.EncodePackedHash.optimized.ll	w	0.05448179319500923	4338	4600	315	2493	2875	2	
+crates_integration_contracts_Events.sol.Events.optimized.ll	ref	0.03948957845568657	1892	2160	292	2864	2864	2	
+crates_integration_contracts_Events.sol.Events.optimized.ll	vec	0.04603428766131401	1882	1823	316	3174	1923	2	
+crates_integration_contracts_Events.sol.Events.optimized.ll	w	0.03838790953159332	1792	1756	308	2083	2884	2	
+crates_integration_contracts_ExtCode.sol.ExtCode.optimized.ll	ref	0.048215361312031746	3014	3936	292	1863	2914	2	
+crates_integration_contracts_ExtCode.sol.ExtCode.optimized.ll	vec	0.05552707612514496	3060	3051	315	2382	2905	2	
+crates_integration_contracts_ExtCode.sol.ExtCode.optimized.ll	w	0.04569116421043873	2868	3065	307	2333	2864	2	
+crates_integration_contracts_Factorial.sol.Factorial.optimized.ll	ref	0.041834285482764244	2162	2433	288	2393	1933	2	
+crates_integration_contracts_Factorial.sol.Factorial.optimized.ll	vec	0.0511830635368824	2246	2091	313	2353	2895	2	
+crates_integration_contracts_Factorial.sol.Factorial.optimized.ll	w	0.04901503212749958	2176	2051	305	2733	2884	2	
+crates_integration_contracts_Fibonacci.sol.FibonacciBinet.optimized.ll	ref	0.05156945250928402	3606	4505	288	1852	2965	2	
+crates_integration_contracts_Fibonacci.sol.FibonacciBinet.optimized.ll	vec	0.05030837282538414	2776	2790	312	2143	2844	2	
+crates_integration_contracts_Fibonacci.sol.FibonacciBinet.optimized.ll	w	0.04562142863869667	2662	2733	304	2033	2885	2	
+crates_integration_contracts_Fibonacci.sol.FibonacciIterative.optimized.ll	ref	0.047077348455786705	1796	1872	277	2093	2854	2	
+crates_integration_contracts_Fibonacci.sol.FibonacciIterative.optimized.ll	vec	0.03989158198237419	1722	1481	302	3084	2895	2	
+crates_integration_contracts_Fibonacci.sol.FibonacciIterative.optimized.ll	w	0.03872775845229626	1664	1448	294	3415	2874	2	
+crates_integration_contracts_Fibonacci.sol.FibonacciRecursive.optimized.ll	ref	0.05056402087211609	2358	2705	286	2864	2935	2	
+crates_integration_contracts_Fibonacci.sol.FibonacciRecursive.optimized.ll	vec	0.051193250343203545	2294	2188	311	2092	2854	2	
+crates_integration_contracts_Fibonacci.sol.FibonacciRecursive.optimized.ll	w	0.04285436123609543	2204	2137	303	2354	2895	2	
+crates_integration_contracts_FmpCrossObjectBug.sol.FmpCrossObjectBug.optimized.ll	ref	0.04875452257692814	2078	2440	744	5418	4156	2	
+crates_integration_contracts_FmpCrossObjectBug.sol.FmpCrossObjectBug.optimized.ll	vec	0.0502658374607563	2202	2209	768	4897	3735	2	
+crates_integration_contracts_FmpCrossObjectBug.sol.FmpCrossObjectBug.optimized.ll	w	0.04097280092537403	2130	2162	748	4937	3767	2	
+crates_integration_contracts_FmpDynRevertBug.sol.FmpDynRevertBug.optimized.ll	ref	0.04232272692024708	1492	1597	352	2313	3245	2	
+crates_integration_contracts_FmpDynRevertBug.sol.FmpDynRevertBug.optimized.ll	vec	0.03845257684588432	1612	1481	393	1983	3295	2	
+crates_integration_contracts_FmpDynRevertBug.sol.FmpDynRevertBug.optimized.ll	w	0.0450608991086483	1552	1436	377	3094	3275	2	
+crates_integration_contracts_FmpDynStoreBug.sol.FmpDynStoreBug.optimized.ll	ref	0.045323632657527924	1888	2103	683	4527	3195	2	
+crates_integration_contracts_FmpDynStoreBug.sol.FmpDynStoreBug.optimized.ll	vec	0.04806865565478802	2004	1893	703	6730	3565	2	
+crates_integration_contracts_FmpDynStoreBug.sol.FmpDynStoreBug.optimized.ll	w	0.0390973836183548	1950	1857	686	4686	3585	2	
+crates_integration_contracts_FmpNativeStoreBug.sol.FmpNativeStoreBug.optimized.ll	ref	0.04842097498476505	2168	2408	603	3725	3725	2	
+crates_integration_contracts_FmpNativeStoreBug.sol.FmpNativeStoreBug.optimized.ll	vec	0.04941047355532646	2146	2022	601	2894	3706	2	
+crates_integration_contracts_FmpNativeStoreBug.sol.FmpNativeStoreBug.optimized.ll	w	0.04795645549893379	2074	1977	585	4626	3686	2	
+crates_integration_contracts_FmpRangeProofBug.sol.FmpRangeProofBug.optimized.ll	ref	0.04782409407198429	1976	2260	612	4286	3947	2	
+crates_integration_contracts_FmpRangeProofBug.sol.FmpRangeProofBug.optimized.ll	vec	0.04974059388041496	2126	2085	642	4607	3926	2	
+crates_integration_contracts_FmpRangeProofBug.sol.FmpRangeProofBug.optimized.ll	w	0.04009917937219143	2058	2048	624	6110	3926	2	
+crates_integration_contracts_FmpRevertBug.sol.FmpRevertBug.optimized.ll	ref	0.04351950064301491	1408	1295	278	1230	3025	2	
+crates_integration_contracts_FmpRevertBug.sol.FmpRevertBug.optimized.ll	vec	0.03754291124641895	1520	1238	315	3354	3285	2	
+crates_integration_contracts_FmpRevertBug.sol.FmpRevertBug.optimized.ll	w	0.036320772022008896	1476	1200	303	2865	3325	2	
+crates_integration_contracts_FunctionPointer.sol.FunctionPointer.optimized.ll	ref	0.044995011761784554	2586	3254	389	2944	3595	2	
+crates_integration_contracts_FunctionPointer.sol.FunctionPointer.optimized.ll	vec	0.05332374759018421	2670	2678	401	2904	3516	2	
+crates_integration_contracts_FunctionPointer.sol.FunctionPointer.optimized.ll	w	0.04310467094182968	2488	2631	384	4075	3515	2	
+crates_integration_contracts_FunctionType.sol.FunctionType.optimized.ll	ref	0.049898456782102585	2254	2664	576	2764	3084	2	
+crates_integration_contracts_FunctionType.sol.FunctionType.optimized.ll	vec	0.050278715789318085	2402	2415	577	3955	3085	2	
+crates_integration_contracts_FunctionType.sol.FunctionType.optimized.ll	w	0.04955703392624855	2314	2363	567	2514	3485	2	
+crates_integration_contracts_GasLeft.sol.GasLeft.optimized.ll	ref	0.04279366508126259	1350	1212	160	851	3315	2	
+crates_integration_contracts_GasLeft.sol.GasLeft.optimized.ll	vec	0.03720233216881752	1414	1162	163	1471	2994	2	
+crates_integration_contracts_GasLeft.sol.GasLeft.optimized.ll	w	0.03596201352775097	1394	1156	161	1461	3325	2	
+crates_integration_contracts_GasLimit.sol.GasLimit.optimized.ll	ref	0.0353887677192688	1336	1191	157	1292	3295	2	
+crates_integration_contracts_GasLimit.sol.GasLimit.optimized.ll	vec	0.03697948530316353	1400	1141	160	1391	3185	2	
+crates_integration_contracts_GasLimit.sol.GasLimit.optimized.ll	w	0.04251629672944546	1380	1135	158	921	2865	2	
+crates_integration_contracts_GasPrice.sol.GasPrice.optimized.ll	ref	0.041112152859568596	1342	1194	158	1301	2814	2	
+crates_integration_contracts_GasPrice.sol.GasPrice.optimized.ll	vec	0.03720063157379627	1406	1148	161	1391	3165	2	
+crates_integration_contracts_GasPrice.sol.GasPrice.optimized.ll	w	0.04420679993927479	1386	1141	159	920	3185	2	
+crates_integration_contracts_Immutables.sol.Immutables.optimized.ll	ref	0.0700727067887783	4752						link
+crates_integration_contracts_Immutables.sol.Immutables.optimized.ll	vec	0.06651508249342442	4694						link
+crates_integration_contracts_Immutables.sol.Immutables.optimized.ll	w	0.06358412280678749	4262						link
+crates_integration_contracts_Immutables.sol.ImmutablesTester.optimized.ll	ref	0.048730384558439255	2870	3550	304	2193	3014	2	
+crates_integration_contracts_Immutables.sol.ImmutablesTester.optimized.ll	vec	0.052187174558639526	2804	2695	312	2683	3055	2	
+crates_integration_contracts_Immutables.sol.ImmutablesTester.optimized.ll	w	0.04392142407596111	2648	2714	308	2283	2744	2	
+crates_integration_contracts_InternalFn.sol.InternalFn.optimized.ll	ref	0.10626008920371532	11950						link
+crates_integration_contracts_InternalFn.sol.InternalFn.optimized.ll	vec	0.0810165572911501	7996	7461	324	2634	3225	2	
+crates_integration_contracts_InternalFn.sol.InternalFn.optimized.ll	w	0.07667229324579239	6498	7360	316	2894	3195	2	
+crates_integration_contracts_KeccakFuseBug.sol.KeccakFuseBug.optimized.ll	ref	0.05642279051244259	4336	5951	415	2943	3825	2	
+crates_integration_contracts_KeccakFuseBug.sol.KeccakFuseBug.optimized.ll	vec	0.0594986155629158	4078	4441	426	3315	3776	2	
+crates_integration_contracts_KeccakFuseBug.sol.KeccakFuseBug.optimized.ll	w	0.04901152290403843	3712	4212	407	2202	3675	2	
+crates_integration_contracts_LayoutAt.sol.LayoutAt.optimized.ll	ref	0.05059599690139294	2408	2928	423	2874	3505	2	
+crates_integration_contracts_LayoutAt.sol.LayoutAt.optimized.ll	vec	0.05189496651291847	2444	2426	420	4125	3535	2	
+crates_integration_contracts_LayoutAt.sol.LayoutAt.optimized.ll	w	0.04227118939161301	2328	2418	413	4235	3545	2	
+crates_integration_contracts_Library.sol.L.optimized.ll	ref	0.0375971645116806	1724	1876	325	2143	3575	2	
+crates_integration_contracts_Library.sol.L.optimized.ll	vec	0.04847648739814758	1872	1706	339	3124	3164	2	
+crates_integration_contracts_Library.sol.L.optimized.ll	w	0.04699358902871609	1812	1750	340	2703	3454	2	
+crates_integration_contracts_LinkerI32BoundaryFoldBug.sol.LinkerI32BoundaryFoldBug.optimized.ll	ref	0.04831301048398018	3122						link
+crates_integration_contracts_LinkerI32BoundaryFoldBug.sol.LinkerI32BoundaryFoldBug.optimized.ll	vec	0.048125213012099266	1880	1647	302	1342	3194	2	
+crates_integration_contracts_LinkerI32BoundaryFoldBug.sol.LinkerI32BoundaryFoldBug.optimized.ll	w	0.04715684615075588	1812	1602	294	2012	3176	2	
+crates_integration_contracts_MCopy.sol.MCopy.optimized.ll	ref	0.04583831690251827	2880	3452	185	1541	1993	2	
+crates_integration_contracts_MCopy.sol.MCopy.optimized.ll	vec	0.05336345545947552	2810	2706	202	1121	3134	2	
+crates_integration_contracts_MCopy.sol.MCopy.optimized.ll	w	0.051369763910770416	2676	2632	196	1541	2853	2	
+crates_integration_contracts_MCopyOverlap.sol.MCopyOverlap.optimized.ll	ref	0.05315983481705189	2796	3405	294	2273	2903	2	
+crates_integration_contracts_MCopyOverlap.sol.MCopyOverlap.optimized.ll	vec	0.05970853753387928	3268	3407	319	3165	3166	2	
+crates_integration_contracts_MCopyOverlap.sol.MCopyOverlap.optimized.ll	w	0.04287210665643215	2618	2693	311	2373	3204	2	
+crates_integration_contracts_MLoad.sol.MLoad.optimized.ll	ref	0.03956401348114014	1940	2066	322	3735	3064	2	
+crates_integration_contracts_MLoad.sol.MLoad.optimized.ll	vec	0.049385592341423035	2034	1880	294	2933	2743	2	
+crates_integration_contracts_MLoad.sol.MLoad.optimized.ll	w	0.04653729125857353	2000	1867	292	1601	3055	2	
+crates_integration_contracts_MStore8.sol.MStore8.optimized.ll	ref	0.03939680755138397	1984	2200	286	1842	3215	2	
+crates_integration_contracts_MStore8.sol.MStore8.optimized.ll	vec	0.04957807622849941	2126	1985	311	1382	3175	2	
+crates_integration_contracts_MStore8.sol.MStore8.optimized.ll	w	0.046924861147999763	2062	1947	303	2202	3185	2	
+crates_integration_contracts_MemoryBounds.sol.MemoryBounds.optimized.ll	ref	0.06219705007970333	3962	5171	312	2052	3375	2	
+crates_integration_contracts_MemoryBounds.sol.MemoryBounds.optimized.ll	vec	0.05111056938767433	3758	3753	347	2774	3346	2	
+crates_integration_contracts_MemoryBounds.sol.MemoryBounds.optimized.ll	w	0.05631915107369423	3472	3670	335	1601	3305	2	
+crates_integration_contracts_MultiLeaveReturnNarrow.sol.MultiLeaveReturnNarrow.optimized.ll	ref	0.061335284262895584	5214						link
+crates_integration_contracts_MultiLeaveReturnNarrow.sol.MultiLeaveReturnNarrow.optimized.ll	vec	0.04479467496275902	2486						link
+crates_integration_contracts_MultiLeaveReturnNarrow.sol.MultiLeaveReturnNarrow.optimized.ll	w	0.05145638808608055	2428	2333	303	1551	3204	2	
+crates_integration_contracts_PanicCodeBug.sol.PanicCodeBug.optimized.ll	ref	0.03835049271583557	1434	1353	400	3505	3404	2	
+crates_integration_contracts_PanicCodeBug.sol.PanicCodeBug.optimized.ll	vec	0.04596667177975178	1534	1339	452	2913	3354	2	
+crates_integration_contracts_PanicCodeBug.sol.PanicCodeBug.optimized.ll	w	0.036314038559794426	1486	1307	438	2113	3385	2	
+crates_integration_contracts_PanicCodes.sol.PanicCodes.optimized.ll	ref	0.05835023522377014	3420						link
+crates_integration_contracts_PanicCodes.sol.PanicCodes.optimized.ll	vec	0.05604036524891853	3070	3012	322	2533	3224	2	
+crates_integration_contracts_PanicCodes.sol.PanicCodes.optimized.ll	w	0.053716765716671944	2852	2904	314	2112	3185	2	
+crates_integration_contracts_PanicInterveneBug.sol.PanicInterveneBug.optimized.ll	ref	0.04429635591804981	1456	1384	502	1993	3435	2	
+crates_integration_contracts_PanicInterveneBug.sol.PanicInterveneBug.optimized.ll	vec	0.04542780853807926	1554	1349	560	5419	3494	2	
+crates_integration_contracts_PanicInterveneBug.sol.PanicInterveneBug.optimized.ll	w	0.036453431472182274	1502	1317	544	3937	3444	2	
+crates_integration_contracts_ParamMload.sol.ParamMload.optimized.ll	ref	0.04740395210683346	1970	2211	286	1231	1932	2	
+crates_integration_contracts_ParamMload.sol.ParamMload.optimized.ll	vec	0.04753005504608154	2114	1972	311	1592	3184	2	
+crates_integration_contracts_ParamMload.sol.ParamMload.optimized.ll	w	0.039815234020352364	2044	1931	303	2052	3174	2	
+crates_integration_contracts_ReturnDataOob.sol.Callee.optimized.ll	ref	0.054112739861011505	2878	3452	185	1852	3124	2	
+crates_integration_contracts_ReturnDataOob.sol.Callee.optimized.ll	vec	0.0537207406014204	2810	2706	202	1501	3134	2	
+crates_integration_contracts_ReturnDataOob.sol.Callee.optimized.ll	w	0.043568216264247894	2676	2632	196	1632	3125	2	
+crates_integration_contracts_ReturnDataOob.sol.ReturnDataOob.optimized.ll	ref	0.06150764785706997	3856						link
+crates_integration_contracts_ReturnDataOob.sol.ReturnDataOob.optimized.ll	vec	0.05135305039584637	3512						link
+crates_integration_contracts_ReturnDataOob.sol.ReturnDataOob.optimized.ll	w	0.048890016973018646	3298						link
+crates_integration_contracts_RevertDataOob.sol.RevertDataOob.optimized.ll	ref	0.04941909201443195	2102	2694	293	1882	2885	2	
+crates_integration_contracts_RevertDataOob.sol.RevertDataOob.optimized.ll	vec	0.04341556318104267	2196	2191	318	2402	3205	2	
+crates_integration_contracts_RevertDataOob.sol.RevertDataOob.optimized.ll	w	0.048030536621809006	2048	2123	310	2083	2874	2	
+crates_integration_contracts_SAR.sol.SAR.optimized.ll	ref	0.04852074384689331	2100						link
+crates_integration_contracts_SAR.sol.SAR.optimized.ll	vec	0.04923548176884651	2094	1935	421	2233	3044	2	
+crates_integration_contracts_SAR.sol.SAR.optimized.ll	w	0.04812806658446789	2028	1895	415	2184	2754	2	
+crates_integration_contracts_SDivNarrowBug.sol.SDivNarrowBug.optimized.ll	ref	0.04642590135335922	2934						link
+crates_integration_contracts_SDivNarrowBug.sol.SDivNarrowBug.optimized.ll	vec	0.04283135198056698	1778	1596	302	1532	3204	2	
+crates_integration_contracts_SDivNarrowBug.sol.SDivNarrowBug.optimized.ll	w	0.03827768191695213	1710	1556	294	1983	3165	2	
+crates_integration_contracts_SHA1.sol.SHA1.optimized.ll	ref								compile
+crates_integration_contracts_SHA1.sol.SHA1.optimized.ll	vec	0.06611085683107376	4836	4487	319	1632	3225	2	
+crates_integration_contracts_SHA1.sol.SHA1.optimized.ll	w	0.06767595000565052	4400	4435	311	1643	3215	2	
+crates_integration_contracts_Selfdestruct.sol.Selfdestruct.optimized.ll	ref	0.06018865667283535	3916						link
+crates_integration_contracts_Selfdestruct.sol.Selfdestruct.optimized.ll	vec	0.05017492547631264	3786						link
+crates_integration_contracts_Selfdestruct.sol.Selfdestruct.optimized.ll	w	0.05599648877978325	3506						link
+crates_integration_contracts_Selfdestruct.sol.SelfdestructTester.optimized.ll	ref	0.04312175326049328	1324	1254	172	1882	3234	2	
+crates_integration_contracts_Selfdestruct.sol.SelfdestructTester.optimized.ll	vec	0.03659854456782341	1416	1211	188	1603	3274	2	
+crates_integration_contracts_Selfdestruct.sol.SelfdestructTester.optimized.ll	w	0.03823726065456867	1388	1190	182	2202	2954	2	
+crates_integration_contracts_Send.sol.Send.optimized.ll	ref	0.047351399436593056	1766	1904	250	2132	3075	2	
+crates_integration_contracts_Send.sol.Send.optimized.ll	vec	0.04892302490770817	1848	1695	259	1992	3074	2	
+crates_integration_contracts_Send.sol.Send.optimized.ll	w	0.04698517173528671	1780	1644	255	2234	3105	2	
+crates_integration_contracts_Storage.sol.Storage.optimized.ll	ref	0.05397733673453331	2740	3501	291	2132	3236	2	
+crates_integration_contracts_Storage.sol.Storage.optimized.ll	vec	0.04603913053870201	2768	2955	316	2213	3154	2	
+crates_integration_contracts_Storage.sol.Storage.optimized.ll	w	0.046623772010207176	2574	2854	308	2403	2904	2	
+crates_integration_contracts_StructDeleteStorage.sol.StructDeleteStorage.optimized.ll	ref	0.04398563876748085	1632	1703	277	2052	3205	2	
+crates_integration_contracts_StructDeleteStorage.sol.StructDeleteStorage.optimized.ll	vec	0.047347523272037506	1742	1602	302	2002	3195	2	
+crates_integration_contracts_StructDeleteStorage.sol.StructDeleteStorage.optimized.ll	w	0.04589657485485077	1674	1548	294	3164	3225	2	
+crates_integration_contracts_SubTypeValidation.sol.SubTypeValidation.optimized.ll	ref	0.051123008131980896	2284	2614	286	2784	3244	2	
+crates_integration_contracts_SubTypeValidation.sol.SubTypeValidation.optimized.ll	vec	0.05181622505187988	2360	2294	311	2353	2895	2	
+crates_integration_contracts_SubTypeValidation.sol.SubTypeValidation.optimized.ll	w	0.05002702958881855	2248	2224	303	2923	3185	2	
+crates_integration_contracts_SubUnderflowZext.sol.SubUnderflowZext.optimized.ll	ref	0.044955961406230927	1548	1519	278	2382	3214	2	
+crates_integration_contracts_SubUnderflowZext.sol.SubUnderflowZext.optimized.ll	vec	0.03936886414885521	1724	1471	302	2303	3214	2	
+crates_integration_contracts_SubUnderflowZext.sol.SubUnderflowZext.optimized.ll	w	0.03730385564267635	1660	1431	294	2264	3225	2	
+crates_integration_contracts_Transaction.sol.TransactionOrigin.optimized.ll	ref	0.04644872061908245	1704	1750	278	1252	3255	2	
+crates_integration_contracts_Transaction.sol.TransactionOrigin.optimized.ll	vec	0.04744256101548672	1966	1627	303	1521	3154	2	
+crates_integration_contracts_Transaction.sol.TransactionOrigin.optimized.ll	w	0.03835417702794075	1906	1599	295	1492	3215	2	
+crates_integration_contracts_Transaction.sol.TransactionTester.optimized.ll	ref	0.04705658182501793	2918						link
+crates_integration_contracts_Transaction.sol.TransactionTester.optimized.ll	vec	0.05625705420970917	3108						link
+crates_integration_contracts_Transaction.sol.TransactionTester.optimized.ll	w	0.054082879796624184	2988						link
+crates_integration_contracts_Transfer.sol.Transfer.optimized.ll	ref	0.043173814192414284	2310	2821	279	2363	3084	2	
+crates_integration_contracts_Transfer.sol.Transfer.optimized.ll	vec	0.044217852875590324	2418	2487	288	2052	3114	2	
+crates_integration_contracts_Transfer.sol.Transfer.optimized.ll	w	0.049971723929047585	2334	2437	284	1411	3074	2	
+crates_integration_contracts_TryCatchCatchReturn.sol.TryCatchCatchReturn.optimized.ll	ref	0.0435823667794466	2506	3055	293	2142	3255	2	
+crates_integration_contracts_TryCatchCatchReturn.sol.TryCatchCatchReturn.optimized.ll	vec	0.04435179941356182	2558	2617	317	2133	3214	2	
+crates_integration_contracts_TryCatchCatchReturn.sol.TryCatchCatchReturn.optimized.ll	w	0.042803769931197166	2444	2569	309	3204	3175	2	
+crates_integration_contracts_Uint128Arithmetic.sol.Uint128Arithmetic.optimized.ll	ref	0.06229374557733536	4754						link
+crates_integration_contracts_Uint128Arithmetic.sol.Uint128Arithmetic.optimized.ll	vec	0.05557346157729626	4090	4979	322	2884	1923	2	
+crates_integration_contracts_Uint128Arithmetic.sol.Uint128Arithmetic.optimized.ll	w	0.0601492952555418	3730	4823	313	2123	2864	2	
+crates_integration_contracts_UlongRem.sol.UlongRem.optimized.ll	ref								compile
+crates_integration_contracts_UlongRem.sol.UlongRem.optimized.ll	vec	0.03989646956324577	1826	1616	302	1602	3114	2	
+crates_integration_contracts_UlongRem.sol.UlongRem.optimized.ll	w	0.04652169533073902	1748	1568	294	2394	2874	2	
+crates_integration_contracts_UlongRem.sol.UlongRemTester.optimized.ll	ref	0.04852379485964775	2794						link
+crates_integration_contracts_UlongRem.sol.UlongRemTester.optimized.ll	vec	0.05455487035214901	2850						link
+crates_integration_contracts_UlongRem.sol.UlongRemTester.optimized.ll	w	0.04642178490757942	2720						link
+crates_integration_contracts_UnalignedMStore8Bug.sol.UnalignedMStore8Bug.optimized.ll	ref	0.03998737595975399	1998	2224	286	1502	3315	2	
+crates_integration_contracts_UnalignedMStore8Bug.sol.UnalignedMStore8Bug.optimized.ll	vec	0.04455667920410633	2130	2018	311	2333	3175	2	
+crates_integration_contracts_UnalignedMStore8Bug.sol.UnalignedMStore8Bug.optimized.ll	w	0.04822481982409954	2066	1976	303	1541	3225	2	
+crates_integration_contracts_UnalignedMStoreBug.sol.UnalignedMStoreBug.optimized.ll	ref	0.046330804005265236	1928	2059	179	1001	3174	2	
+crates_integration_contracts_UnalignedMStoreBug.sol.UnalignedMStoreBug.optimized.ll	vec	0.041393740102648735	2050	1940	198	1491	3154	2	
+crates_integration_contracts_UnalignedMStoreBug.sol.UnalignedMStoreBug.optimized.ll	w	0.04829739220440388	1998	1906	192	1612	3165	2	
+crates_integration_contracts_UnalignedMloadNativeBug.sol.UnalignedMload.optimized.ll	ref	0.041738446801900864	1912	2030	179	1021	2885	2	
+crates_integration_contracts_UnalignedMloadNativeBug.sol.UnalignedMload.optimized.ll	vec	0.04227549210190773	2024	1886	198	1491	3145	2	
+crates_integration_contracts_UnalignedMloadNativeBug.sol.UnalignedMload.optimized.ll	w	0.04117949120700359	1976	1852	192	981	2824	2	
+crates_integration_contracts_Value.sol.Value.optimized.ll	ref	0.050992466509342194	3140						link
+crates_integration_contracts_Value.sol.Value.optimized.ll	vec	0.05663539096713066	3288						link
+crates_integration_contracts_Value.sol.Value.optimized.ll	w	0.04863547906279564	3096						link
+crates_integration_contracts_Value.sol.ValueTester.optimized.ll	ref	0.03893856890499592	1456	1418	262	1481	3044	2	
+crates_integration_contracts_Value.sol.ValueTester.optimized.ll	vec	0.03831967152655125	1562	1357	271	1162	3085	2	
+crates_integration_contracts_Value.sol.ValueTester.optimized.ll	w	0.037231726571917534	1524	1336	267	2012	3075	2	
+crates_integration_contracts_flipper.sol.Flipper.optimized.ll	ref	0.0432861652225256	2324	2833	210	1051	3165	2	
+crates_integration_contracts_flipper.sol.Flipper.optimized.ll	vec	0.04692102409899235	2456						link
+crates_integration_contracts_flipper.sol.Flipper.optimized.ll	w	0.05084403231739998	2342	2321	216	2153	1893	2	

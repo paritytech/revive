@@ -420,6 +420,8 @@ Every non-superlinear class is now `≤ N × 64-bit` (4), and each is ≤ its me
 
 After the recalibration the residual is **convert-dominated** (`wzext`/`wtrunc`, +2,814) — this deploy-path corpus promotes narrow constants to i256 and truncates back, extra ops with no scalar counterpart, correctly priced at 2 each and removable only by narrowing (§9), not cost-tuning. Memory drops to +2,540 (now ~neutral per op) and linear to +300. So the earlier "converts" intuition was right about the *residual* — it just took removing the memory/linear miscalibration to expose it. **On real contracts converts are ~0 and memory is neutral, so `ext` gas is now 0.993× ref** (§12).
 
+**Full per-benchmark re-run (all 64 modules, recalibrated).** vec/ref **1.071×**, w/ref **1.043×**; 61 of 64 above ref, 3 below (`MLoad` 0.91×, `LayoutAt` 0.99×, `FmpNativeStoreBug` 1.00×), worst `CallGas` 1.37× (a deploy path that stores many small values through 256-bit slots — convert+memory heavy, no arithmetic to offset). The spread is entirely the per-contract mix of convert/memory overhead vs offsetting wide arithmetic; per-benchmark table in `gas-vs-ref-toycorpus.txt`.
+
 ## 7. Wide-instruction usage and width
 
 **12,678 wide instructions** over 98 modules. Width is **99.9% i256** (4,842 `i256` / 4 `i512` in linked blobs; no i128/i1024).

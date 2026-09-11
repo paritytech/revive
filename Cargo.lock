@@ -540,26 +540,26 @@ dependencies = [
 
 [[package]]
 name = "ark-bls12-377"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfedac3173d12820a5e0d6cd4de31b49719a74f4a41dc09b6652d0276a3b2cd4"
+checksum = "c26d3bddbe5a0adf5bc717f5e146b977dcd686440d9e71827171b61bfbcebad6"
 dependencies = [
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-std 0.5.0",
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
+ "ark-std 0.6.0",
 ]
 
 [[package]]
 name = "ark-bls12-377-ext"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07208c7ea9e7abfe8fb01e190eba611f6e7c3cdbdef4a5473c9297d396495d1b"
+checksum = "1437e528ba6f25b7e5cda9d179acae9e29af3c30b2ed106d5e0dca881557226b"
 dependencies = [
- "ark-bls12-377 0.5.0",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
+ "ark-bls12-377 0.6.0",
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
  "ark-models-ext",
- "ark-std 0.5.0",
+ "ark-std 0.6.0",
 ]
 
 [[package]]
@@ -600,16 +600,16 @@ dependencies = [
 
 [[package]]
 name = "ark-bls12-381-ext"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a83d59f25570c846b9cfc430539a150e9634c9db6949f87b12f3cbc53149b17"
+checksum = "54d637e6e5fdaf847b7e7ba5064d3986e2d2a2aab6d2b9ea38d6ffd8c901f375"
 dependencies = [
- "ark-bls12-381 0.5.0",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
+ "ark-bls12-381 0.6.0",
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
  "ark-models-ext",
- "ark-serialize 0.5.0",
- "ark-std 0.5.0",
+ "ark-serialize 0.6.0",
+ "ark-std 0.6.0",
 ]
 
 [[package]]
@@ -626,27 +626,27 @@ dependencies = [
 
 [[package]]
 name = "ark-bw6-761"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cc9cae367e0c3c0b52e3ef13371122752654f45d0212ec7306fb0c1c012cd98"
+checksum = "d3626eb530f3748f33942e1ee171c568674a077d6451e75403203731109a6734"
 dependencies = [
- "ark-bls12-377 0.5.0",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-std 0.5.0",
+ "ark-bls12-377 0.6.0",
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
+ "ark-std 0.6.0",
 ]
 
 [[package]]
 name = "ark-bw6-761-ext"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60f7fc87dfb5699c1c5a12e8d4f13564c174a5224b5702002587ca67205a9ca7"
+checksum = "6638915f36ace44c16b6b79be31563938efaa6ff56a1313f3e3f6f447f0b820e"
 dependencies = [
  "ark-bw6-761",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
  "ark-models-ext",
- "ark-std 0.5.0",
+ "ark-std 0.6.0",
 ]
 
 [[package]]
@@ -706,32 +706,33 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
+ "rayon",
  "zeroize",
 ]
 
 [[package]]
 name = "ark-ed-on-bls12-377"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebbf817b2db27d2787009b2ff76304a5b90b4b01bb16aa8351701fd40f5f37b2"
+checksum = "59995f58f2e5dca97286f3c43f0fa1cd1bbfc5dae7ee13b85391a4600c918ab1"
 dependencies = [
- "ark-bls12-377 0.5.0",
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-std 0.5.0",
+ "ark-bls12-377 0.6.0",
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
+ "ark-std 0.6.0",
 ]
 
 [[package]]
 name = "ark-ed-on-bls12-377-ext"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "93170025f4679342661d00f27c9a1586ccf053d29ad78b072d5be11649cae02c"
+checksum = "f8592ac28a1eb7ee1ba53183ecc29e0053f6c212c0f9ff8d41bb334e4b2b3150"
 dependencies = [
- "ark-ec 0.5.0",
+ "ark-ec 0.6.0",
  "ark-ed-on-bls12-377",
- "ark-ff 0.5.0",
+ "ark-ff 0.6.0",
  "ark-models-ext",
- "ark-std 0.5.0",
+ "ark-std 0.6.0",
 ]
 
 [[package]]
@@ -760,15 +761,15 @@ dependencies = [
 
 [[package]]
 name = "ark-ed-on-bls12-381-bandersnatch-ext"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee7e1fb880811e22d4fc8ffe83eaa260e39a4deb0f345dcc8ffb663d3e034e7a"
+checksum = "98a2b67897cc7b0a1a480619ac5cbed851486541eed57b20706a54cf9c5ff759"
 dependencies = [
- "ark-ec 0.5.0",
- "ark-ed-on-bls12-381-bandersnatch 0.5.0",
- "ark-ff 0.5.0",
+ "ark-ec 0.6.0",
+ "ark-ed-on-bls12-381-bandersnatch 0.6.0",
+ "ark-ff 0.6.0",
  "ark-models-ext",
- "ark-std 0.5.0",
+ "ark-std 0.6.0",
 ]
 
 [[package]]
@@ -940,40 +941,40 @@ dependencies = [
 
 [[package]]
 name = "ark-models-ext"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6294fd6ddc4996910adf2a9d3b56e3aa6a1f605ea315952169d2ddebc304dc4c"
+checksum = "4aabf979cc6d6605f515f10411958d534fe33e0ae20741490e3e869805a87351"
 dependencies = [
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-serialize 0.5.0",
- "ark-std 0.5.0",
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
+ "ark-serialize 0.6.0",
+ "ark-std 0.6.0",
  "derivative",
 ]
 
 [[package]]
 name = "ark-pallas"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c676d42c65f0b2d334fc0ae72a422de2e62ed75beb3022050c0e8a81f6ccc0f"
+checksum = "f26dbfc18163d3313389ce5d515aa675bb694b8ef64744006c5a2c88439c7133"
 dependencies = [
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
- "ark-std 0.5.0",
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
+ "ark-std 0.6.0",
 ]
 
 [[package]]
 name = "ark-pallas-ext"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6906648fb42b7c83fc40ea43b12fbf75b704532057d71a467a25ec4afc239b6"
+checksum = "859d5ce24266ec2113513c59fe2c4a1696b7fa1636c07dfedfcd8f08f43118f3"
 dependencies = [
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
  "ark-models-ext",
  "ark-pallas",
- "ark-serialize 0.5.0",
- "ark-std 0.5.0",
+ "ark-serialize 0.6.0",
+ "ark-std 0.6.0",
 ]
 
 [[package]]
@@ -1055,10 +1056,22 @@ version = "0.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985c81a9c7b23a72f62b7b20686d5326d2a9956806f37de9ee35cb1238faf0c0"
 dependencies = [
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
  "ark-serialize 0.5.0",
  "ark-std 0.5.0",
+ "parity-scale-codec",
+ "scale-info",
+]
+
+[[package]]
+name = "ark-scale"
+version = "0.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7080e0b73651b75236e0b9af7c6a68cd38e87d02553e39c0cbf525b704c780a9"
+dependencies = [
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
+ "ark-serialize 0.6.0",
+ "ark-std 0.6.0",
  "parity-scale-codec",
  "scale-info",
 ]
@@ -1109,6 +1122,7 @@ dependencies = [
  "ark-std 0.6.0",
  "digest 0.10.7",
  "num-bigint",
+ "rayon",
  "serde_with",
 ]
 
@@ -1184,6 +1198,7 @@ checksum = "367c9c827ed431bff6868b7aa926e05b16eb46603cc8b6e768e4a5553fa1d155"
 dependencies = [
  "num-traits",
  "rand 0.8.8",
+ "rayon",
 ]
 
 [[package]]
@@ -1215,27 +1230,27 @@ dependencies = [
 
 [[package]]
 name = "ark-vesta"
-version = "0.5.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3a6d658e5e7380af710828550b2dc2c7b033c9f3103d2690711cb07d5a62df6"
+checksum = "64149c07e3d07ee2263e831cf747ecf77c58d90a9cfa2813fc45c39dc5c92964"
 dependencies = [
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
  "ark-pallas",
- "ark-std 0.5.0",
+ "ark-std 0.6.0",
 ]
 
 [[package]]
 name = "ark-vesta-ext"
-version = "0.5.2"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27dfabb2b731180273184366ebf57b1793600889e9c7b548916433dd19fb8932"
+checksum = "4593f07a929a229bcd3381b490e8bd1354f01992658d6c312f346b5aad0061f4"
 dependencies = [
- "ark-ec 0.5.0",
- "ark-ff 0.5.0",
+ "ark-ec 0.6.0",
+ "ark-ff 0.6.0",
  "ark-models-ext",
- "ark-serialize 0.5.0",
- "ark-std 0.5.0",
+ "ark-serialize 0.6.0",
+ "ark-std 0.6.0",
  "ark-vesta",
 ]
 
@@ -1410,7 +1425,7 @@ checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
 [[package]]
 name = "asset-test-utils"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "assets-common",
  "cumulus-pallet-parachain-system",
@@ -1441,7 +1456,7 @@ dependencies = [
 [[package]]
 name = "assets-common"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-primitives-core",
  "ethereum-standards",
@@ -1759,7 +1774,7 @@ checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 [[package]]
 name = "binary-merkle-tree"
 version = "13.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "hash-db",
  "log",
@@ -2003,7 +2018,7 @@ dependencies = [
 [[package]]
 name = "bp-header-chain"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-runtime",
  "finality-grandpa",
@@ -2020,7 +2035,7 @@ dependencies = [
 [[package]]
 name = "bp-messages"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-header-chain",
  "bp-runtime",
@@ -2036,7 +2051,7 @@ dependencies = [
 [[package]]
 name = "bp-parachains"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-header-chain",
  "bp-polkadot-core",
@@ -2053,7 +2068,7 @@ dependencies = [
 [[package]]
 name = "bp-polkadot-core"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-messages",
  "bp-runtime",
@@ -2070,7 +2085,7 @@ dependencies = [
 [[package]]
 name = "bp-relayers"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-header-chain",
  "bp-messages",
@@ -2088,7 +2103,7 @@ dependencies = [
 [[package]]
 name = "bp-runtime"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -2111,7 +2126,7 @@ dependencies = [
 [[package]]
 name = "bp-test-utils"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-header-chain",
  "bp-parachains",
@@ -2131,7 +2146,7 @@ dependencies = [
 [[package]]
 name = "bp-xcm-bridge-hub"
 version = "0.2.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-messages",
  "bp-runtime",
@@ -2148,7 +2163,7 @@ dependencies = [
 [[package]]
 name = "bp-xcm-bridge-hub-router"
 version = "0.6.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -2160,7 +2175,7 @@ dependencies = [
 [[package]]
 name = "bridge-hub-common"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-primitives-core",
  "frame-support",
@@ -2179,7 +2194,7 @@ dependencies = [
 [[package]]
 name = "bridge-hub-test-utils"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "asset-test-utils",
  "bp-header-chain",
@@ -2221,7 +2236,7 @@ dependencies = [
 [[package]]
 name = "bridge-runtime-common"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-header-chain",
  "bp-messages",
@@ -3067,7 +3082,7 @@ dependencies = [
 [[package]]
 name = "cumulus-pallet-aura-ext"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-pallet-parachain-system",
  "cumulus-primitives-core",
@@ -3084,26 +3099,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "cumulus-pallet-dmp-queue"
-version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
-dependencies = [
- "cumulus-primitives-core",
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "log",
- "parity-scale-codec",
- "scale-info",
- "sp-io",
- "sp-runtime",
- "staging-xcm",
-]
-
-[[package]]
 name = "cumulus-pallet-parachain-system"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "array-bytes",
  "bytes",
@@ -3129,7 +3127,7 @@ dependencies = [
  "sp-api",
  "sp-consensus-babe",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-externalities",
  "sp-inherents",
  "sp-io",
@@ -3146,7 +3144,7 @@ dependencies = [
 [[package]]
 name = "cumulus-pallet-parachain-system-proc-macro"
 version = "0.6.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -3157,7 +3155,7 @@ dependencies = [
 [[package]]
 name = "cumulus-pallet-session-benchmarking"
 version = "9.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -3170,7 +3168,7 @@ dependencies = [
 [[package]]
 name = "cumulus-pallet-solo-to-para"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-pallet-parachain-system",
  "frame-support",
@@ -3185,7 +3183,7 @@ dependencies = [
 [[package]]
 name = "cumulus-pallet-weight-reclaim"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-primitives-storage-weight-reclaim",
  "derive-where",
@@ -3204,7 +3202,7 @@ dependencies = [
 [[package]]
 name = "cumulus-pallet-xcm"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-primitives-core",
  "frame-support",
@@ -3219,7 +3217,7 @@ dependencies = [
 [[package]]
 name = "cumulus-pallet-xcmp-queue"
 version = "0.7.1"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "approx",
  "bitflags 1.3.2",
@@ -3246,7 +3244,7 @@ dependencies = [
 [[package]]
 name = "cumulus-ping"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-pallet-xcm",
  "cumulus-primitives-core",
@@ -3261,7 +3259,7 @@ dependencies = [
 [[package]]
 name = "cumulus-primitives-aura"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "sp-api",
  "sp-consensus-aura",
@@ -3270,7 +3268,7 @@ dependencies = [
 [[package]]
 name = "cumulus-primitives-core"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "polkadot-core-primitives",
@@ -3287,7 +3285,7 @@ dependencies = [
 [[package]]
 name = "cumulus-primitives-parachain-inherent"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "async-trait",
  "cumulus-primitives-core",
@@ -3301,7 +3299,7 @@ dependencies = [
 [[package]]
 name = "cumulus-primitives-proof-size-hostfunction"
 version = "0.2.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "sp-externalities",
  "sp-runtime-interface",
@@ -3311,7 +3309,7 @@ dependencies = [
 [[package]]
 name = "cumulus-primitives-storage-weight-reclaim"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-primitives-core",
  "cumulus-primitives-proof-size-hostfunction",
@@ -3328,7 +3326,7 @@ dependencies = [
 [[package]]
 name = "cumulus-primitives-timestamp"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-primitives-core",
  "sp-inherents",
@@ -3338,7 +3336,7 @@ dependencies = [
 [[package]]
 name = "cumulus-primitives-utility"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-primitives-core",
  "frame-support",
@@ -3355,7 +3353,7 @@ dependencies = [
 [[package]]
 name = "cumulus-test-relay-sproof-builder"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-primitives-core",
  "parity-scale-codec",
@@ -3735,9 +3733,9 @@ dependencies = [
 
 [[package]]
 name = "dimpl"
-version = "0.5.0"
+version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ffb781459bc33976be951aa31815deadcd74fb63781da5a4dc48f7001e567d3"
+checksum = "7fa936d6931067b24f3467ae6d1747a7985b5713aec477aacea2d1d8995234e8"
 dependencies = [
  "arrayvec 0.7.8",
  "log",
@@ -3984,7 +3982,7 @@ checksum = "edd0f118536f44f5ccd48bcb8b111bdc3de888b58c74639dfb034a357d0f206d"
 [[package]]
 name = "emulated-integration-tests-common"
 version = "3.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "asset-test-utils",
  "bp-messages",
@@ -4170,7 +4168,7 @@ dependencies = [
 [[package]]
 name = "ethereum-standards"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "alloy-core",
 ]
@@ -4416,7 +4414,7 @@ checksum = "00b0228411908ca8685dba7fc2cdd70ec9990a6e753e89b6ac91a84c40fbaf4b"
 [[package]]
 name = "fork-tree"
 version = "12.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
 ]
@@ -4433,7 +4431,7 @@ dependencies = [
 [[package]]
 name = "fp-coretime"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -4453,7 +4451,7 @@ dependencies = [
 [[package]]
 name = "frame-benchmarking"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "anyhow",
  "frame-support",
@@ -4478,7 +4476,7 @@ dependencies = [
 [[package]]
 name = "frame-benchmarking-pallet-pov"
 version = "18.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -4510,7 +4508,7 @@ dependencies = [
 [[package]]
 name = "frame-election-provider-solution-type"
 version = "13.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -4521,7 +4519,7 @@ dependencies = [
 [[package]]
 name = "frame-election-provider-support"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-election-provider-solution-type",
  "frame-support",
@@ -4538,7 +4536,7 @@ dependencies = [
 [[package]]
 name = "frame-executive"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "aquamarine",
  "frame-support",
@@ -4568,7 +4566,7 @@ dependencies = [
 [[package]]
 name = "frame-metadata-hash-extension"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "array-bytes",
  "const-hex",
@@ -4584,7 +4582,7 @@ dependencies = [
 [[package]]
 name = "frame-support"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "aquamarine",
  "array-bytes",
@@ -4626,7 +4624,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural"
 version = "23.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "Inflector",
  "cfg-expr",
@@ -4639,14 +4637,14 @@ dependencies = [
  "proc-macro-warning",
  "proc-macro2",
  "quote",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "syn 2.0.119",
 ]
 
 [[package]]
 name = "frame-support-procedural-tools"
 version = "10.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support-procedural-tools-derive",
  "proc-macro-crate",
@@ -4658,7 +4656,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural-tools-derive"
 version = "11.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4668,7 +4666,7 @@ dependencies = [
 [[package]]
 name = "frame-system"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cfg-if",
  "docify",
@@ -4687,7 +4685,7 @@ dependencies = [
 [[package]]
 name = "frame-system-benchmarking"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -4701,7 +4699,7 @@ dependencies = [
 [[package]]
 name = "frame-system-rpc-runtime-api"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "parity-scale-codec",
@@ -4711,7 +4709,7 @@ dependencies = [
 [[package]]
 name = "frame-try-runtime"
 version = "0.34.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "parity-scale-codec",
@@ -5226,6 +5224,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fe2267d4ed49bc07b63801559be28c718ea06c4738b7a03c94df7386d2cde46"
 
 [[package]]
+name = "hickory-net"
+version = "0.26.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "084e7bd6a377435d568f652153e571b50970d7ccc1d1eeec0519f834632287e1"
+dependencies = [
+ "async-trait",
+ "cfg-if",
+ "data-encoding",
+ "futures-channel",
+ "futures-io",
+ "futures-util",
+ "hickory-proto 0.26.2",
+ "idna",
+ "ipnet",
+ "jni 0.22.4",
+ "rand 0.10.2",
+ "thiserror 2.0.20",
+ "tinyvec",
+ "tokio",
+ "tracing",
+ "url",
+]
+
+[[package]]
 name = "hickory-proto"
 version = "0.24.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5252,25 +5274,20 @@ dependencies = [
 
 [[package]]
 name = "hickory-proto"
-version = "0.25.2"
+version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8a6fe56c0038198998a6f217ca4e7ef3a5e51f46163bd6dd60b5c71ca6c6502"
+checksum = "7e2da0694c15b44c6f68a6b05e0233617008c54080e31d6eb848d858a9c5b38d"
 dependencies = [
- "async-trait",
- "cfg-if",
  "data-encoding",
- "enum-as-inner",
- "futures-channel",
- "futures-io",
- "futures-util",
  "idna",
  "ipnet",
+ "jni 0.22.4",
  "once_cell",
- "rand 0.9.5",
+ "prefix-trie",
+ "rand 0.10.2",
  "ring 0.17.14",
  "thiserror 2.0.20",
  "tinyvec",
- "tokio",
  "tracing",
  "url",
 ]
@@ -5298,20 +5315,25 @@ dependencies = [
 
 [[package]]
 name = "hickory-resolver"
-version = "0.25.2"
+version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc62a9a99b0bfb44d2ab95a7208ac952d31060efc16241c87eaf36406fecf87a"
+checksum = "0e4f9f4603319422d482738f3f6fe5aac03157fdbfed1cd85a3ff45adb09072f"
 dependencies = [
  "cfg-if",
  "futures-util",
- "hickory-proto 0.25.2",
+ "hickory-net",
+ "hickory-proto 0.26.2",
  "ipconfig",
+ "ipnet",
+ "jni 0.22.4",
  "moka",
+ "ndk-context",
  "once_cell",
  "parking_lot 0.12.5",
- "rand 0.9.5",
+ "rand 0.10.2",
  "resolv-conf",
  "smallvec",
+ "system-configuration",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -5910,12 +5932,15 @@ name = "ipnet"
 version = "2.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a756c3fac73139e83f14c2d742155dd2b78d3ee56597b419a0579b7bdd6dd78"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "is"
-version = "0.8.1"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3b80bc4cf63564aa2f64c0bb16e03ddd67d7325007aa90d96520bd1eefc8dab"
+checksum = "d08f9118d003d441f79c1070e84d0a2a89f35721ca8ae0cd5e1f9026dc4a2517"
 dependencies = [
  "crc",
  "serde",
@@ -6096,6 +6121,36 @@ dependencies = [
  "thiserror 1.0.69",
  "walkdir",
  "windows-sys 0.45.0",
+]
+
+[[package]]
+name = "jni"
+version = "0.22.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5efd9a482cf3a427f00d6b35f14332adc7902ce91efb778580e180ff90fa3498"
+dependencies = [
+ "cfg-if",
+ "combine",
+ "jni-macros",
+ "jni-sys 0.4.1",
+ "log",
+ "simd_cesu8",
+ "thiserror 2.0.20",
+ "walkdir",
+ "windows-link",
+]
+
+[[package]]
+name = "jni-macros"
+version = "0.22.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a00109accc170f0bdb141fed3e393c565b6f5e072365c3bd58f5b062591560a3"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "rustc_version 0.4.1",
+ "simd_cesu8",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -6899,9 +6954,9 @@ checksum = "47d9d19d1d6efa0109d2f65ff4c85cddd50bd572e5a00127ab10987290bcefae"
 
 [[package]]
 name = "litep2p"
-version = "0.14.3"
+version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67508e7500fe69a99a038d2fba84fb30f23cac9d98bfeb7f5a1389ddd137b579"
+checksum = "9b43bcd3f698c589f30fb44db886f48c1b5d96c6a6f8ee5c41cdb21d24da2869"
 dependencies = [
  "async-trait",
  "bs58",
@@ -6911,12 +6966,13 @@ dependencies = [
  "enum-display",
  "futures",
  "futures-timer",
- "hickory-resolver 0.25.2",
+ "hickory-resolver 0.26.2",
  "indexmap 2.14.0",
  "ip_network",
  "libc",
  "mockall",
  "multiaddr",
+ "multibase",
  "multihash",
  "multihash-codetable",
  "network-interface",
@@ -6924,6 +6980,7 @@ dependencies = [
  "pin-project",
  "prost 0.13.5",
  "prost-build 0.14.4",
+ "quinn-udp 0.6.2",
  "rand 0.8.8",
  "ring 0.17.14",
  "serde",
@@ -7325,9 +7382,11 @@ version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60384411b100398c5b2fdca476eed82e9898d09f2c60d1b1b66c5080ebe06118"
 dependencies = [
+ "blake2b_simd",
  "digest 0.11.3",
  "multihash-derive",
  "sha2 0.11.0",
+ "sha3 0.11.0",
 ]
 
 [[package]]
@@ -7404,6 +7463,12 @@ dependencies = [
  "security-framework-sys",
  "tempfile",
 ]
+
+[[package]]
+name = "ndk-context"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "27b02d87554356db9e9a873add8782d4ea6e3e58ea071a9adb9a2e8ddb884a8b"
 
 [[package]]
 name = "netlink-packet-core"
@@ -7849,7 +7914,7 @@ dependencies = [
 [[package]]
 name = "pallet-accumulate-and-forward"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -7863,7 +7928,7 @@ dependencies = [
 [[package]]
 name = "pallet-alliance"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -7874,7 +7939,7 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-io",
  "sp-runtime",
 ]
@@ -7882,7 +7947,7 @@ dependencies = [
 [[package]]
 name = "pallet-asset-conversion"
 version = "10.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -7900,7 +7965,7 @@ dependencies = [
 [[package]]
 name = "pallet-asset-conversion-ops"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -7918,7 +7983,7 @@ dependencies = [
 [[package]]
 name = "pallet-asset-conversion-precompiles"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -7933,7 +7998,7 @@ dependencies = [
 [[package]]
 name = "pallet-asset-conversion-tx-payment"
 version = "10.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -7948,7 +8013,7 @@ dependencies = [
 [[package]]
 name = "pallet-asset-rate"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -7962,7 +8027,7 @@ dependencies = [
 [[package]]
 name = "pallet-asset-rewards"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -7980,7 +8045,7 @@ dependencies = [
 [[package]]
 name = "pallet-asset-tx-payment"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -7996,7 +8061,7 @@ dependencies = [
 [[package]]
 name = "pallet-assets"
 version = "29.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8012,7 +8077,7 @@ dependencies = [
 [[package]]
 name = "pallet-assets-freezer"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "pallet-assets",
@@ -8024,7 +8089,7 @@ dependencies = [
 [[package]]
 name = "pallet-assets-holder"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8039,7 +8104,7 @@ dependencies = [
 [[package]]
 name = "pallet-assets-precompiles"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "const-crypto",
  "ethereum-standards",
@@ -8061,7 +8126,7 @@ dependencies = [
 [[package]]
 name = "pallet-atomic-swap"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "polkadot-sdk-frame",
@@ -8071,7 +8136,7 @@ dependencies = [
 [[package]]
 name = "pallet-aura"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8087,7 +8152,7 @@ dependencies = [
 [[package]]
 name = "pallet-authority-discovery"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8102,7 +8167,7 @@ dependencies = [
 [[package]]
 name = "pallet-authorship"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8115,7 +8180,7 @@ dependencies = [
 [[package]]
 name = "pallet-babe"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8138,7 +8203,7 @@ dependencies = [
 [[package]]
 name = "pallet-bags-list"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "aquamarine",
  "docify",
@@ -8159,7 +8224,7 @@ dependencies = [
 [[package]]
 name = "pallet-balances"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -8175,7 +8240,7 @@ dependencies = [
 [[package]]
 name = "pallet-beefy"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8194,7 +8259,7 @@ dependencies = [
 [[package]]
 name = "pallet-beefy-mmr"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "array-bytes",
  "binary-merkle-tree",
@@ -8219,7 +8284,7 @@ dependencies = [
 [[package]]
 name = "pallet-bounties"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8236,7 +8301,7 @@ dependencies = [
 [[package]]
 name = "pallet-bridge-grandpa"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-header-chain",
  "bp-runtime",
@@ -8255,7 +8320,7 @@ dependencies = [
 [[package]]
 name = "pallet-bridge-messages"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-header-chain",
  "bp-messages",
@@ -8274,7 +8339,7 @@ dependencies = [
 [[package]]
 name = "pallet-bridge-parachains"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-header-chain",
  "bp-parachains",
@@ -8294,7 +8359,7 @@ dependencies = [
 [[package]]
 name = "pallet-bridge-relayers"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-header-chain",
  "bp-messages",
@@ -8317,7 +8382,7 @@ dependencies = [
 [[package]]
 name = "pallet-broker"
 version = "0.6.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "fp-coretime",
  "frame-benchmarking",
@@ -8335,7 +8400,7 @@ dependencies = [
 [[package]]
 name = "pallet-child-bounties"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8353,7 +8418,7 @@ dependencies = [
 [[package]]
 name = "pallet-collator-selection"
 version = "9.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-pallet-session-benchmarking",
  "frame-benchmarking",
@@ -8373,7 +8438,7 @@ dependencies = [
 [[package]]
 name = "pallet-collective"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -8390,7 +8455,7 @@ dependencies = [
 [[package]]
 name = "pallet-collective-content"
 version = "0.6.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8404,7 +8469,7 @@ dependencies = [
 [[package]]
 name = "pallet-contracts"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "environmental",
  "frame-benchmarking",
@@ -8434,7 +8499,7 @@ dependencies = [
 [[package]]
 name = "pallet-contracts-mock-network"
 version = "3.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8465,7 +8530,7 @@ dependencies = [
 [[package]]
 name = "pallet-contracts-proc-macro"
 version = "18.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -8475,7 +8540,7 @@ dependencies = [
 [[package]]
 name = "pallet-contracts-uapi"
 version = "5.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bitflags 1.3.2",
  "parity-scale-codec",
@@ -8486,7 +8551,7 @@ dependencies = [
 [[package]]
 name = "pallet-conviction-voting"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "assert_matches",
  "frame-benchmarking",
@@ -8502,7 +8567,7 @@ dependencies = [
 [[package]]
 name = "pallet-core-fellowship"
 version = "12.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8520,7 +8585,7 @@ dependencies = [
 [[package]]
 name = "pallet-dap"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8537,7 +8602,7 @@ dependencies = [
 [[package]]
 name = "pallet-delegated-staking"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8552,7 +8617,7 @@ dependencies = [
 [[package]]
 name = "pallet-democracy"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8569,7 +8634,7 @@ dependencies = [
 [[package]]
 name = "pallet-derivatives"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8589,7 +8654,7 @@ dependencies = [
 [[package]]
 name = "pallet-dev-mode"
 version = "10.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -8604,7 +8669,7 @@ dependencies = [
 [[package]]
 name = "pallet-dummy-dim"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8622,7 +8687,7 @@ dependencies = [
 [[package]]
 name = "pallet-election-provider-multi-block"
 version = "0.9.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-election-provider-support",
@@ -8643,7 +8708,7 @@ dependencies = [
 [[package]]
 name = "pallet-election-provider-multi-phase"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-election-provider-support",
@@ -8655,7 +8720,7 @@ dependencies = [
  "scale-info",
  "sp-arithmetic",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-io",
  "sp-npos-elections",
  "sp-runtime",
@@ -8665,7 +8730,7 @@ dependencies = [
 [[package]]
 name = "pallet-election-provider-support-benchmarking"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-election-provider-support",
@@ -8678,7 +8743,7 @@ dependencies = [
 [[package]]
 name = "pallet-elections-phragmen"
 version = "29.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8696,7 +8761,7 @@ dependencies = [
 [[package]]
 name = "pallet-fast-unstake"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -8714,7 +8779,7 @@ dependencies = [
 [[package]]
 name = "pallet-glutton"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "blake2",
  "frame-benchmarking",
@@ -8732,7 +8797,7 @@ dependencies = [
 [[package]]
 name = "pallet-grandpa"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8754,7 +8819,7 @@ dependencies = [
 [[package]]
 name = "pallet-identity"
 version = "29.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "enumflags2",
  "frame-benchmarking",
@@ -8770,7 +8835,7 @@ dependencies = [
 [[package]]
 name = "pallet-im-online"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8789,7 +8854,7 @@ dependencies = [
 [[package]]
 name = "pallet-indices"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8804,7 +8869,7 @@ dependencies = [
 [[package]]
 name = "pallet-insecure-randomness-collective-flip"
 version = "16.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "polkadot-sdk-frame",
@@ -8815,7 +8880,7 @@ dependencies = [
 [[package]]
 name = "pallet-lottery"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8828,7 +8893,7 @@ dependencies = [
 [[package]]
 name = "pallet-membership"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -8844,7 +8909,7 @@ dependencies = [
 [[package]]
 name = "pallet-message-queue"
 version = "31.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "environmental",
  "frame-benchmarking",
@@ -8863,7 +8928,7 @@ dependencies = [
 [[package]]
 name = "pallet-meta-tx"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -8881,7 +8946,7 @@ dependencies = [
 [[package]]
 name = "pallet-migrations"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -8893,7 +8958,7 @@ dependencies = [
  "polkadot-sdk-frame",
  "scale-info",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-io",
  "sp-runtime",
 ]
@@ -8901,7 +8966,7 @@ dependencies = [
 [[package]]
 name = "pallet-mixnet"
 version = "0.4.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -8915,7 +8980,7 @@ dependencies = [
 [[package]]
 name = "pallet-mmr"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -8927,7 +8992,7 @@ dependencies = [
 [[package]]
 name = "pallet-multi-asset-bounties"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -8944,7 +9009,7 @@ dependencies = [
 [[package]]
 name = "pallet-multisig"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -8955,7 +9020,7 @@ dependencies = [
 [[package]]
 name = "pallet-nft-fractionalization"
 version = "10.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "pallet-assets",
@@ -8968,7 +9033,7 @@ dependencies = [
 [[package]]
 name = "pallet-nfts"
 version = "22.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "enumflags2",
  "frame-benchmarking",
@@ -8985,7 +9050,7 @@ dependencies = [
 [[package]]
 name = "pallet-nfts-runtime-api"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -8994,7 +9059,7 @@ dependencies = [
 [[package]]
 name = "pallet-nis"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "polkadot-sdk-frame",
@@ -9004,7 +9069,7 @@ dependencies = [
 [[package]]
 name = "pallet-node-authorization"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -9015,7 +9080,7 @@ dependencies = [
 [[package]]
 name = "pallet-nomination-pools"
 version = "25.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -9033,7 +9098,7 @@ dependencies = [
 [[package]]
 name = "pallet-nomination-pools-benchmarking"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-election-provider-support",
@@ -9053,7 +9118,7 @@ dependencies = [
 [[package]]
 name = "pallet-nomination-pools-runtime-api"
 version = "23.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "pallet-nomination-pools",
  "parity-scale-codec",
@@ -9063,7 +9128,7 @@ dependencies = [
 [[package]]
 name = "pallet-offences"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -9078,7 +9143,7 @@ dependencies = [
 [[package]]
 name = "pallet-offences-benchmarking"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-election-provider-support",
@@ -9102,7 +9167,7 @@ dependencies = [
 [[package]]
 name = "pallet-oracle"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9120,7 +9185,7 @@ dependencies = [
 [[package]]
 name = "pallet-oracle-runtime-api"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -9131,7 +9196,7 @@ dependencies = [
 [[package]]
 name = "pallet-origin-restriction"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9149,7 +9214,7 @@ dependencies = [
 [[package]]
 name = "pallet-paged-list"
 version = "0.6.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "parity-scale-codec",
@@ -9161,7 +9226,7 @@ dependencies = [
 [[package]]
 name = "pallet-parameters"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -9178,7 +9243,7 @@ dependencies = [
 [[package]]
 name = "pallet-people"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9188,7 +9253,7 @@ dependencies = [
  "scale-info",
  "sp-arithmetic",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-io",
  "sp-runtime",
  "verifiable",
@@ -9197,7 +9262,7 @@ dependencies = [
 [[package]]
 name = "pallet-pgas-allowance"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9212,7 +9277,7 @@ dependencies = [
 [[package]]
 name = "pallet-preimage"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9228,7 +9293,7 @@ dependencies = [
 [[package]]
 name = "pallet-proxy"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "polkadot-sdk-frame",
@@ -9238,7 +9303,7 @@ dependencies = [
 [[package]]
 name = "pallet-psm"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9253,7 +9318,7 @@ dependencies = [
 [[package]]
 name = "pallet-ranked-collective"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9271,7 +9336,7 @@ dependencies = [
 [[package]]
 name = "pallet-recovery"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -9284,7 +9349,7 @@ dependencies = [
 [[package]]
 name = "pallet-referenda"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9301,7 +9366,7 @@ dependencies = [
 [[package]]
 name = "pallet-remark"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9317,7 +9382,7 @@ dependencies = [
 [[package]]
 name = "pallet-revive"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "alloy-consensus",
  "alloy-core",
@@ -9358,7 +9423,7 @@ dependencies = [
  "sp-consensus-babe",
  "sp-consensus-slots",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-io",
  "sp-runtime",
  "sp-version",
@@ -9370,7 +9435,7 @@ dependencies = [
 [[package]]
 name = "pallet-revive-fixtures"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "alloy-core",
  "anyhow",
@@ -9387,7 +9452,7 @@ dependencies = [
 [[package]]
 name = "pallet-revive-proc-macro"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9397,7 +9462,7 @@ dependencies = [
 [[package]]
 name = "pallet-revive-types"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "alloy-core",
  "derive_more 0.99.20",
@@ -9420,7 +9485,7 @@ dependencies = [
 [[package]]
 name = "pallet-revive-uapi"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "alloy-core",
  "bitflags 1.3.2",
@@ -9435,7 +9500,7 @@ dependencies = [
 [[package]]
 name = "pallet-root-offences"
 version = "25.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -9451,7 +9516,7 @@ dependencies = [
 [[package]]
 name = "pallet-root-testing"
 version = "4.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -9464,7 +9529,7 @@ dependencies = [
 [[package]]
 name = "pallet-safe-mode"
 version = "9.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "pallet-balances",
@@ -9478,7 +9543,7 @@ dependencies = [
 [[package]]
 name = "pallet-salary"
 version = "13.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "pallet-ranked-collective",
@@ -9490,7 +9555,7 @@ dependencies = [
 [[package]]
 name = "pallet-scarcity"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9504,7 +9569,7 @@ dependencies = [
 [[package]]
 name = "pallet-scheduler"
 version = "29.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -9521,7 +9586,7 @@ dependencies = [
 [[package]]
 name = "pallet-session"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -9543,7 +9608,7 @@ dependencies = [
 [[package]]
 name = "pallet-session-benchmarking"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9559,7 +9624,7 @@ dependencies = [
 [[package]]
 name = "pallet-skip-feeless-payment"
 version = "3.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -9571,7 +9636,7 @@ dependencies = [
 [[package]]
 name = "pallet-society"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9588,7 +9653,7 @@ dependencies = [
 [[package]]
 name = "pallet-staking"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-election-provider-support",
@@ -9609,7 +9674,7 @@ dependencies = [
 [[package]]
 name = "pallet-staking-async"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-election-provider-support",
@@ -9625,7 +9690,7 @@ dependencies = [
  "sp-application-crypto",
  "sp-arithmetic",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-io",
  "sp-npos-elections",
  "sp-runtime",
@@ -9635,7 +9700,7 @@ dependencies = [
 [[package]]
 name = "pallet-staking-async-ah-client"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9655,7 +9720,7 @@ dependencies = [
 [[package]]
 name = "pallet-staking-async-rc-client"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9675,7 +9740,7 @@ dependencies = [
 [[package]]
 name = "pallet-staking-async-runtime-api"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -9685,7 +9750,7 @@ dependencies = [
 [[package]]
 name = "pallet-staking-reward-fn"
 version = "19.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "sp-arithmetic",
@@ -9694,7 +9759,7 @@ dependencies = [
 [[package]]
 name = "pallet-staking-runtime-api"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -9704,7 +9769,7 @@ dependencies = [
 [[package]]
 name = "pallet-state-trie-migration"
 version = "29.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9720,7 +9785,7 @@ dependencies = [
 [[package]]
 name = "pallet-statement"
 version = "10.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -9737,7 +9802,7 @@ dependencies = [
 [[package]]
 name = "pallet-sudo"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -9752,7 +9817,7 @@ dependencies = [
 [[package]]
 name = "pallet-timestamp"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -9770,7 +9835,7 @@ dependencies = [
 [[package]]
 name = "pallet-tips"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9788,7 +9853,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9804,7 +9869,7 @@ dependencies = [
 [[package]]
 name = "pallet-transaction-payment-rpc-runtime-api"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "pallet-transaction-payment",
  "parity-scale-codec",
@@ -9816,7 +9881,7 @@ dependencies = [
 [[package]]
 name = "pallet-treasury"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -9835,7 +9900,7 @@ dependencies = [
 [[package]]
 name = "pallet-tx-pause"
 version = "9.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "parity-scale-codec",
@@ -9846,7 +9911,7 @@ dependencies = [
 [[package]]
 name = "pallet-uniques"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9860,7 +9925,7 @@ dependencies = [
 [[package]]
 name = "pallet-utility"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9875,7 +9940,7 @@ dependencies = [
 [[package]]
 name = "pallet-verify-signature"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9890,7 +9955,7 @@ dependencies = [
 [[package]]
 name = "pallet-vesting"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9904,7 +9969,7 @@ dependencies = [
 [[package]]
 name = "pallet-vesting-precompiles"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "alloy-core",
  "frame-benchmarking",
@@ -9924,7 +9989,7 @@ dependencies = [
 [[package]]
 name = "pallet-whitelist"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "polkadot-sdk-frame",
@@ -9934,7 +9999,7 @@ dependencies = [
 [[package]]
 name = "pallet-xcm"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bounded-collections 0.3.2",
  "frame-benchmarking",
@@ -9958,7 +10023,7 @@ dependencies = [
 [[package]]
 name = "pallet-xcm-benchmarks"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -9975,7 +10040,7 @@ dependencies = [
 [[package]]
 name = "pallet-xcm-bridge-hub"
 version = "0.2.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-messages",
  "bp-runtime",
@@ -9997,7 +10062,7 @@ dependencies = [
 [[package]]
 name = "pallet-xcm-bridge-hub-router"
 version = "0.5.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-xcm-bridge-hub-router",
  "frame-benchmarking",
@@ -10017,7 +10082,7 @@ dependencies = [
 [[package]]
 name = "pallet-xcm-precompiles"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "pallet-revive",
@@ -10031,7 +10096,7 @@ dependencies = [
 [[package]]
 name = "parachains-common"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-primitives-core",
  "cumulus-primitives-utility",
@@ -10063,7 +10128,7 @@ dependencies = [
 [[package]]
 name = "parachains-common-types"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "sp-consensus-aura",
  "sp-core",
@@ -10073,7 +10138,7 @@ dependencies = [
 [[package]]
 name = "parachains-runtimes-test-utils"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-pallet-parachain-system",
  "cumulus-pallet-xcmp-queue",
@@ -10455,7 +10520,7 @@ dependencies = [
 [[package]]
 name = "polkadot-core-primitives"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -10466,7 +10531,7 @@ dependencies = [
 [[package]]
 name = "polkadot-parachain-primitives"
 version = "6.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "array-bytes",
  "bounded-collections 0.3.2",
@@ -10483,7 +10548,7 @@ dependencies = [
 [[package]]
 name = "polkadot-primitives"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bitvec",
  "bounded-collections 0.3.2",
@@ -10512,7 +10577,7 @@ dependencies = [
 [[package]]
 name = "polkadot-runtime-common"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bitvec",
  "frame-benchmarking",
@@ -10520,7 +10585,7 @@ dependencies = [
  "frame-support",
  "frame-system",
  "impl-trait-for-tuples",
- "libsecp256k1",
+ "k256",
  "log",
  "pallet-asset-rate",
  "pallet-authorship",
@@ -10562,7 +10627,7 @@ dependencies = [
 [[package]]
 name = "polkadot-runtime-metrics"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bs58",
  "frame-benchmarking",
@@ -10574,7 +10639,7 @@ dependencies = [
 [[package]]
 name = "polkadot-runtime-parachains"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bitflags 1.3.2",
  "bitvec",
@@ -10622,7 +10687,7 @@ dependencies = [
 [[package]]
 name = "polkadot-sdk"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "asset-test-utils",
  "assets-common",
@@ -10640,7 +10705,6 @@ dependencies = [
  "bridge-hub-test-utils",
  "bridge-runtime-common",
  "cumulus-pallet-aura-ext",
- "cumulus-pallet-dmp-queue",
  "cumulus-pallet-parachain-system",
  "cumulus-pallet-parachain-system-proc-macro",
  "cumulus-pallet-session-benchmarking",
@@ -10824,7 +10888,7 @@ dependencies = [
  "sp-core",
  "sp-core-hashing",
  "sp-crypto-ec-utils",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-crypto-hashing-proc-macro",
  "sp-dap",
  "sp-debug-derive",
@@ -10871,7 +10935,7 @@ dependencies = [
 [[package]]
 name = "polkadot-sdk-frame"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "frame-benchmarking",
@@ -10891,7 +10955,7 @@ dependencies = [
  "sp-consensus-aura",
  "sp-consensus-grandpa",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-genesis-builder",
  "sp-inherents",
  "sp-io",
@@ -10907,7 +10971,7 @@ dependencies = [
 [[package]]
 name = "polkavm"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#09ce634afcbf502000940db0083e73eedbba7132"
+source = "git+https://github.com/paritytech/polkavm?branch=lj%2Fmore-instr-256-opt#87830d8bd223c61e3d4bf96d6f2cf87df5e2324e"
 dependencies = [
  "libc",
  "log",
@@ -10920,7 +10984,7 @@ dependencies = [
 [[package]]
 name = "polkavm-assembler"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#09ce634afcbf502000940db0083e73eedbba7132"
+source = "git+https://github.com/paritytech/polkavm?branch=lj%2Fmore-instr-256-opt#87830d8bd223c61e3d4bf96d6f2cf87df5e2324e"
 dependencies = [
  "log",
 ]
@@ -10928,7 +10992,7 @@ dependencies = [
 [[package]]
 name = "polkavm-common"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#09ce634afcbf502000940db0083e73eedbba7132"
+source = "git+https://github.com/paritytech/polkavm?branch=lj%2Fmore-instr-256-opt#87830d8bd223c61e3d4bf96d6f2cf87df5e2324e"
 dependencies = [
  "blake3",
  "log",
@@ -10939,7 +11003,7 @@ dependencies = [
 [[package]]
 name = "polkavm-derive"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#09ce634afcbf502000940db0083e73eedbba7132"
+source = "git+https://github.com/paritytech/polkavm?branch=lj%2Fmore-instr-256-opt#87830d8bd223c61e3d4bf96d6f2cf87df5e2324e"
 dependencies = [
  "polkavm-derive-impl-macro",
 ]
@@ -10947,7 +11011,7 @@ dependencies = [
 [[package]]
 name = "polkavm-derive-impl"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#09ce634afcbf502000940db0083e73eedbba7132"
+source = "git+https://github.com/paritytech/polkavm?branch=lj%2Fmore-instr-256-opt#87830d8bd223c61e3d4bf96d6f2cf87df5e2324e"
 dependencies = [
  "polkavm-common",
  "proc-macro2",
@@ -10958,7 +11022,7 @@ dependencies = [
 [[package]]
 name = "polkavm-derive-impl-macro"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#09ce634afcbf502000940db0083e73eedbba7132"
+source = "git+https://github.com/paritytech/polkavm?branch=lj%2Fmore-instr-256-opt#87830d8bd223c61e3d4bf96d6f2cf87df5e2324e"
 dependencies = [
  "polkavm-derive-impl",
  "syn 2.0.119",
@@ -10967,7 +11031,7 @@ dependencies = [
 [[package]]
 name = "polkavm-disassembler"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#09ce634afcbf502000940db0083e73eedbba7132"
+source = "git+https://github.com/paritytech/polkavm?branch=lj%2Fmore-instr-256-opt#87830d8bd223c61e3d4bf96d6f2cf87df5e2324e"
 dependencies = [
  "clap",
  "iced-x86",
@@ -10979,7 +11043,7 @@ dependencies = [
 [[package]]
 name = "polkavm-linker"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#09ce634afcbf502000940db0083e73eedbba7132"
+source = "git+https://github.com/paritytech/polkavm?branch=lj%2Fmore-instr-256-opt#87830d8bd223c61e3d4bf96d6f2cf87df5e2324e"
 dependencies = [
  "dirs",
  "gimli 0.31.1",
@@ -10994,7 +11058,7 @@ dependencies = [
 [[package]]
 name = "polkavm-linux-raw"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#09ce634afcbf502000940db0083e73eedbba7132"
+source = "git+https://github.com/paritytech/polkavm?branch=lj%2Fmore-instr-256-opt#87830d8bd223c61e3d4bf96d6f2cf87df5e2324e"
 
 [[package]]
 name = "polling"
@@ -11109,6 +11173,17 @@ checksum = "d0de1b847b39c8131db0467e9df1ff60e6d0562ab8e9a16e568ad0fdb372e2f2"
 dependencies = [
  "predicates-core",
  "termtree",
+]
+
+[[package]]
+name = "prefix-trie"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cf6e3177f0684016a5c209b00882e15f8bdd3f3bb48f0491df10cd102d0c6e7"
+dependencies = [
+ "either",
+ "ipnet",
+ "num-traits",
 ]
 
 [[package]]
@@ -11497,7 +11572,7 @@ dependencies = [
  "futures-io",
  "pin-project-lite",
  "quinn-proto",
- "quinn-udp",
+ "quinn-udp 0.5.15",
  "rustc-hash 2.1.3",
  "rustls",
  "socket2 0.6.5",
@@ -11538,6 +11613,19 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
+ "socket2 0.6.5",
+ "tracing",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "quinn-udp"
+version = "0.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ca72c3f2792761ab5fa848490694cbc728c7f659669ed4320c4c79c12150966"
+dependencies = [
+ "cfg_aliases",
+ "libc",
  "socket2 0.6.5",
  "tracing",
  "windows-sys 0.61.2",
@@ -11843,7 +11931,7 @@ checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 [[package]]
 name = "registrar-primitives"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -12381,7 +12469,7 @@ dependencies = [
 [[package]]
 name = "rococo-runtime-constants"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "polkadot-primitives",
@@ -12577,7 +12665,7 @@ checksum = "19787cda76408ec5404443dc8b31795c87cd8fec49762dc75fa727740d34acc1"
 dependencies = [
  "core-foundation 0.10.1",
  "core-foundation-sys",
- "jni",
+ "jni 0.21.1",
  "log",
  "once_cell",
  "rustls",
@@ -12685,7 +12773,7 @@ dependencies = [
 [[package]]
 name = "sc-allocator"
 version = "23.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "sp-core",
@@ -12696,7 +12784,7 @@ dependencies = [
 [[package]]
 name = "sc-block-builder"
 version = "0.33.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -12711,7 +12799,7 @@ dependencies = [
 [[package]]
 name = "sc-chain-spec"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "array-bytes",
  "docify",
@@ -12726,7 +12814,7 @@ dependencies = [
  "serde_json",
  "sp-blockchain",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-genesis-builder",
  "sp-io",
  "sp-runtime",
@@ -12737,7 +12825,7 @@ dependencies = [
 [[package]]
 name = "sc-chain-spec-derive"
 version = "11.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -12748,7 +12836,7 @@ dependencies = [
 [[package]]
 name = "sc-client-api"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "fnv",
  "futures",
@@ -12774,7 +12862,7 @@ dependencies = [
 [[package]]
 name = "sc-client-db"
 version = "0.35.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "hash-db",
  "kvdb",
@@ -12801,7 +12889,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus"
 version = "0.33.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "async-trait",
  "futures",
@@ -12824,7 +12912,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-grandpa"
 version = "0.19.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "ahash",
  "array-bytes",
@@ -12859,7 +12947,7 @@ dependencies = [
  "sp-consensus",
  "sp-consensus-grandpa",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-keystore",
  "sp-runtime",
  "substrate-prometheus-endpoint",
@@ -12869,7 +12957,7 @@ dependencies = [
 [[package]]
 name = "sc-executor"
 version = "0.32.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "parking_lot 0.12.5",
@@ -12892,7 +12980,7 @@ dependencies = [
 [[package]]
 name = "sc-executor-common"
 version = "0.29.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "polkavm",
  "sc-allocator",
@@ -12905,7 +12993,7 @@ dependencies = [
 [[package]]
 name = "sc-executor-polkavm"
 version = "0.29.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "polkavm",
@@ -12917,7 +13005,7 @@ dependencies = [
 [[package]]
 name = "sc-executor-wasmtime"
 version = "0.29.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "anyhow",
  "log",
@@ -12933,7 +13021,7 @@ dependencies = [
 [[package]]
 name = "sc-network"
 version = "0.34.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "array-bytes",
  "async-channel 1.9.0",
@@ -12986,7 +13074,7 @@ dependencies = [
 [[package]]
 name = "sc-network-common"
 version = "0.33.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bitflags 1.3.2",
  "parity-scale-codec",
@@ -12996,7 +13084,7 @@ dependencies = [
 [[package]]
 name = "sc-network-gossip"
 version = "0.34.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "ahash",
  "futures",
@@ -13015,7 +13103,7 @@ dependencies = [
 [[package]]
 name = "sc-network-sync"
 version = "0.33.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "array-bytes",
  "async-channel 1.9.0",
@@ -13049,7 +13137,7 @@ dependencies = [
 [[package]]
 name = "sc-network-types"
 version = "0.10.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bs58",
  "bytes",
@@ -13070,7 +13158,7 @@ dependencies = [
 [[package]]
 name = "sc-state-db"
 version = "0.30.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -13081,7 +13169,7 @@ dependencies = [
 [[package]]
 name = "sc-telemetry"
 version = "15.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "chrono",
  "futures",
@@ -13100,7 +13188,7 @@ dependencies = [
 [[package]]
 name = "sc-transaction-pool-api"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "async-trait",
  "futures",
@@ -13118,7 +13206,7 @@ dependencies = [
 [[package]]
 name = "sc-utils"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "async-channel 1.9.0",
  "futures",
@@ -13379,9 +13467,9 @@ dependencies = [
 
 [[package]]
 name = "sctp-proto"
-version = "0.9.1"
+version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8423ea59db998985015bc5d0145837eab48f60ec449a2dc01f5870499afe0a4"
+checksum = "a22cbe1d867f74fc377b9e63ac74457ea7dcfda23a0deaba6af083ad7e060019"
 dependencies = [
  "bytes",
  "crc",
@@ -13858,6 +13946,22 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
 
 [[package]]
+name = "simd_cesu8"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11031e251abf8611c80f460e19dbdeb54a66db918e49c65a7065b46ac7aec520"
+dependencies = [
+ "rustc_version 0.4.1",
+ "simdutf8",
+]
+
+[[package]]
+name = "simdutf8"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
 name = "simple-dns"
 version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13899,7 +14003,7 @@ checksum = "826167069c09b99d56f31e9ae5c99049e932a98c9dc2dac47645b08dbbf76ba7"
 [[package]]
 name = "slot-range-helper"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "enumn",
  "parity-scale-codec",
@@ -14065,7 +14169,7 @@ dependencies = [
 [[package]]
 name = "snowbridge-core"
 version = "0.2.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bp-relayers",
  "frame-support",
@@ -14124,7 +14228,7 @@ dependencies = [
 [[package]]
 name = "sp-api"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "hash-db",
@@ -14146,7 +14250,7 @@ dependencies = [
 [[package]]
 name = "sp-api-proc-macro"
 version = "15.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "Inflector",
  "blake2",
@@ -14160,7 +14264,7 @@ dependencies = [
 [[package]]
 name = "sp-application-crypto"
 version = "30.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -14172,7 +14276,7 @@ dependencies = [
 [[package]]
 name = "sp-arithmetic"
 version = "23.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "docify",
  "integer-sqrt",
@@ -14186,7 +14290,7 @@ dependencies = [
 [[package]]
 name = "sp-authority-discovery"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -14198,7 +14302,7 @@ dependencies = [
 [[package]]
 name = "sp-block-builder"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -14209,7 +14313,7 @@ dependencies = [
 [[package]]
 name = "sp-blockchain"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "futures",
  "parity-scale-codec",
@@ -14228,7 +14332,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus"
 version = "0.32.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "async-trait",
  "futures",
@@ -14245,7 +14349,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-aura"
 version = "0.32.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -14261,7 +14365,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-babe"
 version = "0.32.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -14279,7 +14383,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-beefy"
 version = "13.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -14287,7 +14391,7 @@ dependencies = [
  "sp-api",
  "sp-application-crypto",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-io",
  "sp-keystore",
  "sp-mmr-primitives",
@@ -14299,7 +14403,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-grandpa"
 version = "13.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "finality-grandpa",
  "log",
@@ -14316,7 +14420,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-pow"
 version = "0.32.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -14327,7 +14431,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-slots"
 version = "0.32.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -14338,7 +14442,7 @@ dependencies = [
 [[package]]
 name = "sp-core"
 version = "28.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "ark-vrf 0.5.3",
  "array-bytes",
@@ -14365,11 +14469,10 @@ dependencies = [
  "rand 0.8.8",
  "scale-info",
  "schnorrkel 0.11.5",
- "secp256k1 0.28.2",
  "secrecy 0.8.0",
  "serde",
  "sha2 0.10.9",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-debug-derive",
  "sp-externalities",
  "sp-std",
@@ -14385,31 +14488,31 @@ dependencies = [
 [[package]]
 name = "sp-core-hashing"
 version = "15.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
 ]
 
 [[package]]
 name = "sp-crypto-ec-utils"
 version = "0.10.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
- "ark-bls12-377 0.5.0",
+ "ark-bls12-377 0.6.0",
  "ark-bls12-377-ext",
- "ark-bls12-381 0.5.0",
+ "ark-bls12-381 0.6.0",
  "ark-bls12-381-ext",
  "ark-bw6-761",
  "ark-bw6-761-ext",
- "ark-ec 0.5.0",
+ "ark-ec 0.6.0",
  "ark-ed-on-bls12-377",
  "ark-ed-on-bls12-377-ext",
- "ark-ed-on-bls12-381-bandersnatch 0.5.0",
+ "ark-ed-on-bls12-381-bandersnatch 0.6.0",
  "ark-ed-on-bls12-381-bandersnatch-ext",
- "ark-ff 0.5.0",
+ "ark-ff 0.6.0",
  "ark-pallas",
  "ark-pallas-ext",
- "ark-scale",
+ "ark-scale 0.0.14",
  "ark-vesta",
  "ark-vesta-ext",
  "sp-runtime-interface",
@@ -14432,7 +14535,7 @@ dependencies = [
 [[package]]
 name = "sp-crypto-hashing"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "blake2b_simd",
  "byteorder",
@@ -14445,17 +14548,17 @@ dependencies = [
 [[package]]
 name = "sp-crypto-hashing-proc-macro"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "quote",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "syn 2.0.119",
 ]
 
 [[package]]
 name = "sp-dap"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
 ]
@@ -14463,7 +14566,7 @@ dependencies = [
 [[package]]
 name = "sp-database"
 version = "10.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "kvdb",
  "parking_lot 0.12.5",
@@ -14472,7 +14575,7 @@ dependencies = [
 [[package]]
 name = "sp-debug-derive"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "proc-macro-warning",
  "proc-macro2",
@@ -14483,7 +14586,7 @@ dependencies = [
 [[package]]
 name = "sp-externalities"
 version = "0.25.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "environmental",
  "parity-scale-codec",
@@ -14493,7 +14596,7 @@ dependencies = [
 [[package]]
 name = "sp-genesis-builder"
 version = "0.8.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -14505,7 +14608,7 @@ dependencies = [
 [[package]]
 name = "sp-hop"
 version = "0.1.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -14515,7 +14618,7 @@ dependencies = [
 [[package]]
 name = "sp-inherents"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "async-trait",
  "impl-trait-for-tuples",
@@ -14528,7 +14631,7 @@ dependencies = [
 [[package]]
 name = "sp-io"
 version = "30.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bytes",
  "docify",
@@ -14540,7 +14643,7 @@ dependencies = [
  "rustversion",
  "secp256k1 0.28.2",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-externalities",
  "sp-keystore",
  "sp-runtime-interface",
@@ -14554,7 +14657,7 @@ dependencies = [
 [[package]]
 name = "sp-keyring"
 version = "31.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "sp-core",
  "sp-runtime",
@@ -14564,7 +14667,7 @@ dependencies = [
 [[package]]
 name = "sp-keystore"
 version = "0.34.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "parking_lot 0.12.5",
@@ -14575,7 +14678,7 @@ dependencies = [
 [[package]]
 name = "sp-maybe-compressed-blob"
 version = "11.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "thiserror 1.0.69",
  "zstd 0.12.4",
@@ -14584,7 +14687,7 @@ dependencies = [
 [[package]]
 name = "sp-metadata-ir"
 version = "0.6.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "derive-where",
  "frame-metadata",
@@ -14595,7 +14698,7 @@ dependencies = [
 [[package]]
 name = "sp-mixnet"
 version = "0.4.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -14606,7 +14709,7 @@ dependencies = [
 [[package]]
 name = "sp-mmr-primitives"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -14623,7 +14726,7 @@ dependencies = [
 [[package]]
 name = "sp-npos-elections"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -14636,7 +14739,7 @@ dependencies = [
 [[package]]
 name = "sp-offchain"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "sp-api",
  "sp-core",
@@ -14646,7 +14749,7 @@ dependencies = [
 [[package]]
 name = "sp-panic-handler"
 version = "13.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "backtrace",
  "regex",
@@ -14655,7 +14758,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime"
 version = "31.0.1"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "binary-merkle-tree",
  "bytes",
@@ -14686,7 +14789,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface"
 version = "24.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bytes",
  "impl-trait-for-tuples",
@@ -14703,7 +14806,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface-proc-macro"
 version = "17.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "Inflector",
  "expander",
@@ -14716,7 +14819,7 @@ dependencies = [
 [[package]]
 name = "sp-session"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "scale-info",
@@ -14730,7 +14833,7 @@ dependencies = [
 [[package]]
 name = "sp-staking"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "impl-trait-for-tuples",
  "parity-scale-codec",
@@ -14743,7 +14846,7 @@ dependencies = [
 [[package]]
 name = "sp-state-machine"
 version = "0.35.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "hash-db",
  "log",
@@ -14763,7 +14866,7 @@ dependencies = [
 [[package]]
 name = "sp-statement-store"
 version = "10.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "aes-gcm",
  "curve25519-dalek",
@@ -14778,7 +14881,7 @@ dependencies = [
  "sp-api",
  "sp-application-crypto",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-externalities",
  "sp-runtime",
  "sp-runtime-interface",
@@ -14789,12 +14892,12 @@ dependencies = [
 [[package]]
 name = "sp-std"
 version = "14.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 
 [[package]]
 name = "sp-storage"
 version = "19.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -14806,7 +14909,7 @@ dependencies = [
 [[package]]
 name = "sp-timestamp"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -14818,7 +14921,7 @@ dependencies = [
 [[package]]
 name = "sp-tracing"
 version = "16.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "regex",
@@ -14830,7 +14933,7 @@ dependencies = [
 [[package]]
 name = "sp-transaction-pool"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "sp-api",
  "sp-runtime",
@@ -14839,14 +14942,14 @@ dependencies = [
 [[package]]
 name = "sp-transaction-storage-proof"
 version = "26.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
  "scale-info",
  "sp-api",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-inherents",
  "sp-runtime",
  "sp-trie",
@@ -14855,7 +14958,7 @@ dependencies = [
 [[package]]
 name = "sp-trie"
 version = "29.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "ahash",
  "foldhash 0.1.5",
@@ -14880,7 +14983,7 @@ dependencies = [
 [[package]]
 name = "sp-version"
 version = "29.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -14898,7 +15001,7 @@ dependencies = [
 [[package]]
 name = "sp-version-proc-macro"
 version = "13.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "parity-scale-codec",
  "proc-macro-warning",
@@ -14910,7 +15013,7 @@ dependencies = [
 [[package]]
 name = "sp-virtualization"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "log",
  "num_enum",
@@ -14924,7 +15027,7 @@ dependencies = [
 [[package]]
 name = "sp-wasm-interface"
 version = "20.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "anyhow",
  "impl-trait-for-tuples",
@@ -14936,7 +15039,7 @@ dependencies = [
 [[package]]
 name = "sp-weights"
 version = "27.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "bounded-collections 0.3.2",
  "parity-scale-codec",
@@ -15006,7 +15109,7 @@ dependencies = [
 [[package]]
 name = "staging-parachain-info"
 version = "0.7.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-primitives-core",
  "frame-support",
@@ -15019,7 +15122,7 @@ dependencies = [
 [[package]]
 name = "staging-xcm"
 version = "7.0.1"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "array-bytes",
  "bounded-collections 0.3.2",
@@ -15040,7 +15143,7 @@ dependencies = [
 [[package]]
 name = "staging-xcm-builder"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "environmental",
  "frame-support",
@@ -15065,7 +15168,7 @@ dependencies = [
 [[package]]
 name = "staging-xcm-executor"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "environmental",
  "frame-benchmarking",
@@ -15090,9 +15193,9 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "str0m"
-version = "0.18.1"
+version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "853853eafde0493f1928bf8a658ac05d5605ead911643f4cc88432420b8898b5"
+checksum = "8522aa06c731cfdc1488e32de7fcebcfc8d9d86d49a6ecc95a64779fe7b545f2"
 dependencies = [
  "arrayvec 0.7.8",
  "base64ct",
@@ -15111,9 +15214,9 @@ dependencies = [
 
 [[package]]
 name = "str0m-openssl"
-version = "0.3.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11994af5e7206c3c00c8962e4b8ca6d2e3a4911539153078957c95cf74c98c3f"
+checksum = "ae33ce33dcd4dd2d9b6c01e7e425b604be9b811f69511b4387e76d5a36fe606b"
 dependencies = [
  "libc",
  "openssl",
@@ -15124,9 +15227,9 @@ dependencies = [
 
 [[package]]
 name = "str0m-proto"
-version = "0.4.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "222a6a5a946631a167c1b0282846bfa33b0f8098b8dd565237809735656ed63f"
+checksum = "e8f3d99f2cf6c76a502e45feb896ea71e54787ede8744bcdb215acfbfcb905dd"
 dependencies = [
  "base64ct",
  "dimpl",
@@ -15179,7 +15282,7 @@ dependencies = [
 [[package]]
 name = "substrate-bip39"
 version = "0.4.7"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "hmac 0.12.1",
  "pbkdf2",
@@ -15204,7 +15307,7 @@ dependencies = [
 [[package]]
 name = "substrate-prometheus-endpoint"
 version = "0.17.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "http-body-util",
  "hyper 1.11.0",
@@ -15574,7 +15677,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 [[package]]
 name = "testnet-parachains-constants"
 version = "1.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "cumulus-primitives-core",
  "frame-support",
@@ -16271,7 +16374,7 @@ version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "225eaa083192400abfe78838e3089c539a361e0dd9b6884f61b5c6237676ec01"
 dependencies = [
- "ark-scale",
+ "ark-scale 0.0.13",
  "ark-serialize 0.5.0",
  "ark-vrf 0.1.1",
  "bounded-collections 0.1.9",
@@ -16938,7 +17041,7 @@ checksum = "5f20c57d8d7db6d3b86154206ae5d8fba62dd39573114de97c2cb0578251f8e1"
 [[package]]
 name = "westend-runtime-constants"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "polkadot-primitives",
@@ -17575,7 +17678,7 @@ dependencies = [
 [[package]]
 name = "xcm-emulator"
 version = "0.5.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "array-bytes",
  "cumulus-pallet-parachain-system",
@@ -17598,7 +17701,7 @@ dependencies = [
  "sp-arithmetic",
  "sp-consensus-aura",
  "sp-core",
- "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr)",
+ "sp-crypto-hashing 0.1.0 (git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt)",
  "sp-io",
  "sp-runtime",
  "sp-tracing",
@@ -17611,7 +17714,7 @@ dependencies = [
 [[package]]
 name = "xcm-procedural"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "Inflector",
  "proc-macro2",
@@ -17622,7 +17725,7 @@ dependencies = [
 [[package]]
 name = "xcm-runtime-apis"
 version = "0.1.1"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "parity-scale-codec",
@@ -17636,7 +17739,7 @@ dependencies = [
 [[package]]
 name = "xcm-simulator"
 version = "7.0.0"
-source = "git+https://github.com/paritytech/polkadot-sdk?branch=cl%2Fjit-custom-instr#b4913e879521a38265b435d36089e37a27cc0dba"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=lj%2Fjit-custom-instr-256-opt#83b92c920045b8e2b13ab0b6556f3e48b14b80f3"
 dependencies = [
  "frame-support",
  "frame-system",

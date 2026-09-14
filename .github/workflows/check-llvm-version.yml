@@ -43,15 +43,14 @@ jobs:
           git clone --filter=tree:0 --no-checkout \
             "https://x-access-token:${GH_TOKEN}@${LLVM_URL#https://}" llvm-tmp
 
-          # Try to get the most recent tag (e.g., "llvmorg-18.1.8").
-          DETECTED_LLVM_TAG=$(git -C llvm-tmp describe --tags --abbrev=0 "$LLVM_SHA")
-
-          # Convert "llvmorg-x.y.z" to "llvm-x.y.z".
-          DETECTED_LLVM_VERSION=$(echo "$DETECTED_LLVM_TAG" | sed 's/^llvmorg-/llvm-/')
+          # Read the version constants from the pinned commit itself.
+          LLVM_VERSION_FILE=$(git -C llvm-tmp show "${LLVM_SHA}:cmake/Modules/LLVMVersion.cmake")
+          extract() { sed -n "s/^ *set(LLVM_VERSION_$1 \([0-9]\+\))$/\1/p" <<< "$LLVM_VERSION_FILE"; }
+          DETECTED_LLVM_VERSION="llvm-$(extract MAJOR).$(extract MINOR).$(extract PATCH)"
           RECORDED_LLVM_VERSION=$(cat .llvm-version)
 
           if [ "$DETECTED_LLVM_VERSION" != "$RECORDED_LLVM_VERSION" ]; then
-            echo "::error file=.llvm-version::.llvm-version contains '$RECORDED_LLVM_VERSION' but the submodule pin describes to '$DETECTED_LLVM_VERSION'."
+            echo "::error file=.llvm-version::.llvm-version contains '$RECORDED_LLVM_VERSION' but the submodule pin carries version '$DETECTED_LLVM_VERSION'."
             exit 1
           fi
           echo "OK: .llvm-version ($RECORDED_LLVM_VERSION) matches the submodule pin."

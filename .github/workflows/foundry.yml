@@ -70,6 +70,12 @@ jobs:
         working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
         run: bash verify-compiler-output.sh "$RESOLC_PATH"
 
+      # TODO: This step fails while the wide instructions are enabled by default:
+      # resolc emits the custom wide opcodes, but foundry-polkadot v1.5.1 embeds a
+      # released polkavm/pallet-revive that predates them, so it rejects the blob
+      # with InvalidInstruction at contract creation. It can only pass once a
+      # foundry-polkadot release embeds a wide-capable VM, or running this test
+      # with `RESOLC_DISABLE_WIDE_INTEGERS=1` during development.
       - name: Test Project
         working-directory: ${{ env.CI_FOUNDRY_PROJECT_ROOT }}
         run: forge test --polkadot=pvm --use-resolc "$RESOLC_PATH" --optimize -Oz -vvvv

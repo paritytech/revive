@@ -327,7 +327,9 @@ fn pvm_codegen_requested() {
     ];
 
     for file in files {
-        let result = execute_resolc_with_stdin_input(&[JSON_OPTION], file);
+        // These fixtures include contracts whose basic blocks exceed the runtime
+        // limit; this test is about output selection, not deployability.
+        let result = execute_resolc_with_stdin_input(&[JSON_OPTION, "--ignore-memory-limit"], file);
         assert_command_success(&result, &format!("the `{file}` input fixture"));
 
         let output = to_solc_standard_json_output(&result.stdout);

@@ -98,3 +98,22 @@ contract ExternalCodeCopy {
 
     build_solidity(sources(&[("test.sol", code)])).unwrap();
 }
+
+#[test]
+#[should_panic(expected = "The `SLOTNUM` instruction is not supported in revive")]
+fn slotnum_yul() {
+    let code = r#"
+object "SlotNumber" {
+    code {
+        datacopy(0, dataoffset("SlotNumber_deployed"), datasize("SlotNumber_deployed"))
+        return(0, datasize("SlotNumber_deployed"))
+    }
+    object "SlotNumber_deployed" {
+        code {
+            sstore(0, slotnum())
+        }
+    }
+}"#;
+
+    build_yul(&[("test.sol", code)]).unwrap();
+}

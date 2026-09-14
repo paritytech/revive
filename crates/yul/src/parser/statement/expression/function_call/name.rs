@@ -220,6 +220,8 @@ pub enum Name {
     BaseFee,
     /// current block’s blob base fee (EIP-7516 and EIP-4844)
     BlobBaseFee,
+    /// slot number of the current block (EIP-7843), available since the Amsterdam EVM version
+    SlotNum,
     /// current position in code
     Pc,
     /// like `codecopy(t, f, s)` but take code at address `a`
@@ -351,6 +353,7 @@ impl From<&str> for Name {
             "coinbase" => Self::CoinBase,
             "basefee" => Self::BaseFee,
             "blobbasefee" => Self::BlobBaseFee,
+            "slotnum" => Self::SlotNum,
             "msize" => Self::MSize,
 
             "callcode" => Self::CallCode,
@@ -475,6 +478,7 @@ impl fmt::Display for Name {
             Self::CoinBase => "coinbase",
             Self::BaseFee => "basefee",
             Self::BlobBaseFee => "blobbasefee",
+            Self::SlotNum => "slotnum",
             Self::MSize => "msize",
 
             Self::CallCode => "callcode",

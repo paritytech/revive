@@ -489,6 +489,11 @@ impl<'ctx> Context<'ctx> {
         &self.intrinsics
     }
 
+    /// Whether the linked LLVM provides the wide integer extension.
+    pub fn has_wide_integer_extension(&self) -> bool {
+        self.intrinsics.has_wide_integer_extension()
+    }
+
     /// Returns the LLVM runtime function collection reference.
     pub fn llvm_runtime(&self) -> &LLVMRuntime<'ctx> {
         &self.llvm_runtime

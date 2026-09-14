@@ -1,0 +1,348 @@
+<title>XReviveVec Handoff</title>
+<style>
+:root{
+  --ink:#16181d; --ink-soft:#4a5058; --ink-faint:#767d87;
+  --ground:#fbfaf8; --panel:#ffffff; --rule:#e2ded7;
+  --accent:#8a4b2a; --accent-soft:#f0e5dd;
+  --ok:#2f6b45; --ok-soft:#e4efe7; --warn:#8a6a12; --warn-soft:#f5eeda; --bad:#8f2f2f; --bad-soft:#f6e5e3;
+  --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+  --sans:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --ui:system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ink:#e8e6e2; --ink-soft:#b0aca6; --ink-faint:#87837d;
+    --ground:#15161a; --panel:#1c1e23; --rule:#31343b;
+    --accent:#d99263; --accent-soft:#33251c;
+    --ok:#7dc79b; --ok-soft:#1d2a22; --warn:#d8b96a; --warn-soft:#2b2517; --bad:#e08a84; --bad-soft:#2e1e1d;
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#e8e6e2; --ink-soft:#b0aca6; --ink-faint:#87837d;
+  --ground:#15161a; --panel:#1c1e23; --rule:#31343b;
+  --accent:#d99263; --accent-soft:#33251c;
+  --ok:#7dc79b; --ok-soft:#1d2a22; --warn:#d8b96a; --warn-soft:#2b2517; --bad:#e08a84; --bad-soft:#2e1e1d;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--sans);line-height:1.62;
+  font-size:17px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:53rem;margin:0 auto;padding:3.5rem 1.4rem 6rem}
+h1{font-size:2.1rem;line-height:1.15;margin:0 0 .3rem;text-wrap:balance;letter-spacing:-.01em}
+.sub{color:var(--ink-soft);margin:0 0 .5rem;font-size:1.03rem}
+.stamp{font-family:var(--ui);font-size:.76rem;color:var(--ink-faint);letter-spacing:.04em;
+  text-transform:uppercase;margin-bottom:2.4rem}
+h2{font-size:1.32rem;margin:3rem 0 .2rem;padding-top:1.1rem;border-top:1px solid var(--rule);
+  text-wrap:balance;letter-spacing:-.005em}
+h2 .n{font-family:var(--ui);font-size:.7rem;color:var(--accent);display:block;letter-spacing:.09em;
+  text-transform:uppercase;margin-bottom:.34rem;font-weight:600}
+h3{font-size:1.02rem;margin:1.7rem 0 .35rem;font-family:var(--ui);font-weight:650;letter-spacing:-.002em}
+p{margin:.55rem 0}
+code{font-family:var(--mono);font-size:.855em;background:var(--accent-soft);padding:.1em .34em;
+  border-radius:3px;color:var(--ink)}
+pre{background:var(--panel);border:1px solid var(--rule);border-left:2.5px solid var(--accent);
+  border-radius:5px;padding:.85rem 1rem;overflow-x:auto;margin:.8rem 0}
+pre code{background:none;padding:0;font-size:.8rem;line-height:1.62}
+.tw{overflow-x:auto;margin:1rem 0}
+table{border-collapse:collapse;width:100%;font-family:var(--ui);font-size:.85rem}
+th{text-align:left;font-weight:650;color:var(--ink-soft);border-bottom:1.5px solid var(--rule);
+  padding:.42rem .6rem;white-space:nowrap;font-size:.76rem;letter-spacing:.03em;text-transform:uppercase}
+td{padding:.42rem .6rem;border-bottom:1px solid var(--rule);vertical-align:top}
+td.n{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:.82rem;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+.win{color:var(--ok);font-weight:650}
+.lose{color:var(--bad);font-weight:650}
+.pick td{background:var(--accent-soft)}
+.card{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:.9rem 1.1rem;margin:.9rem 0}
+.card.do{border-left:3px solid var(--bad)}
+.card.mid{border-left:3px solid var(--warn)}
+.card.done{border-left:3px solid var(--ok)}
+.card h4{margin:0 0 .3rem;font-family:var(--ui);font-size:.96rem;font-weight:650;
+  display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap}
+.tag{font-family:var(--ui);font-size:.66rem;letter-spacing:.06em;text-transform:uppercase;
+  padding:.13rem .44rem;border-radius:3px;font-weight:650;white-space:nowrap}
+.t-block{background:var(--bad-soft);color:var(--bad)}
+.t-bug{background:var(--bad-soft);color:var(--bad)}
+.t-open{background:var(--warn-soft);color:var(--warn)}
+.t-done{background:var(--ok-soft);color:var(--ok)}
+.card p{margin:.3rem 0;font-size:.93rem;color:var(--ink-soft)}
+.card p strong{color:var(--ink)}
+ul{margin:.5rem 0;padding-left:1.15rem}
+li{margin:.28rem 0}
+.lede{font-size:1.05rem;color:var(--ink-soft);border-left:2.5px solid var(--accent);
+  padding-left:1rem;margin:1.1rem 0}
+.warnbox{background:var(--warn-soft);border:1px solid var(--rule);border-left:3px solid var(--warn);
+  border-radius:5px;padding:.85rem 1.1rem;margin:1.1rem 0;font-size:.94rem}
+.warnbox strong{display:block;font-family:var(--ui);font-size:.83rem;letter-spacing:.03em;
+  text-transform:uppercase;color:var(--warn);margin-bottom:.28rem}
+.kv{font-family:var(--ui);font-size:.86rem}
+.kv td:first-child{color:var(--ink-soft);white-space:nowrap}
+</style>
+
+<div class="wrap">
+
+<h1>XReviveVec Handoff</h1>
+<p class="sub">Picking the work up on an x86-64 Linux box. Supersedes the previous handoff: the
+width design has changed back to <code>vtype</code>, and the measurements it quoted no longer apply.</p>
+<p class="stamp">27 Aug 2026 &middot; three repos, all dirty, nothing committed</p>
+
+<div class="lede">
+The extension takes a wide instruction's width from <code>vtype</code> again, set by
+<code>vsetivli</code>, in one custom-2 instruction set. The linker recovers the width by
+interprocedural dataflow. Two real miscompiles were found and fixed on the way; one remains.
+Performance has never been measured — that is the main reason to be on Linux.
+</div>
+
+<h2><span class="n">1 &middot; State</span>Where everything is</h2>
+
+<div class="tw"><table class="kv">
+<tr><th>repo</th><th>HEAD</th><th>branch</th><th>working tree</th></tr>
+<tr><td><code>parity-llvm</code></td><td><code>72b62d150905</code></td><td><code>vec_ext_custom_inst</code></td><td>24 files dirty — the <code>vtype</code> design</td></tr>
+<tr><td><code>polkavm</code></td><td><code>519e8f8</code></td><td><code>vec_ext_custom_inst</code></td><td>3 files dirty — decoder + dataflow</td></tr>
+<tr><td><code>revive</code></td><td><code>01ce83fd</code></td><td><code>vec_ext_custom_inst</code></td><td>clean; analysis files untracked</td></tr>
+</table></div>
+
+<p><strong>HEAD of <code>parity-llvm</code> is the <em>funct7</em> commit.</strong> The working tree
+reverts it. That is deliberate — it keeps both designs one <code>git stash</code> apart, which is
+how the comparison was run. Do not be misled by the commit subject.</p>
+
+<p>Both working trees are saved as patches, verified to reapply cleanly onto their HEADs:</p>
+<pre><code>revive/benchmarks/analysis/vsetivli-tradeoff/
+  llvm-vsetivli.patch      3,352 lines   apply onto parity-llvm 72b62d150905
+  polkavm-vsetivli.patch     832 lines   apply onto polkavm 519e8f8
+  RESULTS.md               the measurements, with their caveats
+  compare.py  sweep.py     the two measurement harnesses
+  sweep.tsv  codesize-compiletime.tsv
+  bin/                     190 MB of Mach-O arm64 — DELETE, rebuild on Linux</code></pre>
+
+<div class="warnbox"><strong>bin/ does not travel</strong>
+Those are macOS arm64 binaries: two <code>llc</code> builds and two <code>polkatool</code> builds.
+Both harnesses hardcode paths into <code>bin/</code>. On Linux, rebuild all four and repoint them.</div>
+
+<h2><span class="n">2 &middot; Changed</span>What is different from the last handoff</h2>
+
+<h3>LLVM</h3>
+<ul>
+<li><strong>Width comes from <code>vtype</code> again.</strong> One <code>revive.wadd</code> covers
+128/256/512/1024; <code>vsetivli</code> selects. Everything is in custom-2, so custom-1 and custom-3
+stay free — which was the whole point of going back.</li>
+<li><strong>Three things kept from the funct7 work</strong>, because they are orthogonal to how width
+is carried: register moves that name their own count (<code>revive.wmv1r/2r/4r/8r</code>) — a copy is
+expanded <em>after</em> the vsetvli pass and so can never read <code>vtype</code>; the RVV-avoidance
+fixes; and spills through <code>revive.wld</code>/<code>wst</code> rather than
+<code>vs2r.v</code>/<code>vl2r.v</code>.</li>
+<li><strong>The machine outliner is barred from lifting <code>vtype</code>-dependent code</strong>
+(<code>getOutliningTypeImpl</code>). Without this, 43% of wide instructions end up in
+<code>OUTLINED_FUNCTION_*</code> bodies whose width is a property of the call site. Behind
+<code>-riscv-revive-outline-vtype</code> (default: barred).</li>
+<li><strong>3016/3016</strong> on <code>CodeGen/RISCV</code> + <code>MC/RISCV</code>.</li>
+</ul>
+
+<h3>PolkaVM linker</h3>
+<ul>
+<li><code>riscv.rs</code>: custom-2 decoder rewritten for the <code>vtype</code> encoding;
+<code>Inst::SetVtype</code> decodes <code>vsetivli</code>/<code>vsetvli</code>;
+<code>WideMoveN</code> keeps its own width.</li>
+<li><code>BasicInst::Wide.width</code> is now <code>Option&lt;WideWidth&gt;</code>, filled in by a new
+<code>resolve_wide_widths</code> pass over the basic-block graph. It is interprocedural: a call
+clobbers <code>vtype</code>, a function's entry is the meet of its call sites, its exit the meet of
+its returns. It handles the outliner's <code>t0</code> link register, tail-called outlined bodies,
+and blocks whose address escapes into data.</li>
+<li>An unresolvable width is a <strong>hard error</strong>, never a guess. That is how the remaining
+miscompile below was found.</li>
+<li><code>runblob</code> now enables gas metering and reports gas and steps per export.</li>
+</ul>
+
+<h2><span class="n">3 &middot; Bugs</span>Two fixed, one open</h2>
+
+<div class="card done">
+<h4><span class="tag t-done">fixed</span> <code>vtype</code> was assumed to survive calls, and nothing restored it</h4>
+<p><code>hasCallPreservedVType()</code> returned true for the extension, so a caller reconfigured
+nothing after a call. The <code>CalleeSavedRegs&lt;(add …, VL, VTYPE)&gt;</code> declaration meant to
+back that up never took effect, because <strong><code>VTYPE</code> is a reserved register and
+reserved registers are not spilled as callee-saved.</strong> A caller at m2 calling a function that
+configured m4 resumed at m4: reloads read 64 bytes where 32 were spilled.</p>
+<p>Now out of line behind <code>-riscv-revive-call-preserved-vtype</code>, off by default. This is
+what raised the <code>.text</code> cost of <code>vtype</code> from +17% to +24% against funct7.</p>
+</div>
+
+<div class="card done">
+<h4><span class="tag t-done">fixed</span> Relocated wide accesses did not link</h4>
+<p>A <code>%lo</code> on <code>revive.wld</code>/<code>revive.wst</code> had no handler — 27 per
+module in ERC20 alone. Pre-existing and present in <em>both</em> designs, so it was never a
+regression from the rework; it simply had not been hit. Fixed in both linkers. The <code>%hi</code>
+half already becomes a full-address <code>LoadAddress</code>, so the access just needs its
+displacement cleared.</p>
+</div>
+
+<div class="card do">
+<h4><span class="tag t-bug">open — wrong code</span> A wide instruction reachable from a call with no configuration</h4>
+<p>In 3 of 103 modules (XENCrypto variants) a wide instruction sits directly after a call, in the
+same basic block, with nothing between:</p>
+<pre><code>    dc0: jalr    ra                  # call
+    dc4: revive.wzext  v8, zero      # runs under whatever the callee left</code></pre>
+<p>No other predecessor can supply a configuration, so this is not linker conservatism — it is a
+miscompile the linker refuses to encode. <strong>Fix this first.</strong> It is three modules, but
+it is wrong code rather than a link failure, and it is a class of bug the funct7 design cannot
+have.</p>
+<p>Reproduce:</p>
+<pre><code>llc -O2 -mattr=$FEATURES -filetype=obj -o xen.o \
+    &lt;ir-intrinsics-oz/XENCrypto/…XENCrypto5001.optimized.ll, features rewritten&gt;
+polkatool link --isa revive_v2 -o /dev/null xen.o</code></pre>
+<p>Suspicion, unverified: the instruction is a rematerialised wide constant
+(<code>wzext</code> of <code>zero</code>) placed after <code>RISCVInsertVSETVLI</code> has run.
+Check what runs between that pass and <code>ExpandPostRAPseudos</code>.</p>
+</div>
+
+<h2><span class="n">4 &middot; Next</span>What to do on Linux, in order</h2>
+
+<div class="card do">
+<h4><span class="tag t-block">blocker</span> 1. The Linux zygote has no <code>syscall_wide</code></h4>
+<p>The <code>generic</code> sandbox implements it (<code>sandbox/generic.rs:759</code>) and the vmctx
+slot is declared (<code>zygote.rs:70</code>), but the <code>polkavm-zygote</code> crate never
+mentions it, and <code>sandbox/linux.rs:799</code> loads a <strong>prebuilt binary</strong> via
+<code>include_bytes!</code>. So the recompiler cannot execute a wide instruction on Linux until the
+zygote implements it and the blob is rebuilt with
+<code>crates/polkavm-zygote/build-and-replace.sh</code>.</p>
+<p><strong>This gates everything else on this list.</strong></p>
+</div>
+
+<div class="card do">
+<h4><span class="tag t-open">the reason to be here</span> 2. Measure the recompiler</h4>
+<p>Never run. The recompiler needs x86-64 with BMI2 (<code>api.rs:436</code>); the previous host was
+arm64, so the backend refused to start. Every number so far is interpreter-only.</p>
+</div>
+
+<div class="card mid">
+<h4><span class="tag t-open">open</span> 3. Real gas costs for the 32 wide instructions</h4>
+<p><strong>Until this is done there is no performance measurement at all.</strong>
+<code>runblob</code> sets no cost model, so PolkaVM falls back to <code>CostModel::naive()</code>
+where every instruction costs one gas — a 256-bit <code>revive.wmul</code> included. The alternative
+is worse: <code>CostModelKind::Full</code> routes through <code>simulator.rs</code>, which
+<code>unimplemented!()</code>s every wide instruction and would panic.</p>
+<p>So the "gas" column in <code>RESULTS.md</code> is dynamic instruction count. Against the
+no-extension baseline it flatters the extension badly — one <code>revive.wmul</code> standing in for
+a ~40-instruction limb chain scores as a 39-instruction saving. Between the three extension arms it
+is a fair like-for-like count, because they execute the same wide instructions and differ mainly in
+call overhead.</p>
+<p>Note <code>CostModel</code> is at <strong>version 3</strong>; <code>deserialize</code> rejects any
+blob of another version, so previously serialised models are refused.</p>
+</div>
+
+<div class="card mid">
+<h4><span class="tag t-open">open</span> 4. Six modules never link standalone</h4>
+<p>They need resolc's own link step rather than <code>polkatool</code> on a lone object —
+<code>found undefined symbol</code>. Affects every arm equally, so it does not distort the
+comparison, but it costs six modules of coverage.</p>
+</div>
+
+<div class="card mid">
+<h4><span class="tag t-open">open</span> 5. revive is pinned to polkavm 0.35 from crates.io</h4>
+<p>So <code>resolc</code> cannot emit <code>ReviveV2</code> itself. The whole measurement pipeline
+works around this by driving <code>llc</code> over dumped IR and linking with a locally built
+<code>polkatool</code>. Repointing revive at the local tree would let contracts be built end to end
+through <code>resolc</code>.</p>
+</div>
+
+<div class="card mid">
+<h4><span class="tag t-open">decide</span> 6. Inline arithmetic against the 69-byte instruction budget</h4>
+<p><code>VM_COMPILER_MAXIMUM_INSTRUCTION_LENGTH = 69</code>
+(<code>zygote.rs:131</code>), pinned near 71 by the static assert at
+<code>zygote.rs:457</code> relating sandbox native code size to <code>VM_MAXIMUM_CODE_SIZE</code>.
+Inline <code>adc</code>/<code>sbb</code> chains do not fit. Raising it means enlarging the sandbox's
+native code reservation — a memory-layout decision, not a code one.</p>
+</div>
+
+<h2><span class="n">5 &middot; Numbers</span>What was measured, and how far to trust it</h2>
+
+<p>Sums over the 61 modules all four arms compiled, linked and ran; gas over the 108 exports every
+arm ran to the same outcome after the same number of host calls.</p>
+
+<div class="tw"><table>
+<tr><th>arm</th><th class="n">.text</th><th class="n">blob</th><th class="n">insn count</th><th class="n">text/ref</th><th class="n">blob/ref</th><th class="n">compile</th></tr>
+<tr><td>ref (no extension)</td><td class="n">193,400</td><td class="n">242,022</td><td class="n">313,765</td><td class="n">—</td><td class="n">—</td><td class="n">7.3 s</td></tr>
+<tr><td>no-vsetvli (funct7)</td><td class="n">154,642</td><td class="n">167,905</td><td class="n">262,162</td><td class="n win">−20.04%</td><td class="n">−30.62%</td><td class="n">5.0 s</td></tr>
+<tr class="pick"><td>vsetvli-noMO</td><td class="n">171,140</td><td class="n">165,935</td><td class="n">264,975</td><td class="n">−11.51%</td><td class="n win">−31.44%</td><td class="n">5.2 s</td></tr>
+<tr><td>vsetvli-MO</td><td class="n">164,758</td><td class="n">176,311</td><td class="n">265,135</td><td class="n">−14.81%</td><td class="n lose">−27.15%</td><td class="n">5.4 s</td></tr>
+</table></div>
+
+<p><strong>The object-level penalty does not survive translation.</strong> At <code>.text</code> level
+funct7 looks decisively better; at blob level the gap closes and reverses in total. The
+<code>vsetivli</code> instructions carry no PolkaVM instruction and the linker drops them, and
+PolkaVM's own optimiser recovers what the outliner was doing.</p>
+
+<div class="warnbox"><strong>The totals hide the distribution</strong>
+Per module, <code>vsetvli-noMO</code> is <em>larger</em> than funct7 on <strong>61 of 94</strong>
+modules; median <strong>+1.58%</strong>, mean −0.10%, sum −3.20%. It wins on the big contracts
+(−3.5%, −4.7%, −6.7% on the three largest) and costs a near-constant ~19 bytes on small ones — one
+module alone is 24.6% of the total blob bytes. The claim the totals support is that
+<code>vtype</code> <em>scales</em> better, not that it always wins. <strong>If small contracts
+dominate what ships, funct7 is the better choice and the recommendation flips.</strong></div>
+
+<p>Over the wider 94-module set (dropping the <code>ref</code> column, which excluded 33 modules only
+because it cannot lower the <code>revive.*</code> intrinsics at all), <code>vsetvli-MO</code> is
+<strong>+12.34%</strong> against funct7 on blob size — worse than the 61-module table suggests.
+Outlining is not worth having: it is bigger, slower to compile, and needs the most linker machinery.</p>
+
+<h2><span class="n">6 &middot; Traps</span>Each of these cost a cycle</h2>
+<ul>
+<li><strong>Cargo does not track <code>LLVM_SYS_221_PREFIX</code>.</strong> After changing LLVM,
+<code>make install-bin</code> alone leaves resolc linked against the old libraries. Touch a source
+file first.</li>
+<li><strong><code>ninja llc</code> does not rebuild <code>llvm-mc</code>.</strong> MC tests passed
+here while asserting instructions that no longer existed.</li>
+<li><strong>Most functions carry no <code>target-features</code> attribute</strong> — in a typical
+module 5 of 15 attribute groups do, and the ones doing the i256 work are not among them. Rewriting
+the attribute alone measures nothing; <code>-mattr</code> is also required. Both harnesses do this.</li>
+<li><strong>Measure at <code>-Oz</code>.</strong> The reference corpus was dumped at <code>-Oz</code>;
+comparing against <code>-O3</code> produced an apparent 3.2× regression that was purely the
+optimisation level.</li>
+<li><strong><code>llvm-size</code> needs every <code>.text*</code> section summed</strong>, not just
+<code>.text</code> — objects are function-sectioned, so reading the one section undercounts
+massively.</li>
+<li><strong>Gas is only comparable between runs that did the same work.</strong> An arm that faults
+early burns little gas while doing none of the work, which reads as a speed-up. <code>sweep.py</code>
+matches exports on outcome and host-call count before comparing.</li>
+<li><strong>Opcode 254 is <code>UNUSED_RAW_OPCODE</code></strong>, a reserved sentinel the ISA
+asserts must stay free.</li>
+<li><strong>Instruction groups in the definition macros match positionally.</strong> A misordered
+group silently gives every instruction another shape's signature — there is no name-based safety
+net.</li>
+<li><strong><code>git checkout -- .</code> restores from the index, not from HEAD.</strong> With a
+<code>git revert --no-commit</code> staged, it reinstates the revert and discards unstaged work.
+Save a patch before switching designs.</li>
+</ul>
+
+<h2><span class="n">7 &middot; Start</span>Picking it up</h2>
+
+<pre><code># three repos, all on vec_ext_custom_inst, all dirty, nothing committed
+git -C parity-llvm log --oneline -1   # 72b62d150905  (the funct7 commit; tree reverts it)
+git -C polkavm     log --oneline -1   # 519e8f8
+git -C revive      log --oneline -1   # 01ce83fd
+
+# if the trees did not travel, reapply from the saved patches
+git -C parity-llvm apply revive/benchmarks/analysis/vsetivli-tradeoff/llvm-vsetivli.patch
+git -C polkavm     apply revive/benchmarks/analysis/vsetivli-tradeoff/polkavm-vsetivli.patch
+
+# rebuild the four binaries the harnesses need, then repoint bin/
+ninja -C &lt;llvm-build&gt; llc llvm-mc llvm-size FileCheck
+cargo -C polkavm build --release -p polkatool -p runblob
+
+# the flags that select an arm
+llc -mattr=…,+xrevivevec                                      # vsetvli-noMO  (default)
+llc -mattr=…,+xrevivevec -riscv-revive-outline-vtype=true     # vsetvli-MO
+llc -mattr=…,+xrevivevec -riscv-revive-call-preserved-vtype=true   # the miscompile, for measuring
+
+# verify before changing anything
+llvm-lit -s llvm/test/CodeGen/RISCV llvm/test/MC/RISCV        # expect 3016/3016
+python3 revive/benchmarks/analysis/vsetivli-tradeoff/compare.py    # .text and compile time
+python3 revive/benchmarks/analysis/vsetivli-tradeoff/sweep.py      # blob, count, link time
+
+# wide tests are parameterised by backend, so the recompiler is held to the interpreter's results
+cargo test -p polkavm --lib wide_</code></pre>
+
+<p style="color:var(--ink-faint);font-size:.9rem;margin-top:2rem">Recommendation as it stands:
+<strong>vsetvli-noMO</strong>, on the strength of how it scales and of keeping custom-1 and custom-3
+free — but resting on code size alone, since performance has not been measured. Fix the open
+miscompile before drawing conclusions from any of it.</p>
+
+</div>

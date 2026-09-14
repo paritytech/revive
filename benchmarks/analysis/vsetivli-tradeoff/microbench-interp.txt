@@ -1,0 +1,69 @@
+=== wide microbenchmark: Interpreter, 128-bit (ns per operation) ===
+op          extension    reference    speedup  correct
+add             17.48       137.05      7.84x  yes
+sub             17.45       141.94      8.13x  yes
+and             17.44        59.47      3.41x  yes
+or              17.44        59.92      3.44x  yes
+xor             17.46        59.61      3.41x  yes
+mul             23.87       252.44     10.57x  yes
+move            13.09        28.86      2.20x  yes
+bswap           16.28        40.55      2.49x  yes
+shl             21.37        65.11      3.05x  yes
+shr_l           21.33            -          -  (ext only)
+shr_a           21.28            -          -  (ext only)
+slt_u           15.89       189.23     11.91x  yes
+slt_s           16.32            -          -  (ext only)
+seq             15.82       105.20      6.65x  yes
+sne             15.81            -          -  (ext only)
+min_u           17.09            -          -  (ext only)
+min_s           16.76            -          -  (ext only)
+max_u           16.78            -          -  (ext only)
+max_s           17.10            -          -  (ext only)
+zext            14.97        30.18      2.02x  yes
+sext_w          12.41            -          -  (ext only)
+trunc           10.73        16.07      1.50x  yes
+signext         22.12            -          -  (ext only)
+load            20.50            -          -  (ext only)
+store           13.44            -          -  (ext only)
+div_u          654.08            -          -  (ext only)
+div_s          685.19            -          -  (ext only)
+rem_u          670.02            -          -  (ext only)
+rem_s          672.84            -          -  (ext only)
+exp           1611.81            -          -  (ext only)
+addmod        1280.89            -          -  (ext only)
+mulmod        1898.17            -          -  (ext only)
+
+=== wide microbenchmark: Interpreter, 256-bit (ns per operation) ===
+op          extension    reference    speedup  correct
+add             19.99       254.31     12.72x  yes
+sub             20.29       261.72     12.90x  yes
+and             20.43       117.52      5.75x  yes
+or              20.90       122.81      5.88x  yes
+xor             20.54       122.21      5.95x  yes
+mul             36.43       828.21     22.73x  yes
+move            13.75        58.16      4.23x  yes
+bswap           17.47        81.62      4.67x  yes
+shl             23.89       165.11      6.91x  yes
+shr_l           24.58            -          -  (ext only)
+shr_a           24.64            -          -  (ext only)
+slt_u           16.70       365.47     21.89x  yes
+slt_s           17.15            -          -  (ext only)
+seq             16.47       198.25     12.04x  yes
+sne             16.53            -          -  (ext only)
+min_u           18.15            -          -  (ext only)
+min_s           17.82            -          -  (ext only)
+max_u           17.80            -          -  (ext only)
+max_s           18.14            -          -  (ext only)
+zext            15.18        45.20      2.98x  yes
+sext_w          12.44            -          -  (ext only)
+trunc           10.77        14.42      1.34x  yes
+signext         21.17            -          -  (ext only)
+load            28.36            -          -  (ext only)
+store           16.77            -          -  (ext only)
+div_u         2807.23            -          -  (ext only)
+div_s         2797.89            -          -  (ext only)
+rem_u         2781.49            -          -  (ext only)
+rem_s         2804.50            -          -  (ext only)
+exp           5551.36            -          -  (ext only)
+addmod        5574.91            -          -  (ext only)
+mulmod        6805.66            -          -  (ext only)

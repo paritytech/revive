@@ -1,0 +1,76 @@
+# Recompiler microbench, worker logging OFF (production-representative).
+# The harness runs as a #[test], where is_sandbox_logging_enabled() forces the sandbox worker's
+# trace logging on -- that adds ~1,680 ns of per-op log I/O to every op that still crosses the
+# syscall_wide trampoline (mul/shift/min/max/bswap/sext + the heavy iterative ops), swamping their
+# real cost. These numbers were captured with that gate temporarily forced off (reverted after), so
+# they match how resolc/runblob run. Inlined ops never touch the trampoline, so they are unaffected.
+
+=== wide microbenchmark: Compiler, 128-bit (ns per operation) ===
+op          extension    reference    speedup  correct
+add              1.16         3.51      3.03x  yes
+sub              1.14         3.51      3.06x  yes
+and              1.16         1.14      0.98x  yes
+or               1.15         1.34      1.16x  yes
+xor              0.94         1.15      1.22x  yes
+mul             56.47         5.20      0.09x  yes
+move             0.72         0.55      0.77x  yes
+bswap           53.57         0.87      0.02x  yes
+shl             57.25         1.36      0.02x  yes
+shr_l           59.56            -          -  (ext only)
+shr_a           59.01            -          -  (ext only)
+slt_u            1.06         4.30      4.06x  yes
+slt_s            0.90            -          -  (ext only)
+seq              1.08         2.14      1.97x  yes
+sne              1.08            -          -  (ext only)
+min_u           58.11            -          -  (ext only)
+min_s           55.64            -          -  (ext only)
+max_u           58.18            -          -  (ext only)
+max_s           55.66            -          -  (ext only)
+zext             0.51         0.51      1.00x  yes
+sext_w          52.32            -          -  (ext only)
+trunc            0.08         0.19      2.39x  yes
+signext         53.70            -          -  (ext only)
+load             1.22            -          -  (ext only)
+store            1.22            -          -  (ext only)
+div_u         1025.71            -          -  (ext only)
+div_s         1060.24            -          -  (ext only)
+rem_u         1032.83            -          -  (ext only)
+rem_s         1068.04            -          -  (ext only)
+exp           4127.01            -          -  (ext only)
+addmod        1932.57            -          -  (ext only)
+mulmod        3155.78            -          -  (ext only)
+
+=== wide microbenchmark: Compiler, 256-bit (ns per operation) ===
+op          extension    reference    speedup  correct
+add              2.49         7.08      2.84x  yes
+sub              2.48         7.39      2.97x  yes
+and              2.49         2.47      0.99x  yes
+or               2.48         2.46      0.99x  yes
+xor              2.49         2.45      0.98x  yes
+mul             56.94        22.98      0.40x  yes
+move             1.59         1.26      0.79x  yes
+bswap           52.50         1.86      0.04x  yes
+shl             61.26         3.83      0.06x  yes
+shr_l           56.49            -          -  (ext only)
+shr_a           57.89            -          -  (ext only)
+slt_u            1.31         8.88      6.75x  yes
+slt_s            1.78            -          -  (ext only)
+seq              3.10         3.40      1.10x  yes
+sne              2.16            -          -  (ext only)
+min_u           58.12            -          -  (ext only)
+min_s           55.71            -          -  (ext only)
+max_u           58.14            -          -  (ext only)
+max_s           55.83            -          -  (ext only)
+zext             1.16         1.16      1.00x  yes
+sext_w          52.36            -          -  (ext only)
+trunc            0.04         0.19      4.30x  yes
+signext         53.65            -          -  (ext only)
+load             1.89            -          -  (ext only)
+store            1.88            -          -  (ext only)
+div_u         4489.90            -          -  (ext only)
+div_s         4539.75            -          -  (ext only)
+rem_u         4522.05            -          -  (ext only)
+rem_s         4542.57            -          -  (ext only)
+exp          10191.58            -          -  (ext only)
+addmod        8996.92            -          -  (ext only)
+mulmod       10778.25            -          -  (ext only)

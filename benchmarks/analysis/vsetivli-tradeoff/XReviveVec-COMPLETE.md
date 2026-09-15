@@ -622,6 +622,22 @@ Remeasured against the current cost model (`wtrunc=0`) on the **`w`** arm (the p
 
 `opt -O3` removes just **2 of 34** — LLVM cannot narrow a memory access without proving the stored/loaded value's range at every def and use, an interprocedural property its per-function passes don't compute. NewYork's inference proves exactly that and collapses the scratch/ABI/heap traffic (stores to `%value_transferred` spills, `%key_pointer`/`%value_pointer` marshalling, `@__heap_memory`, ABI `getelementptr` slots) from 34 wide ops to **5**. And those 5 are *irreducible*: they are the EVM storage ABI inside `__revive_sload_word`/`__revive_sstore_word` — a storage **key** is 32 bytes and a slot **value** is 32 bytes (`store i256 …, ptr %sstore_key` / `%sstore_value` / `%sload_key`), so no pipeline can narrow them. That is the whole divergence: **~29 narrowable memory ops that only whole-program inference can prove are ≤64-bit**, plus the 5 that are 256-bit by EVM definition and stay wide everywhere.
 
+**Confirming it in gas, not just op counts (category decomposition, `w` arm).** Building both CallGas.Other blobs on the `w` arm and decomposing executed gas by category (`full − cat_zeroed` via `RUNBLOB_GASDECOMP`), the Yul-w → NewYork-w reduction is **620 → 278 (0.448×)**, and **68% of it is memory**:
+
+| category | Yul-w | NewYork-w | Δ | share of cut |
+|---|--:|--:|--:|--:|
+| **memory (total)** | 344 | 112 | **−232** | **68%** |
+|   — wide `wld`/`wst` | 160 | 56 | −104 | 30% |
+|   — scalar load/store | 184 | 56 | −128 | 37% |
+| arithmetic | 158 | 59 | −99 | 29% |
+| control | 49 | 27 | −22 | 6% |
+| compare | 32 | 33 | +1 | — |
+| move | 37 | 47 | +10 | — |
+| convert | 0 | 0 | 0 | — |
+| **TOTAL** | **620** | **278** | **−342** | 100% |
+
+The op-count story (wide `wld`/`wst` 160 → 56, tracking the 34 → 5 IR narrowing) is only *half* the memory win. The larger half is **scalar** load/store (184 → 56): once values are narrow they live in registers instead of being spilled to the stack as 256-bit quantities and reloaded limb-by-limb — a second-order effect op-counting the IR doesn't reveal. Arithmetic adds −99 (narrowed loop math runs as single scalar ops); compare/move tick up trivially from restructured control flow. **Arm reversal on this module:** Yul has w (620) < vec (653), but NewYork has **vec (193) < w (278)** — once narrowing strips CallGas to a handful of wide storage ops, vec's RVV marshalling of those few is cheaper than w's here. It is the one module where the arms flip; the corpus still favors w.
+
 **Does it generalize? Yes — CallGas is the extreme of a corpus-wide pattern.** Counting `i256` load+store in the Yul vs NewYork IR across 10 modules spanning the win range (IR-level, so extension-independent — same for `vec` and `w`):
 
 | module | i256 mem: Yul → NY | narrowed | gas NY-w÷ref |

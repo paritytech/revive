@@ -3496,6 +3496,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         self.generate_block(&object.code, context)?;
 
+        // The EVM lets the code return implicitly, so terminate the block the way the legacy
+        // pipeline does in `Code::into_llvm`. Without it a code block that falls off the end
+        // reaches the function's `ret void`, which contradicts `__entry` being `noreturn`: LLVM
+        // then proves the dispatch edge into this function unreachable and folds it away, so
+        // calling the deployed contract would run the constructor.
+        revive_llvm_context::polkavm_evm_return::stop(context)
+            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
+
         context
             .set_debug_location(0, 0, None)
             .map_err(|error| CodegenError::Llvm(error.to_string()))?;

@@ -5,7 +5,7 @@ use crate::{
         absolute_path, assert_command_success, execute_command, execute_resolc, CommandResult,
         ResolcOptSettings, SolcOptSettings, SOLIDITY_CONTRACT_PATH,
         SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH, STANDARD_JSON_CONTRACTS_PATH,
-        YUL_MEMSET_CONTRACT_PATH,
+        YUL_EMPTY_RUNTIME_OBJECT_PATH, YUL_MEMSET_CONTRACT_PATH,
     },
     SolcCompiler,
 };
@@ -175,6 +175,20 @@ fn compiles_yul_to_binary_blob() {
 fn compiles_newyork_folded_guard_inlined_loop() {
     let path = absolute_path(SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH);
     let arguments = &[&path, "--newyork", "--disable-solc-optimizer", "--bin"];
+
+    let result = execute_resolc(arguments);
+    assert_pvm_blob(&result);
+}
+
+/// Compile regression: a `_deployed` object with an empty code block crashed the newyork
+/// pipeline in `polkavm-linker` with "inconsistent reachability after optimization". The code
+/// block fell through to the function's `ret void`, which contradicts `__entry` being
+/// `noreturn`, so LLVM folded the runtime dispatch edge away and a call would have run the
+/// constructor. The implicit `stop` the legacy pipeline appends keeps the edge live.
+#[test]
+fn compiles_newyork_empty_runtime_object() {
+    let path = absolute_path(YUL_EMPTY_RUNTIME_OBJECT_PATH);
+    let arguments = &[&path, "--yul", "--newyork", "--bin"];
 
     let result = execute_resolc(arguments);
     assert_pvm_blob(&result);

@@ -134,7 +134,7 @@ The gas analogue of the ns/op tables — what a chain charges, deterministic and
 | `move` | 4 | 8 | **0.50×** | 4 | 1.00× |
 | `load`/`store` | 4 | ≈4 (4 limbs) | **≈1.0×** | ≈2 | ≈2× |
 | `zext` | 2 | 6 | **0.33×** | 4 | 0.50× |
-| `trunc` | 2 | 2 | 1.00× | 2 | 1.00× |
+| `trunc` | 0 | 2 | 0.00× | 2 | 0.00× |
 | `min`/`max`/`sext`/`signext`/shifts | 4 (2 for `sext`) | — | — | — | — |
 | `mul` | 56 | 105 | **0.53×** | 29 | 1.93× |
 | `div_u`/`rem_u` | 3,100 | — | — | — | — |
@@ -393,7 +393,8 @@ Gas is what a chain charges. Two recalibrations brought it down: first removing 
 
 | wide op class | marshal-era | interim | **now** | scalar chain @256 (§5a) |
 |---|--:|--:|--:|--:|
-| `trunc`/`zext`/`sext` (convert) | 12 | 2 | **2** | 2–6 |
+| `trunc` | 12 | 2 | **0** | 0 (free register-aliasing in ref) |
+| `zext`/`sext` (convert) | 12 | 2 | **2** | 4–6 |
 | `move` | 24 | 4 | **4** | 8 |
 | `load`/`store` (memory) | 24 | 6 | **4** | ~4 |
 | `add`/`sub`/bitwise/min/max/cmp/shift/`bswap` (linear) | 24 | 16 | **4** | 12–43 |
@@ -402,25 +403,23 @@ Gas is what a chain charges. Two recalibrations brought it down: first removing 
 | `addmod`/`mulmod` | 6300 | 6300 | **6300** | ~5,000 |
 | `exp` | 8000 | 8000 | **8000** | ~8,000 |
 
-Every non-superlinear class is now `≤ N × 64-bit` (4), and each is ≤ its measured scalar chain (§5a). The iterative ops keep their large absolute costs — a division or modular multiply is genuinely thousands of primitive ops.
+Every non-superlinear class is now `≤ N × 64-bit` (4), each ≤ its measured scalar chain (§5a); `trunc` is 0 because it just names the low limb (free register-aliasing in ref). The iterative ops keep their large absolute costs — a division or modular multiply is genuinely thousands of primitive ops.
 
-**Result:** aggregate ext/ref gas: **2.47× → 1.18× (interim) → 1.07× (now)**. On real contracts (§12) it goes to **0.993×** — below the base ISA.
+**Result — aggregate ext/ref gas across the recalibrations:** `WIDE_MARSHAL` removed **2.47× → 1.18×**; `WIDE_MEMORY 6→4`, `WIDE_LINEAR 16→4` **→ 1.07×**; `wtrunc 1→0` **→ 0.93×**. So on the standard corpus the extension now uses **less** gas than the base ISA: **vec 0.932×, w 0.904×** (63/64 modules below ref; **CallGas the lone outlier at 1.205×**). Full per-benchmark table in `gas-vs-ref-toycorpus.txt`. On real mainnet contracts it is likewise below ref.
 
-**Residual +7% decomposed** (`runblob RUNBLOB_GASDECOMP=1` over the 64-module corpus; `full − z_<class>` is each class's exact executed gas). Gas is **independent of recompiler lowering** — inline, trampoline, and interpreter charge identically (empirically 1187 for ERC20 in all three), so this is `ext` vs `ref`, not "inline vs ref".
+Decomposition is **independent of recompiler lowering** — inline, trampoline, and interpreter charge identically (empirically 1187 for ERC20 in all three), so it is `ext` vs `ref`, not "inline vs ref". The residual is now **memory-bound**: the one contract above ref, CallGas, breaks down (executed gas, `full − cat_x`) as:
 
-| component | interim (16/6) | **now (4/4)** |
-|---|--:|--:|
-| ref total | 20,261 | 20,261 |
-| vec total | 23,865 (1.178×) | **21,695 (1.071×)** |
-| — vec scalar-only | 16,041 (−4,220) | 16,041 (−4,220) |
-| — wide **memory** (`wld`/`wst`) | +3,810 | **+2,540** |
-| — wide **convert** (`wzext`/`wtrunc`) | +2,814 | **+2,814** |
-| — wide linear | +1,200 | **+300** |
-| **net (vec − ref)** | +3,604 | **+1,434** |
+| category | ref | ext (vec) | w | Δ (ext−ref) |
+|---|--:|--:|--:|--:|
+| memory (`wld`/`wst`) | 260 | 344 | 344 | **+84** |
+| arithmetic | 193 | 191 | 158 | −2 |
+| compare | 16 | 32 | 32 | +16 |
+| convert (trunc/zext) | 0 | 0 | 0 | 0 |
+| move | 31 | 37 | 37 | +6 |
+| control | 42 | 49 | 49 | +7 |
+| **total** | **542** | **653** | **620** | **+111** |
 
-After the recalibration the residual is **convert-dominated** (`wzext`/`wtrunc`, +2,814) — this deploy-path corpus promotes narrow constants to i256 and truncates back, extra ops with no scalar counterpart, correctly priced at 2 each and removable only by narrowing (§9), not cost-tuning. Memory drops to +2,540 (now ~neutral per op) and linear to +300. So the earlier "converts" intuition was right about the *residual* — it just took removing the memory/linear miscalibration to expose it. **On real contracts converts are ~0 and memory is neutral, so `ext` gas is now 0.993× ref** (§12).
-
-**Full per-benchmark re-run (all 64 modules, recalibrated).** vec/ref **1.071×**, w/ref **1.043×**; 61 of 64 above ref, 3 below (`MLoad` 0.91×, `LayoutAt` 0.99×, `FmpNativeStoreBug` 1.00×), worst `CallGas` 1.37× (a deploy path that stores many small values through 256-bit slots — convert+memory heavy, no arithmetic to offset). The spread is entirely the per-contract mix of convert/memory overhead vs offsetting wide arithmetic; per-benchmark table in `gas-vs-ref-toycorpus.txt`.
+CallGas is memory-bound: it shuffles 256-bit ABI/storage words with almost no wide arithmetic to offset the wide load/store, so `+84` memory stands. Every one of those words is 256-bit *by necessity* — an EVM storage slot / ABI word is 32 bytes, so a 160-bit address is a 32-byte word with the top 12 bytes zero; a narrower store would corrupt it. The narrowness is only recoverable in **compute**, via type inference (§9), not in the memory ops.
 
 ## 7. Wide-instruction usage and width
 
@@ -536,6 +535,12 @@ The complementary question to the table above: the whole pipeline — **NewYork 
 Narrowing `i256`→`i64`/`i128` leaves far fewer wide ops, so the win lands on **gas — down 3.3×** (−70%), interpreter −61%, code size −34%; the **recompiler is at parity** (0.99×, already fast on wide ops per §5/§6c). This is the opposite of the TI-on-vs-off table (which showed TI larger): against the **Yul** baseline the whole NewYork pipeline is both smaller and cheaper. (These NewYork gas numbers were measured before the §6d `WIDE_MEMORY/LINEAR` recalibration, so both the Yul and NewYork absolute gas would now be lower; the NewYork-vs-Yul *ratio* holds since both shift together.) w-vs-vec stays at recompiler parity (indicative — only 31–36 modules).
 
 **Bottom line.** Where the NewYork front-end compiles, benchmarks are dramatically cheaper (**~3.3× less gas, ~2.6× faster interp, ~1.5× smaller**) at recompiler parity, and `w` compiles more of them than `vec`. The blocker is `llc` robustness (only 37/99 `vec` compile) — a "where it compiles" result, not a full-corpus replacement for §6 (the §10 NewYork item).
+
+### Narrowing is the real gas lever — and only the NewYork path has it
+
+Remeasured against the current cost model (`wtrunc=0`), on the 31 modules that compile+run on the `vec` arm in **both** front-ends: **NewYork ÷ Yul-i256 = 0.327×, NewYork ÷ ref = 0.307×** — a **~3× gas cut** purely from the compiler emitting narrower representations. It helps even the memory-bound outlier: **CallGas 653 → 193 (0.30×)**, because most of its values (gas argument, lengths, counters, selectors) are genuinely ≤64-bit and narrow to *scalar* `i64`, deleting those wide loads/stores/converts (the 160-bit address itself can't narrow below its 32-byte slot, but it's a small part of the total).
+
+**Why the standard (non-NewYork) path can't match it.** The standard path already narrows everything LLVM can prove *locally* — the standard CallGas IR is a mix (95 `i256` + 166 `i64` + 283 `i32` + 171 `i8`: offsets/counters/lengths are already scalar), and `load+trunc` folds to a single scalar load even for the extension. But the residual **95 `i256`** are the values needing *whole-program* value-range reasoning to narrow, and LLVM's standard optimizer provably can't touch them: **`opt -O3` leaves i256 at 95 → 95**. Narrowing them requires the exact inference NewYork adds; there is no free lunch — *the narrowing is the inference*. So the standard path sits at LLVM's local-narrowing ceiling (§6d, vec 0.932× ref); the further ~3× needs NewYork (or grafting its inference into the standard pipeline). Emitting narrower *wide* ops (i128/i192) instead is worse (i64-scalar removes the op) or unsafe (32-byte slots), so scalar narrowing via inference is the correct lever.
 
 ## 10. Status and next
 

@@ -670,6 +670,25 @@ Per-benchmark NY-ref vs NY-w (39 modules that ran both):
 
 Remeasured against the current cost model (`wtrunc=0`) on the **`w`** arm (the primary extension), on the 37 modules that compile+run on `w` in **both** front-ends: **NewYork ÷ Yul-path w = 0.369×, NewYork ÷ ref = 0.335×** — a **~3× gas cut** purely from the compiler emitting narrower representations. (On the narrower `vec`-shared subset of 31 modules the same effect reads NewYork ÷ Yul-i256 = 0.327×, NewYork ÷ ref = 0.307×.) It helps even the memory-bound outlier: **CallGas 653 → 193 (0.30×)**, because most of its values (gas argument, lengths, counters, selectors) are genuinely ≤64-bit and narrow to *scalar* `i64`, deleting those wide loads/stores/converts (the 160-bit address itself can't narrow below its 32-byte slot, but it's a small part of the total).
 
+### Where the width difference is born — the inference rules
+
+The default path has **no** width analysis: Yul's abstract machine has one type (the 256-bit word), so every SSA value is emitted `i256` and only LLVM's local `instcombine` narrows anything (the 99→84 above). NewYork adds a bidirectional dataflow pass — `crates/newyork/src/type_inference.rs` (2,054 lines) — that computes each value's minimum width to a fixed point. That pass *is* the difference, and it narrows two ways.
+
+**(1) Semantic EVM-opcode widths** (`infer_expression_width`) — the default path types all of these `i256`:
+
+| width | opcodes |
+|---|---|
+| **i160** | `Caller`, `Origin`, `Address`, `Coinbase`; the address operand of `Balance`/`ExtCodeSize`/`ExtCodeHash` |
+| **i64** | `CallDataSize`, `CodeSize`, `ReturnDataSize`, `MSize`; `Timestamp`, `Number`, `GasLimit`, `Gas`; every memory **offset** and `keccak` **length** |
+| **i32** | free-memory-pointer slot load (when the FMP is provably bounded) |
+| **i256** (kept) | `CallValue` (msg.value), `GasPrice`, `SLoad`/`TLoad` key & value, `Difficulty`/`ChainId`/`BaseFee`/`SelfBalance`, `Keccak256` result, `CallDataLoad` |
+
+**(2) Structural propagation** through computation: `Literal` → magnitude bucket (`from_max_value`); `and` → `min(lhs,rhs)` (masking narrows to the mask, `and x,0xffffffff`→i32); `shr` by constant k → `from_bits(256−k)` (the selector idiom `shr 224`→i32); comparisons/`iszero`→i1; `byte`→i8; `add`→widen-by-one (carry); `mul`→double-width. Conservative `i256` (never narrowed): `sub`, `shl`, `exp`, `signextend`, `not`, `addmod`/`mulmod`, `calldataload`.
+
+**(3) Interprocedural + soundness.** `Call` result width = max of the callee's return-value widths (`function_returns`) — the whole-program piece LLVM's per-function passes lack. Narrowing is gated on EVM-truncation-safety: `full_width_operands` forces shift amounts and `calldatacopy` source offsets back to i256; a parameter narrows only if `unconditionally_narrowed` (used on every path, so the call-boundary checked truncation matches EVM's own trap); storage/keccak hash inputs stay i256 so a truncation can't compute a slot over the wrong bits.
+
+**Verified in CallGas.Other (NewYork IR):** `%shr_const = lshr i256 %call_data_load_value, 224` (selector→i32), the `call_data_size` import (→i64), `i160 @address_spill_buffer` (address→i160), `value_transferred` kept i256 (msg.value), `__revive_sload_word`/`__revive_sstore_word` kept i256 (the irreducible storage key/value). So the i256→{i64,i160,i32,i1} narrowing is exactly these rules on CallGas's calldata-derived selector, its length/counter arithmetic, and its address — while msg.value and the storage slots stay wide *by rule*.
+
 **Why the standard (non-NewYork) path can't match it.** The standard path already narrows everything LLVM can prove *locally* — the standard CallGas IR is a mix (99 `i256` + 167 `i64` + 311 `i32` + 177 `i8`: offsets/counters/lengths are already scalar), and `load+trunc` folds to a single scalar load even for the extension. Running the optimized IR back through **`opt -O3` gets 99 → 84 `i256`** — LLVM *does* narrow a little more, but it's local CSE of redundant `zext`/`trunc`/`bswap` temporaries, not structural. NewYork reaches **68**. The gap is whole-program: narrowing the remaining values needs value-range reasoning across defs/uses/calls that LLVM's per-function passes don't perform — *the narrowing is the inference*. So the standard path sits at LLVM's local-narrowing ceiling (§6d, vec 0.932× ref); the further ~3× needs NewYork (or grafting its inference into the standard pipeline). Emitting narrower *wide* ops (i128/i192) instead is worse (i64-scalar removes the op) or unsafe (32-byte slots), so scalar narrowing via inference is the correct lever.
 
 **Where the divergence actually is: memory traffic.** Bucketing the `i256` uses by opcode isolates it — the 3× gas cut is not spread evenly, it lands on **256-bit loads/stores**:

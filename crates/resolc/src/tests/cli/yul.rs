@@ -2,7 +2,7 @@
 
 use crate::cli_utils::{
     assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
-    execute_solc, RESOLC_YUL_FLAG, SOLC_YUL_FLAG, YUL_CONTRACT_PATH,
+    execute_solc, RESOLC_YUL_FLAG, SOLC_YUL_FLAG, YUL_CONTRACT_PATH, YUL_DEPLOY_ONLY_OBJECT_PATH,
     YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH, YUL_DUPLICATE_FUNCTIONS_SWITCH_PATH,
     YUL_INVALID_HEX_NIBBLES_PATH,
 };
@@ -62,4 +62,17 @@ fn duplicate_functions_deep_nesting() {
         &resolc_result,
         "Duplicate function names in deeply nested switch cases",
     );
+}
+
+#[test]
+fn compiles_object_without_a_runtime_sub_object() {
+    let resolc_result = execute_resolc(&[YUL_DEPLOY_ONLY_OBJECT_PATH, RESOLC_YUL_FLAG, "--bin"]);
+    assert_command_success(
+        &resolc_result,
+        "An object carrying deploy code only, without a `_deployed` sub-object",
+    );
+
+    // `solc` accepts this too, which is the whole point: the two front-ends should agree.
+    let solc_result = execute_solc(&[YUL_DEPLOY_ONLY_OBJECT_PATH, SOLC_YUL_FLAG]);
+    assert_equal_exit_codes(&solc_result, &resolc_result);
 }

@@ -421,75 +421,77 @@ Decomposition is **independent of recompiler lowering** — inline, trampoline, 
 
 CallGas is memory-bound: it shuffles 256-bit ABI/storage words with almost no wide arithmetic to offset the wide load/store, so `+84` memory stands. Every one of those words is 256-bit *by necessity* — an EVM storage slot / ABI word is 32 bytes, so a 160-bit address is a 32-byte word with the top 12 bytes zero; a narrower store would corrupt it. The narrowness is only recoverable in **compute**, via type inference (§9), not in the memory ops.
 
-**Full per-benchmark gas (all 64 modules; recalibrated `WIDE_MEMORY=4`, `WIDE_LINEAR=4`, `wtrunc=0`).**
+**Full per-benchmark gas — one combined table.** All 64 modules where `ref`/`vec`/`w` all compiled+ran (non-NewYork, recalibrated `WIDE_MEMORY=4`, `WIDE_LINEAR=4`, `wtrunc=0`), plus the **NewYork `vec`** column where that pipeline also compiled (36 of them; `—` = `llc` crash/timeout on the NewYork arm, see §9). The `ref`/`vec`/`w` TOTAL is over all 64; the NewYork ratio is reported separately on its 31-module shared subset (a NewYork total over a different module set would not be comparable to the 64-module `ref`).
 
-| benchmark | ref | ext (vec) | w | ext÷ref | w÷ref |
-|---|--:|--:|--:|--:|--:|
-| AddModMulMod | 287 | 267 | 259 | 0.930× | 0.902× |
-| AddressPredictor | 318 | 299 | 290 | 0.940× | 0.912× |
-| Balance | 147 | 128 | 126 | 0.871× | 0.857× |
-| BaseFee | 365 | 323 | 316 | 0.885× | 0.866× |
-| Baseline | 167 | 164 | 158 | 0.982× | 0.946× |
-| Block | 288 | 269 | 261 | 0.934× | 0.906× |
-| BlockHash | 193 | 176 | 173 | 0.912× | 0.896× |
-| Call.Callee | 184 | 180 | 174 | 0.978× | 0.946× |
-| CallerOriginAliasing | 295 | 275 | 267 | 0.932× | 0.905× |
-| CallGas.Other | 542 | 653 | 620 | 1.205× | 1.144× |
-| Coinbase | 365 | 322 | 316 | 0.882× | 0.866× |
-| ConstReturnOverflowBug | 170 | 167 | 161 | 0.982× | 0.947× |
-| Context | 288 | 269 | 261 | 0.934× | 0.906× |
-| CopyOverlapBug | 292 | 273 | 265 | 0.935× | 0.908× |
-| Create.CreateA | 147 | 128 | 126 | 0.871× | 0.857× |
-| Create2.CreateA | 147 | 128 | 126 | 0.871× | 0.857× |
-| CustomErrorArgs | 282 | 261 | 253 | 0.926× | 0.897× |
-| DelegateCaller | 293 | 273 | 265 | 0.932× | 0.904× |
-| EncodePackedHash | 297 | 279 | 271 | 0.939× | 0.912× |
-| ERC20 | 917 | 889 | 851 | 0.969× | 0.928× |
-| Events | 292 | 272 | 264 | 0.932× | 0.904× |
-| ExtCode | 292 | 271 | 263 | 0.928× | 0.901× |
-| Factorial | 288 | 269 | 261 | 0.934× | 0.906× |
-| Fibonacci.Binet | 288 | 268 | 260 | 0.931× | 0.903× |
-| Fibonacci.Iterative | 277 | 258 | 250 | 0.931× | 0.903× |
-| Fibonacci.Recursive | 286 | 267 | 259 | 0.934× | 0.906× |
-| FmpCrossObjectBug | 744 | 676 | 656 | 0.909× | 0.882× |
-| FmpDynRevertBug | 352 | 345 | 329 | 0.980× | 0.935× |
-| FmpDynStoreBug | 683 | 613 | 596 | 0.898× | 0.873× |
-| FmpNativeStoreBug | 603 | 535 | 519 | 0.887× | 0.861× |
-| FmpRangeProofBug | 612 | 572 | 554 | 0.935× | 0.905× |
-| FmpRevertBug | 278 | 271 | 259 | 0.975× | 0.932× |
-| FunctionPointer | 389 | 357 | 340 | 0.918× | 0.874× |
-| FunctionType | 576 | 511 | 501 | 0.887× | 0.870× |
-| GasLeft | 160 | 141 | 139 | 0.881× | 0.869× |
-| GasLimit | 157 | 138 | 136 | 0.879× | 0.866× |
-| GasPrice | 158 | 139 | 137 | 0.880× | 0.867× |
-| Immutables | 304 | 268 | 264 | 0.882× | 0.868× |
-| KeccakFuseBug | 415 | 382 | 363 | 0.920× | 0.875× |
-| LayoutAt | 423 | 376 | 369 | 0.889× | 0.872× |
-| Library.L | 325 | 295 | 296 | 0.908× | 0.911× |
-| MCopy | 185 | 180 | 174 | 0.973× | 0.941× |
-| MCopyOverlap | 294 | 275 | 267 | 0.935× | 0.908× |
-| MemoryBounds | 312 | 303 | 291 | 0.971× | 0.933× |
-| MLoad | 322 | 272 | 270 | 0.845× | 0.839× |
-| MStore8 | 286 | 267 | 259 | 0.934× | 0.906× |
-| PanicCodeBug | 400 | 386 | 372 | 0.965× | 0.930× |
-| PanicInterveneBug | 502 | 472 | 456 | 0.940× | 0.908× |
-| ParamMload | 286 | 267 | 259 | 0.934× | 0.906× |
-| ReturnDataOob.Callee | 185 | 180 | 174 | 0.973× | 0.941× |
-| RevertDataOob | 293 | 274 | 266 | 0.935× | 0.908× |
-| Selfdestruct | 172 | 166 | 160 | 0.965× | 0.930× |
-| Send | 250 | 215 | 211 | 0.860× | 0.844× |
-| Storage | 291 | 272 | 264 | 0.935× | 0.907× |
-| StructDeleteStorage | 277 | 258 | 250 | 0.931× | 0.903× |
-| SubTypeValidation | 286 | 267 | 259 | 0.934× | 0.906× |
-| SubUnderflowZext | 278 | 258 | 250 | 0.928× | 0.899× |
-| Transaction.Origin | 278 | 259 | 251 | 0.932× | 0.903× |
-| Transfer | 279 | 244 | 240 | 0.875× | 0.860× |
-| TryCatchCatchReturn | 293 | 273 | 265 | 0.932× | 0.904× |
-| UnalignedMloadNativeBug | 179 | 176 | 170 | 0.983× | 0.950× |
-| UnalignedMStore8Bug | 286 | 267 | 259 | 0.934× | 0.906× |
-| UnalignedMStoreBug | 179 | 176 | 170 | 0.983× | 0.950× |
-| Value.ValueTester | 262 | 227 | 223 | 0.866× | 0.851× |
-| **TOTAL (64)** | **20,261** | **18,881** | **18,314** | **0.932×** | **0.904×** |
+| benchmark | ref | vec | w | NY-vec | vec÷ref | w÷ref | NY÷ref |
+|---|--:|--:|--:|--:|--:|--:|--:|
+| AddModMulMod.AddModMulMod | 287 | 267 | 259 | — | 0.930× | 0.902× | — |
+| AddressPredictor.Predicted | 318 | 299 | 290 | — | 0.940× | 0.912× | — |
+| Balance.BalanceReceiver | 147 | 128 | 126 | 38 | 0.871× | 0.857× | 0.259× |
+| BaseFee.BaseFee | 365 | 323 | 316 | 55 | 0.885× | 0.866× | 0.151× |
+| Baseline.Baseline | 167 | 164 | 158 | 90 | 0.982× | 0.946× | 0.539× |
+| Block.Block | 288 | 269 | 261 | — | 0.934× | 0.906× | — |
+| BlockHash.BlockHash | 193 | 176 | 173 | — | 0.912× | 0.896× | — |
+| Call.Callee | 184 | 180 | 174 | — | 0.978× | 0.946× | — |
+| CallGas.Other | 542 | 653 | 620 | 193 | 1.205× | 1.144× | 0.356× |
+| CallerOriginAliasing.CallerOriginAliasing | 295 | 275 | 267 | — | 0.932× | 0.905× | — |
+| Coinbase.Coinbase | 365 | 322 | 316 | 59 | 0.882× | 0.866× | 0.162× |
+| ConstReturnOverflowBug.ConstReturnOverflowBug | 170 | 167 | 161 | 90 | 0.982× | 0.947× | 0.529× |
+| Context.Context | 288 | 269 | 261 | 91 | 0.934× | 0.906× | 0.316× |
+| CopyOverlapBug.CopyOverlapBug | 292 | 273 | 265 | 91 | 0.935× | 0.908× | 0.312× |
+| Create.CreateA | 147 | 128 | 126 | 38 | 0.871× | 0.857× | 0.259× |
+| Create2.CreateA | 147 | 128 | 126 | 38 | 0.871× | 0.857× | 0.259× |
+| CustomErrorArgs.CustomErrorArgs | 282 | 261 | 253 | 91 | 0.926× | 0.897× | 0.323× |
+| DelegateCaller.DelegateCaller | 293 | 273 | 265 | — | 0.932× | 0.904× | — |
+| ERC20.ERC20 | 917 | 889 | 851 | — | 0.969× | 0.928× | — |
+| EncodePackedHash.EncodePackedHash | 297 | 279 | 271 | — | 0.939× | 0.912× | — |
+| Events.Events | 292 | 272 | 264 | 91 | 0.932× | 0.904× | 0.312× |
+| ExtCode.ExtCode | 292 | 271 | 263 | 91 | 0.928× | 0.901× | 0.312× |
+| Factorial.Factorial | 288 | 269 | 261 | — | 0.934× | 0.906× | — |
+| Fibonacci.FibonacciBinet | 288 | 268 | 260 | 91 | 0.931× | 0.903× | 0.316× |
+| Fibonacci.FibonacciIterative | 277 | 258 | 250 | 91 | 0.931× | 0.903× | 0.329× |
+| Fibonacci.FibonacciRecursive | 286 | 267 | 259 | 91 | 0.934× | 0.906× | 0.318× |
+| FmpCrossObjectBug.FmpCrossObjectBug | 744 | 676 | 656 | — | 0.909× | 0.882× | — |
+| FmpDynRevertBug.FmpDynRevertBug | 352 | 345 | 329 | — | 0.980× | 0.935× | — |
+| FmpDynStoreBug.FmpDynStoreBug | 683 | 613 | 596 | — | 0.898× | 0.873× | — |
+| FmpNativeStoreBug.FmpNativeStoreBug | 603 | 535 | 519 | 151 | 0.887× | 0.861× | 0.250× |
+| FmpRangeProofBug.FmpRangeProofBug | 612 | 572 | 554 | — | 0.935× | 0.905× | — |
+| FmpRevertBug.FmpRevertBug | 278 | 271 | 259 | — | 0.975× | 0.932× | — |
+| FunctionPointer.FunctionPointer | 389 | 357 | 340 | — | 0.918× | 0.874× | — |
+| FunctionType.FunctionType | 576 | 511 | 501 | — | 0.887× | 0.870× | — |
+| GasLeft.GasLeft | 160 | 141 | 139 | 44 | 0.881× | 0.869× | 0.275× |
+| GasLimit.GasLimit | 157 | 138 | 136 | 41 | 0.879× | 0.866× | 0.261× |
+| GasPrice.GasPrice | 158 | 139 | 137 | 47 | 0.880× | 0.867× | 0.297× |
+| Immutables.ImmutablesTester | 304 | 268 | 264 | — | 0.882× | 0.868× | — |
+| KeccakFuseBug.KeccakFuseBug | 415 | 382 | 363 | — | 0.920× | 0.875× | — |
+| LayoutAt.LayoutAt | 423 | 376 | 369 | — | 0.889× | 0.872× | — |
+| Library.L | 325 | 295 | 296 | — | 0.908× | 0.911× | — |
+| MCopy.MCopy | 185 | 180 | 174 | — | 0.973× | 0.941× | — |
+| MCopyOverlap.MCopyOverlap | 294 | 275 | 267 | — | 0.935× | 0.908× | — |
+| MLoad.MLoad | 322 | 272 | 270 | — | 0.845× | 0.839× | — |
+| MStore8.MStore8 | 286 | 267 | 259 | 91 | 0.934× | 0.906× | 0.318× |
+| MemoryBounds.MemoryBounds | 312 | 303 | 291 | — | 0.971× | 0.933× | — |
+| PanicCodeBug.PanicCodeBug | 400 | 386 | 372 | 116 | 0.965× | 0.930× | 0.290× |
+| PanicInterveneBug.PanicInterveneBug | 502 | 472 | 456 | 140 | 0.940× | 0.908× | 0.279× |
+| ParamMload.ParamMload | 286 | 267 | 259 | — | 0.934× | 0.906× | — |
+| ReturnDataOob.Callee | 185 | 180 | 174 | — | 0.973× | 0.941× | — |
+| RevertDataOob.RevertDataOob | 293 | 274 | 266 | — | 0.935× | 0.908× | — |
+| Selfdestruct.SelfdestructTester | 172 | 166 | 160 | 79 | 0.965× | 0.930× | 0.459× |
+| Send.Send | 250 | 215 | 211 | 58 | 0.860× | 0.844× | 0.232× |
+| Storage.Storage | 291 | 272 | 264 | — | 0.935× | 0.907× | — |
+| StructDeleteStorage.StructDeleteStorage | 277 | 258 | 250 | — | 0.931× | 0.903× | — |
+| SubTypeValidation.SubTypeValidation | 286 | 267 | 259 | — | 0.934× | 0.906× | — |
+| SubUnderflowZext.SubUnderflowZext | 278 | 258 | 250 | 91 | 0.928× | 0.899× | 0.327× |
+| Transaction.TransactionOrigin | 278 | 259 | 251 | 91 | 0.932× | 0.903× | 0.327× |
+| Transfer.Transfer | 279 | 244 | 240 | — | 0.875× | 0.860× | — |
+| TryCatchCatchReturn.TryCatchCatchReturn | 293 | 273 | 265 | — | 0.932× | 0.904× | — |
+| UnalignedMStore8Bug.UnalignedMStore8Bug | 286 | 267 | 259 | 92 | 0.934× | 0.906× | 0.322× |
+| UnalignedMStoreBug.UnalignedMStoreBug | 179 | 176 | 170 | 90 | 0.983× | 0.950× | 0.503× |
+| UnalignedMloadNativeBug.UnalignedMload | 179 | 176 | 170 | 90 | 0.983× | 0.950× | 0.503× |
+| Value.ValueTester | 262 | 227 | 223 | 61 | 0.866× | 0.851× | 0.233× |
+| **TOTAL (64)** | **20261** | **18881** | **18314** | — | **0.932×** | **0.904×** | — |
+
+*NewYork shared subset (31 modules with NY-vec): ref 8497 → NY-vec 2611 = **0.307× ref**; vs the same modules' `vec` 7974 = **0.327× vec** — the ~3× narrowing win of §9, on a like-for-like module set.*
 
 ## 7. Wide-instruction usage and width
 
@@ -610,7 +612,15 @@ Narrowing `i256`→`i64`/`i128` leaves far fewer wide ops, so the win lands on *
 
 Remeasured against the current cost model (`wtrunc=0`), on the 31 modules that compile+run on the `vec` arm in **both** front-ends: **NewYork ÷ Yul-i256 = 0.327×, NewYork ÷ ref = 0.307×** — a **~3× gas cut** purely from the compiler emitting narrower representations. It helps even the memory-bound outlier: **CallGas 653 → 193 (0.30×)**, because most of its values (gas argument, lengths, counters, selectors) are genuinely ≤64-bit and narrow to *scalar* `i64`, deleting those wide loads/stores/converts (the 160-bit address itself can't narrow below its 32-byte slot, but it's a small part of the total).
 
-**Why the standard (non-NewYork) path can't match it.** The standard path already narrows everything LLVM can prove *locally* — the standard CallGas IR is a mix (95 `i256` + 166 `i64` + 283 `i32` + 171 `i8`: offsets/counters/lengths are already scalar), and `load+trunc` folds to a single scalar load even for the extension. But the residual **95 `i256`** are the values needing *whole-program* value-range reasoning to narrow, and LLVM's standard optimizer provably can't touch them: **`opt -O3` leaves i256 at 95 → 95**. Narrowing them requires the exact inference NewYork adds; there is no free lunch — *the narrowing is the inference*. So the standard path sits at LLVM's local-narrowing ceiling (§6d, vec 0.932× ref); the further ~3× needs NewYork (or grafting its inference into the standard pipeline). Emitting narrower *wide* ops (i128/i192) instead is worse (i64-scalar removes the op) or unsafe (32-byte slots), so scalar narrowing via inference is the correct lever.
+**Why the standard (non-NewYork) path can't match it.** The standard path already narrows everything LLVM can prove *locally* — the standard CallGas IR is a mix (99 `i256` + 167 `i64` + 311 `i32` + 177 `i8`: offsets/counters/lengths are already scalar), and `load+trunc` folds to a single scalar load even for the extension. Running the optimized IR back through **`opt -O3` gets 99 → 84 `i256`** — LLVM *does* narrow a little more, but it's local CSE of redundant `zext`/`trunc`/`bswap` temporaries, not structural. NewYork reaches **68**. The gap is whole-program: narrowing the remaining values needs value-range reasoning across defs/uses/calls that LLVM's per-function passes don't perform — *the narrowing is the inference*. So the standard path sits at LLVM's local-narrowing ceiling (§6d, vec 0.932× ref); the further ~3× needs NewYork (or grafting its inference into the standard pipeline). Emitting narrower *wide* ops (i128/i192) instead is worse (i64-scalar removes the op) or unsafe (32-byte slots), so scalar narrowing via inference is the correct lever.
+
+**Where the divergence actually is: memory traffic.** Bucketing the `i256` uses by opcode isolates it — the 3× gas cut is not spread evenly, it lands on **256-bit loads/stores**:
+
+| `i256` load + store ops | Yul (resolc -O2) | + `opt -O3` | NewYork |
+|---|--:|--:|--:|
+| CallGas.Other | **34** | 32 | **5** |
+
+`opt -O3` removes just **2 of 34** — LLVM cannot narrow a memory access without proving the stored/loaded value's range at every def and use, an interprocedural property its per-function passes don't compute. NewYork's inference proves exactly that and collapses the scratch/ABI/heap traffic (stores to `%value_transferred` spills, `%key_pointer`/`%value_pointer` marshalling, `@__heap_memory`, ABI `getelementptr` slots) from 34 wide ops to **5**. And those 5 are *irreducible*: they are the EVM storage ABI inside `__revive_sload_word`/`__revive_sstore_word` — a storage **key** is 32 bytes and a slot **value** is 32 bytes (`store i256 …, ptr %sstore_key` / `%sstore_value` / `%sload_key`), so no pipeline can narrow them. That is the whole divergence: **~29 narrowable memory ops that only whole-program inference can prove are ≤64-bit**, plus the 5 that are 256-bit by EVM definition and stay wide everywhere.
 
 ### CallGas.Other — where the Yul and NewYork IR actually diverge
 

@@ -610,6 +610,64 @@ Narrowing `i256`→`i64`/`i128` leaves far fewer wide ops, so the win lands on *
 
 ### Narrowing is the real gas lever — and only the NewYork path has it
 
+**Full-corpus NY+w remeasure — narrowing and the extension are largely _substitutes_ (2026-09-15).** Fresh `ref`+`w` run over the whole NewYork corpus (`per-bench-wreg-nyw.tsv`, `measure_wreg_nyw.py`; hung `llc` fails once at 90 s — the 48 empties are genuine hangs, e.g. `AddModMulMod` doesn't finish in 180 s). The three-way decomposition on the 38 modules present in both corpora with all four arms:
+
+| configuration | gas | ÷ Yul-ref | isolates |
+|---|--:|--:|---|
+| Yul-ref (unnarrowed scalar) | 10,428 | 1.000× | baseline |
+| Yul-w (extension only) | 9,474 | **0.909×** | extension on 256-bit code → helps |
+| NY-ref (narrowing only) | 3,281 | **0.315×** | narrowing alone → captures 69% |
+| NY-w (both) | 3,530 | **0.339×** | narrowing + extension |
+
+The decisive line: **NY-w (0.339×) is _worse_ than NY-ref (0.315×)** — stacking the extension on narrowed code *raises* gas (**NY-w ÷ NY-ref = 1.077×**). Per-benchmark, `w` loses to plain scalar on the narrowed corpus in **28 of 39 modules**, ties in 9, wins in 2 (many at a flat +9 gas, 78→87 — the residual EVM storage key/value wide ops carrying the extension's per-op cost with no wide work left to offset). Narrowing removes the 256-bit work the extension exists to accelerate, so the two don't compose: narrowing captures 69% of the gas, the extension 9%, and together *less* than narrowing alone.
+
+**Caveat — this corpus is narrowing-friendly.** These are small contracts moving *small* values through 256-bit slots (hence the 78→87 rows). On code doing genuine 256-bit arithmetic (crypto, fixed-point, big-number), narrowing *cannot* narrow, so the extension keeps helping post-narrowing — there the two are **complements**. The substitute relationship is a property of narrow-able code (§12 real-contract results, where wide ops delete long scalar limb-chains), not a universal verdict.
+
+Per-benchmark NY-ref vs NY-w (39 modules that ran both):
+
+| benchmark | NY-ref | NY-w | NY-w÷NY-ref |
+|---|--:|--:|--:|
+| Balance.BalanceReceiver | 38 | 38 | 1.000× |
+| BaseFee.BaseFee | 152 | 153 | 1.007× |
+| Baseline.Baseline | 77 | 86 | 1.117× |
+| Block.Block | 61 | 61 | 1.000× |
+| BlockHash.BlockHash | 79 | 74 | 0.937× |
+| CallGas.Other | 237 | 278 | 1.173× |
+| Coinbase.Coinbase | 155 | 157 | 1.013× |
+| ConstReturnOverflowBug.ConstReturnOverflowBug | 77 | 86 | 1.117× |
+| Context.Context | 78 | 87 | 1.115× |
+| CopyOverlapBug.CopyOverlapBug | 78 | 87 | 1.115× |
+| Create.CreateA | 38 | 38 | 1.000× |
+| Create2.CreateA | 38 | 38 | 1.000× |
+| CustomErrorArgs.CustomErrorArgs | 78 | 87 | 1.115× |
+| Events.Events | 78 | 87 | 1.115× |
+| ExtCode.ExtCode | 78 | 87 | 1.115× |
+| Factorial.Factorial | 78 | 87 | 1.115× |
+| Fibonacci.FibonacciBinet | 78 | 87 | 1.115× |
+| Fibonacci.FibonacciIterative | 78 | 87 | 1.115× |
+| Fibonacci.FibonacciRecursive | 78 | 87 | 1.115× |
+| FmpNativeStoreBug.FmpNativeStoreBug | 139 | 141 | 1.014× |
+| FunctionPointer.FunctionPointer | 145 | 133 | 0.917× |
+| GasLeft.GasLeft | 44 | 44 | 1.000× |
+| GasLimit.GasLimit | 41 | 41 | 1.000× |
+| GasPrice.GasPrice | 145 | 145 | 1.000× |
+| MStore8.MStore8 | 78 | 87 | 1.115× |
+| PanicCodeBug.PanicCodeBug | 90 | 108 | 1.200× |
+| PanicInterveneBug.PanicInterveneBug | 114 | 132 | 1.158× |
+| SDivNarrowBug.SDivNarrowBug | 78 | 87 | 1.115× |
+| Selfdestruct.SelfdestructTester | 66 | 75 | 1.136× |
+| Send.Send | 58 | 58 | 1.000× |
+| StructDeleteStorage.StructDeleteStorage | 79 | 88 | 1.114× |
+| SubTypeValidation.SubTypeValidation | 78 | 87 | 1.115× |
+| SubUnderflowZext.SubUnderflowZext | 78 | 87 | 1.115× |
+| Transaction.TransactionOrigin | 78 | 87 | 1.115× |
+| UnalignedMStore8Bug.UnalignedMStore8Bug | 79 | 88 | 1.114× |
+| UnalignedMStoreBug.UnalignedMStoreBug | 77 | 86 | 1.117× |
+| UnalignedMloadNativeBug.UnalignedMload | 77 | 86 | 1.117× |
+| Value.ValueTester | 61 | 61 | 1.000× |
+| flipper.Flipper | 100 | 104 | 1.040× |
+| **TOTAL (39)** | **3359** | **3617** | **1.077×** |
+
 Remeasured against the current cost model (`wtrunc=0`) on the **`w`** arm (the primary extension), on the 37 modules that compile+run on `w` in **both** front-ends: **NewYork ÷ Yul-path w = 0.369×, NewYork ÷ ref = 0.335×** — a **~3× gas cut** purely from the compiler emitting narrower representations. (On the narrower `vec`-shared subset of 31 modules the same effect reads NewYork ÷ Yul-i256 = 0.327×, NewYork ÷ ref = 0.307×.) It helps even the memory-bound outlier: **CallGas 653 → 193 (0.30×)**, because most of its values (gas argument, lengths, counters, selectors) are genuinely ≤64-bit and narrow to *scalar* `i64`, deleting those wide loads/stores/converts (the 160-bit address itself can't narrow below its 32-byte slot, but it's a small part of the total).
 
 **Why the standard (non-NewYork) path can't match it.** The standard path already narrows everything LLVM can prove *locally* — the standard CallGas IR is a mix (99 `i256` + 167 `i64` + 311 `i32` + 177 `i8`: offsets/counters/lengths are already scalar), and `load+trunc` folds to a single scalar load even for the extension. Running the optimized IR back through **`opt -O3` gets 99 → 84 `i256`** — LLVM *does* narrow a little more, but it's local CSE of redundant `zext`/`trunc`/`bswap` temporaries, not structural. NewYork reaches **68**. The gap is whole-program: narrowing the remaining values needs value-range reasoning across defs/uses/calls that LLVM's per-function passes don't perform — *the narrowing is the inference*. So the standard path sits at LLVM's local-narrowing ceiling (§6d, vec 0.932× ref); the further ~3× needs NewYork (or grafting its inference into the standard pipeline). Emitting narrower *wide* ops (i128/i192) instead is worse (i64-scalar removes the op) or unsafe (32-byte slots), so scalar narrowing via inference is the correct lever.

@@ -421,20 +421,16 @@ Decomposition is **independent of recompiler lowering** — inline, trampoline, 
 
 CallGas is memory-bound: it shuffles 256-bit ABI/storage words with almost no wide arithmetic to offset the wide load/store, so `+84` memory stands. Every one of those words is 256-bit *by necessity* — an EVM storage slot / ABI word is 32 bytes, so a 160-bit address is a 32-byte word with the top 12 bytes zero; a narrower store would corrupt it. The narrowness is only recoverable in **compute**, via type inference (§9), not in the memory ops.
 
-**Full per-benchmark gas — one combined table.** All 64 modules where `ref`/`vec`/`w` all compiled+ran (non-NewYork, recalibrated `WIDE_MEMORY=4`, `WIDE_LINEAR=4`, `wtrunc=0`), plus the **NewYork `w`** column where that pipeline also compiled (`—` = the NewYork+extension `llc` step exceeded the 60 s cap and produced no blob — e.g. `AddModMulMod`, whose `ref` builds fine but both wide arms time out; 48 of 99 `w`-arm modules time out this way, see §9). `w` (dedicated wide-register file, §11) is the primary extension arm; `vec` is retained for reference. The `ref`/`vec`/`w` TOTAL is over all 64; the NewYork ratio is reported separately on its shared subset (a NewYork total over a different module set would not be comparable to the 64-module `ref`).
+**Full per-benchmark gas — combined, no empty cells.** Every module where all four arms compiled+ran (`ref`/`vec`/`w` on the Yul path, recalibrated `WIDE_MEMORY=4`/`WIDE_LINEAR=4`/`wtrunc=0`, plus **NewYork `w`**). The 28 modules whose NewYork+`w` `llc` step hangs (>180 s, §9) are omitted here rather than shown as blanks; across the **full 64** modules where `ref`/`vec`/`w` all ran the totals are ref 20,261 / vec 18,881 / w 18,314 → **vec 0.932×, w 0.904× ref**.
 
 | benchmark | ref | vec | w (Yul) | NY-w | w÷ref | NY-w÷ref | NY-w÷w |
 |---|--:|--:|--:|--:|--:|--:|--:|
-| AddModMulMod.AddModMulMod | 287 | 267 | 259 | — | 0.902× | — | — |
-| AddressPredictor.Predicted | 318 | 299 | 290 | — | 0.912× | — | — |
 | Balance.BalanceReceiver | 147 | 128 | 126 | 38 | 0.857× | 0.259× | 0.302× |
 | BaseFee.BaseFee | 365 | 323 | 316 | 153 | 0.866× | 0.419× | 0.484× |
 | Baseline.Baseline | 167 | 164 | 158 | 86 | 0.946× | 0.515× | 0.544× |
 | Block.Block | 288 | 269 | 261 | 61 | 0.906× | 0.212× | 0.234× |
 | BlockHash.BlockHash | 193 | 176 | 173 | 74 | 0.896× | 0.383× | 0.428× |
-| Call.Callee | 184 | 180 | 174 | — | 0.946× | — | — |
 | CallGas.Other | 542 | 653 | 620 | 278 | 1.144× | 0.513× | 0.448× |
-| CallerOriginAliasing.CallerOriginAliasing | 295 | 275 | 267 | — | 0.905× | — | — |
 | Coinbase.Coinbase | 365 | 322 | 316 | 157 | 0.866× | 0.430× | 0.497× |
 | ConstReturnOverflowBug.ConstReturnOverflowBug | 170 | 167 | 161 | 86 | 0.947× | 0.506× | 0.534× |
 | Context.Context | 288 | 269 | 261 | 87 | 0.906× | 0.302× | 0.333× |
@@ -442,56 +438,31 @@ CallGas is memory-bound: it shuffles 256-bit ABI/storage words with almost no wi
 | Create.CreateA | 147 | 128 | 126 | 38 | 0.857× | 0.259× | 0.302× |
 | Create2.CreateA | 147 | 128 | 126 | 38 | 0.857× | 0.259× | 0.302× |
 | CustomErrorArgs.CustomErrorArgs | 282 | 261 | 253 | 87 | 0.897× | 0.309× | 0.344× |
-| DelegateCaller.DelegateCaller | 293 | 273 | 265 | — | 0.904× | — | — |
-| ERC20.ERC20 | 917 | 889 | 851 | — | 0.928× | — | — |
-| EncodePackedHash.EncodePackedHash | 297 | 279 | 271 | — | 0.912× | — | — |
 | Events.Events | 292 | 272 | 264 | 87 | 0.904× | 0.298× | 0.330× |
 | ExtCode.ExtCode | 292 | 271 | 263 | 87 | 0.901× | 0.298× | 0.331× |
 | Factorial.Factorial | 288 | 269 | 261 | 87 | 0.906× | 0.302× | 0.333× |
 | Fibonacci.FibonacciBinet | 288 | 268 | 260 | 87 | 0.903× | 0.302× | 0.335× |
 | Fibonacci.FibonacciIterative | 277 | 258 | 250 | 87 | 0.903× | 0.314× | 0.348× |
 | Fibonacci.FibonacciRecursive | 286 | 267 | 259 | 87 | 0.906× | 0.304× | 0.336× |
-| FmpCrossObjectBug.FmpCrossObjectBug | 744 | 676 | 656 | — | 0.882× | — | — |
-| FmpDynRevertBug.FmpDynRevertBug | 352 | 345 | 329 | — | 0.935× | — | — |
-| FmpDynStoreBug.FmpDynStoreBug | 683 | 613 | 596 | — | 0.873× | — | — |
 | FmpNativeStoreBug.FmpNativeStoreBug | 603 | 535 | 519 | 141 | 0.861× | 0.234× | 0.272× |
-| FmpRangeProofBug.FmpRangeProofBug | 612 | 572 | 554 | — | 0.905× | — | — |
-| FmpRevertBug.FmpRevertBug | 278 | 271 | 259 | — | 0.932× | — | — |
 | FunctionPointer.FunctionPointer | 389 | 357 | 340 | 133 | 0.874× | 0.342× | 0.391× |
-| FunctionType.FunctionType | 576 | 511 | 501 | — | 0.870× | — | — |
 | GasLeft.GasLeft | 160 | 141 | 139 | 44 | 0.869× | 0.275× | 0.317× |
 | GasLimit.GasLimit | 157 | 138 | 136 | 41 | 0.866× | 0.261× | 0.301× |
 | GasPrice.GasPrice | 158 | 139 | 137 | 145 | 0.867× | 0.918× | 1.058× |
-| Immutables.ImmutablesTester | 304 | 268 | 264 | — | 0.868× | — | — |
-| KeccakFuseBug.KeccakFuseBug | 415 | 382 | 363 | — | 0.875× | — | — |
-| LayoutAt.LayoutAt | 423 | 376 | 369 | — | 0.872× | — | — |
-| Library.L | 325 | 295 | 296 | — | 0.911× | — | — |
-| MCopy.MCopy | 185 | 180 | 174 | — | 0.941× | — | — |
-| MCopyOverlap.MCopyOverlap | 294 | 275 | 267 | — | 0.908× | — | — |
-| MLoad.MLoad | 322 | 272 | 270 | — | 0.839× | — | — |
 | MStore8.MStore8 | 286 | 267 | 259 | 87 | 0.906× | 0.304× | 0.336× |
-| MemoryBounds.MemoryBounds | 312 | 303 | 291 | — | 0.933× | — | — |
 | PanicCodeBug.PanicCodeBug | 400 | 386 | 372 | 108 | 0.930× | 0.270× | 0.290× |
 | PanicInterveneBug.PanicInterveneBug | 502 | 472 | 456 | 132 | 0.908× | 0.263× | 0.289× |
-| ParamMload.ParamMload | 286 | 267 | 259 | — | 0.906× | — | — |
-| ReturnDataOob.Callee | 185 | 180 | 174 | — | 0.941× | — | — |
-| RevertDataOob.RevertDataOob | 293 | 274 | 266 | — | 0.908× | — | — |
 | Selfdestruct.SelfdestructTester | 172 | 166 | 160 | 75 | 0.930× | 0.436× | 0.469× |
 | Send.Send | 250 | 215 | 211 | 58 | 0.844× | 0.232× | 0.275× |
-| Storage.Storage | 291 | 272 | 264 | — | 0.907× | — | — |
 | StructDeleteStorage.StructDeleteStorage | 277 | 258 | 250 | 88 | 0.903× | 0.318× | 0.352× |
 | SubTypeValidation.SubTypeValidation | 286 | 267 | 259 | 87 | 0.906× | 0.304× | 0.336× |
 | SubUnderflowZext.SubUnderflowZext | 278 | 258 | 250 | 87 | 0.899× | 0.313× | 0.348× |
 | Transaction.TransactionOrigin | 278 | 259 | 251 | 87 | 0.903× | 0.313× | 0.347× |
-| Transfer.Transfer | 279 | 244 | 240 | — | 0.860× | — | — |
-| TryCatchCatchReturn.TryCatchCatchReturn | 293 | 273 | 265 | — | 0.904× | — | — |
 | UnalignedMStore8Bug.UnalignedMStore8Bug | 286 | 267 | 259 | 88 | 0.906× | 0.308× | 0.340× |
 | UnalignedMStoreBug.UnalignedMStoreBug | 179 | 176 | 170 | 86 | 0.950× | 0.480× | 0.506× |
 | UnalignedMloadNativeBug.UnalignedMload | 179 | 176 | 170 | 86 | 0.950× | 0.480× | 0.506× |
 | Value.ValueTester | 262 | 227 | 223 | 61 | 0.851× | 0.233× | 0.274× |
-| **TOTAL (64)** | **20261** | **18881** | **18314** | — | **0.904×** | — | — |
-
-*NewYork shared subset (37 modules with NY-w): ref 10218 → NY-w 3426 = **0.335× ref**; vs the same modules' Yul-path `w` 9280 = **0.369× w** — the ~3× narrowing win of §9, like-for-like on the w arm.*
+| **TOTAL (37)** | **10218** | **9570** | **9280** | **3426** | **0.908×** | **0.335×** | **0.369×** |
 
 ## 7. Wide-instruction usage and width
 

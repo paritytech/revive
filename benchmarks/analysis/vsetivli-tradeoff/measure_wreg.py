@@ -28,12 +28,18 @@ EXPORT = re.compile(r'^  (\S+): (.*?) gas=(-?\d+) steps=(\d+)(?: time_ns=(\d+))?
 ITERS = int(os.environ.get("RUNBLOB_ITERS", "50"))
 
 # ext: whether the linker treats it as revive_v2; feat: the target-feature suffix; w: needs the
-# assume-256 link flag.
+# assume-256 link flag; set_width: charge gas with the set_width-aware (width-proportional) model.
 ARMS = {
-    "ref": dict(ext=False, feat="", w=False),
-    "vec": dict(ext=True, feat=",+xrevivevec", w=False),
-    "w":   dict(ext=True, feat=",+xrevivew", w=True),
+    "ref": dict(ext=False, feat="", w=False, set_width=False),
+    "vec": dict(ext=True, feat=",+xrevivevec", w=False, set_width=False),
+    "w":   dict(ext=True, feat=",+xrevivew", w=True, set_width=False),
 }
+# Testing knob: MEASURE_SET_WIDTH=1 adds a `w_sw` arm -- the same W blob measured with
+# set_width-aware (width-proportional) gas (POLKAVM_WIDTH_PROPORTIONAL_GAS). A single run then
+# reports W with and without set_width side by side; size/perf are identical (same blob), only gas
+# differs, and only where the compiler emitted sub-256-bit wide ops (none on an all-i256 corpus).
+if os.environ.get("MEASURE_SET_WIDTH"):
+    ARMS["w_sw"] = dict(ext=True, feat=",+xrevivew", w=True, set_width=True)
 
 
 def ir_for(src, feat):
@@ -84,6 +90,8 @@ def profile(src, arm):
         env = {**os.environ}
         if spec["w"]:
             env["POLKAVM_ASSUME_W256"] = "1"
+        if spec.get("set_width"):
+            env["POLKAVM_WIDTH_PROPORTIONAL_GAS"] = "1"
         x = subprocess.run([str(LINK), "link", "--isa", isa, "-o", blob, obj],
                            capture_output=True, timeout=TIMEOUT, env=env)
         if x.returncode:

@@ -647,6 +647,57 @@ Per-benchmark NY-ref vs NY-w (39 modules that ran both):
 | flipper.Flipper | 100 | 104 | 1.040× |
 | **TOTAL (39)** | **3359** | **3617** | **1.077×** |
 
+#### Full size / performance / gas impact — NewYork + W, without set_width
+
+The gas table above is the headline; for completeness, the same 39-module NewYork run measured **all** metrics for `w` vs NewYork `ref` (plain `+xrevivew`, `POLKAVM_ASSUME_W256`, **no set_width / no width-proportional gas**). Absolute totals (ref → w): .text 46,128 → 46,234 B · blob 48,900 → 45,452 B · gas 3,359 → 3,617 · interp 30.1 → 34.8 µs · recomp 116.8 → 116.3 µs.
+
+| benchmark | .text ÷ref | blob ÷ref | gas ÷ref | interp ÷ref | recomp ÷ref |
+|---|--:|--:|--:|--:|--:|
+| Balance.BalanceReceiver | 1.000× | 1.000× | 1.000× | 1.548× | 1.099× |
+| BaseFee.BaseFee | 1.028× | 0.994× | 1.007× | 0.436× | 0.993× |
+| Baseline.Baseline | 1.027× | 1.004× | 1.117× | 1.137× | 0.912× |
+| Block.Block | 1.030× | 0.973× | 1.000× | 0.986× | 0.887× |
+| BlockHash.BlockHash | 1.039× | 0.886× | 0.937× | 0.685× | 1.013× |
+| CallGas.Other | 0.973× | 0.908× | 1.173× | 1.734× | 0.981× |
+| Coinbase.Coinbase | 1.054× | 1.012× | 1.013× | 0.962× | 1.114× |
+| ConstReturnOverflowBug.ConstReturnOverflowBug | 1.028× | 0.997× | 1.117× | 2.068× | 0.981× |
+| Context.Context | 1.045× | 0.926× | 1.115× | 1.135× | 0.981× |
+| CopyOverlapBug.CopyOverlapBug | 1.093× | 0.987× | 1.115× | 1.708× | 0.983× |
+| Create.CreateA | 1.000× | 1.000× | 1.000× | 0.696× | 0.902× |
+| Create2.CreateA | 1.000× | 1.000× | 1.000× | 0.492× | 1.113× |
+| CustomErrorArgs.CustomErrorArgs | 1.109× | 0.959× | 1.115× | 1.145× | 0.996× |
+| Events.Events | 1.012× | 1.025× | 1.115× | 1.729× | 1.110× |
+| ExtCode.ExtCode | 0.992× | 0.871× | 1.115× | 1.706× | 0.993× |
+| Factorial.Factorial | 1.008× | 0.970× | 1.115× | 1.711× | 1.092× |
+| Fibonacci.FibonacciBinet | 0.686× | 0.572× | 1.115× | 1.184× | 1.010× |
+| Fibonacci.FibonacciIterative | 0.908× | 0.774× | 1.115× | 1.145× | 1.103× |
+| Fibonacci.FibonacciRecursive | 0.893× | 0.811× | 1.115× | 0.612× | 1.000× |
+| FmpNativeStoreBug.FmpNativeStoreBug | 0.921× | 0.829× | 1.014× | 2.890× | 1.123× |
+| FunctionPointer.FunctionPointer | 0.983× | 0.906× | 0.917× | 1.529× | 1.027× |
+| GasLeft.GasLeft | 1.000× | 1.000× | 1.000× | 1.002× | 1.000× |
+| GasLimit.GasLimit | 1.000× | 1.000× | 1.000× | 1.354× | 0.989× |
+| GasPrice.GasPrice | 1.000× | 1.000× | 1.000× | 1.489× | 0.996× |
+| MStore8.MStore8 | 1.107× | 0.977× | 1.115× | 1.731× | 0.974× |
+| PanicCodeBug.PanicCodeBug | 1.004× | 0.962× | 1.200× | 0.864× | 1.010× |
+| PanicInterveneBug.PanicInterveneBug | 1.004× | 0.975× | 1.158× | 0.822× | 1.000× |
+| SDivNarrowBug.SDivNarrowBug | 1.077× | 1.004× | 1.115× | 1.160× | 0.981× |
+| Selfdestruct.SelfdestructTester | 1.002× | 0.982× | 1.136× | 1.157× | 0.986× |
+| Send.Send | 0.983× | 0.899× | 1.000× | 0.682× | 0.898× |
+| StructDeleteStorage.StructDeleteStorage | 1.027× | 0.986× | 1.114× | 0.758× | 1.006× |
+| SubTypeValidation.SubTypeValidation | 0.966× | 0.923× | 1.115× | 2.585× | 1.000× |
+| SubUnderflowZext.SubUnderflowZext | 1.082× | 1.002× | 1.115× | 0.781× | 0.962× |
+| Transaction.TransactionOrigin | 1.105× | 0.972× | 1.115× | 1.148× | 0.900× |
+| UnalignedMStore8Bug.UnalignedMStore8Bug | 1.068× | 1.112× | 1.114× | 0.756× | 0.994× |
+| UnalignedMStoreBug.UnalignedMStoreBug | 1.053× | 1.190× | 1.117× | 1.148× | 0.906× |
+| UnalignedMloadNativeBug.UnalignedMload | 1.107× | 0.989× | 1.117× | 1.148× | 1.017× |
+| Value.ValueTester | 1.060× | 1.020× | 1.000× | 0.500× | 0.994× |
+| flipper.Flipper | 1.025× | 0.884× | 1.040× | 1.117× | 0.907× |
+| **TOTAL (39)** | **1.002×** | **0.929×** | **1.077×** | **1.158×** | **0.996×** |
+
+**Reading it:** the three axes diverge. **Blob shrinks 7%** (0.929×) even on narrowed code — wide ops encode more compactly than scalar limb chains (`.text` is neutral at 1.002×; the win lands after linking/relaxation). **Gas is +7.7%** (1.077×) — the substitute penalty (residual storage/ABI wide ops + marshalling, no wide work left to offset). **Recompiler is at parity** (0.996×). The **interpreter 1.158× is noise-dominated** — per-row it swings 0.44×–2.89× with no structure (single best-of-3, 50-iter timings on sub-microsecond kernels); treat it as inconclusive. So code size and gas move in *opposite* directions: gas is work/marshalling-proportional, blob size is instruction-count-proportional, and wide ops are compact-to-encode but charged for full-width work.
+
+*Testing knob:* `MEASURE_SET_WIDTH=1 python3 measure_wreg.py` (or `measure_wreg_nyw.py`) adds a `w_sw` arm — the same W blob charged with set_width-aware (width-proportional) gas (`POLKAVM_WIDTH_PROPORTIONAL_GAS`). On this corpus `w_sw == w` exactly, because every residual wide op is a full i256 (storage key/value); width-proportional charging only diverges where the compiler emits sub-256-bit wide ops, which narrowing to *scalar* i64 (not narrow-wide) never produces here.
+
 Remeasured against the current cost model (`wtrunc=0`) on the **`w`** arm (the primary extension), on the 37 modules that compile+run on `w` in **both** front-ends: **NewYork ÷ Yul-path w = 0.369×, NewYork ÷ ref = 0.335×** — a **~3× gas cut** purely from the compiler emitting narrower representations. (On the narrower `vec`-shared subset of 31 modules the same effect reads NewYork ÷ Yul-i256 = 0.327×, NewYork ÷ ref = 0.307×.) It helps even the memory-bound outlier: **CallGas 653 → 193 (0.30×)**, because most of its values (gas argument, lengths, counters, selectors) are genuinely ≤64-bit and narrow to *scalar* `i64`, deleting those wide loads/stores/converts (the 160-bit address itself can't narrow below its 32-byte slot, but it's a small part of the total).
 
 ### Where the width difference is born — the inference rules

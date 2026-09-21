@@ -90,15 +90,48 @@ The wide instructions' semantics are the EVM's rather than Rust's: division and 
 zero produce zero, shift amounts of 256 or more clear the value, and `addmod`/`mulmod` keep
 the untruncated intermediate.
 
-The interpreter and the recompiler both execute everything above, out of one implementation:
-every operation on the register file lives in `polkavm-common`, the interpreter calls it
-directly, and recompiled code reaches it through a native helper that receives the
-instruction's operands packed at translation time. That makes the recompiler correct, not
-fast: each of these instructions costs a register save and restore around a native call.
-A recompiled memory access is answered rather than performed by the helper, with a source,
-a destination and a length; the bytes move in recompiled code, so that a page fault lands
-where the signal handler can attribute it to the guest address the call site recorded. The
-execution tests run each backend and, in the tracing configuration, run both in lockstep.
+The interpreter and the recompiler both execute everything above. In the interpreter every
+operation on the register file lives in `polkavm-common`. The recompiler maps the register
+file onto the host's: wide register `n` is `ymm<n>` for the whole time the guest runs, so
+the sixteen wide registers are the sixteen vector registers an x86-64 host has, and every
+common wide instruction is a fixed sequence of a few AVX2 instructions chosen at translation
+time with no register allocation. A move is one instruction, a load or a store is one
+unaligned 256-bit access, the bitwise operations are one instruction each, an equality test
+is an exclusive or and a `vptest`, an addition stages its operands below the stack pointer
+and runs four carry-linked scalar additions, the constant shifts move whole words between
+lanes with the cross-lane permutes and finish with per-word shifts, and the bit counts run
+`lzcnt`/`tzcnt` over the four words. A template that needs one more vector register than
+the instruction names borrows one, spilled to the red zone for the length of the template.
+Multiplication, division, the modular operations, exponentiation, the shifts by a register
+amount and the vector subset still go through the shared implementation, by a native helper
+that receives the instruction's operands packed at translation time.
+
+The file has to leave the vector registers whenever control leaves the guest, because host
+code may use them freely: every exit path writes the sixteen registers into the context,
+every entry reads them back, and the helper trampoline does both around its call. An exit
+by signal, which is how running out of gas and a page fault arrive, finds them only in the
+frame the kernel built, and the signal handlers read them out of its `XSAVE` area. A
+recompiled memory access of the vector subset is answered rather than performed by the
+helper, with a source, a destination and a length; the bytes move in recompiled code, so
+that a page fault lands where the signal handler can attribute it to the guest address the
+call site recorded. The execution tests run each backend and, in the tracing configuration,
+run both in lockstep; further tests cover every template under every way its operands can
+coincide, every word boundary of the constant shifts, and the register file surviving a
+host call and an out-of-gas interruption.
+
+Over the openzeppelin contracts this arrangement compiles the wide instructions to 55% less
+native code than the helper-per-instruction one it replaces, 479,142 bytes against 213,234
+with the scalar code unchanged, and the whole recompiled contracts are 39% smaller. A wide
+move went from 36 bytes of native code to 4.5, a load or store from 41 to 11, a bitwise
+operation from 54 to 4, an equality test from 57 to 27, a sign extended immediate from 44 to
+9. An addition grew from 44 to 92, because it is now straight-line code that assembles its
+result words directly into the registers rather than a call, and a constant shift from 26
+to 37 for the same reason. In a loop of the instructions contracts consist of, the recompiled code runs 2.5 times
+faster than under the helper arrangement: moves and bitwise operations ten times, loads and
+stores twice, constant shifts four times, a chain of dependent additions 17% slower,
+comparisons about the same, and an operation that still goes through the helper about 7 ns
+slower for the larger save. The recompiler requires AVX2 for these
+instructions, as it already required BMI2 for everything else.
 
 ## Encoding
 

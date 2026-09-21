@@ -72,7 +72,6 @@ fn compiles_object_without_a_runtime_sub_object() {
         "An object carrying deploy code only, without a `_deployed` sub-object",
     );
 
-    // `solc` accepts this too, which is the whole point: the two front-ends should agree.
     let solc_result = execute_solc(&[YUL_DEPLOY_ONLY_OBJECT_PATH, SOLC_YUL_FLAG]);
     assert_equal_exit_codes(&solc_result, &resolc_result);
 }

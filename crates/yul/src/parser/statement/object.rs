@@ -178,21 +178,7 @@ impl Object {
         })
     }
 
-    /// Builds the runtime code object for a deploy-only object, that is one the source omitted
-    /// the `_deployed` sub-object for.
-    ///
-    /// Such an object carries deploy code only, so the deployed contract has no runtime code to
-    /// run. `solc` accepts this, and the EVM behaviour of "no runtime code" is a successful
-    /// return with empty data, which is exactly what an empty Yul code block lowers to (see
-    /// `Code::into_llvm`, which terminates every code block with an implicit `stop`).
-    ///
-    /// Materializing the sub-object here instead of special casing its absence in code
-    /// generation keeps every consumer of the AST -- both IR pipelines, the visitors and the
-    /// analyses -- on the one path they already handle.
-    ///
-    /// The body is an explicit `stop` rather than an empty block. The two are equivalent, but an
-    /// empty runtime block currently trips an assertion in `polkavm-linker` when lowered through
-    /// the `--newyork` pipeline.
+    /// A short-hand constructor returning an object with a call to `stop`.
     fn implicit_runtime_code(identifier: &str, location: Location) -> Self {
         let stop = Statement::Expression(Expression::FunctionCall(FunctionCall {
             location,
@@ -552,8 +538,11 @@ object "Test" {
         assert_eq!(inner.identifier, "Test_deployed");
         assert_eq!(inner.inner_object, None);
 
-        // An explicit `stop`, so that `__runtime` is emitted with a terminator.
-        assert_eq!(inner.code.block.statements.len(), 1);
+        assert_eq!(
+            inner.code.block.statements.len(),
+            1,
+            "expected one statement"
+        );
         match &inner.code.block.statements[0] {
             Statement::Expression(Expression::FunctionCall(call)) => {
                 assert_eq!(call.name, Name::Stop);

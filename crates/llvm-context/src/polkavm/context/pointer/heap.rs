@@ -92,11 +92,14 @@ impl RuntimeFunction for StoreWord {
 /// each 64-bit access into byte operations, producing larger and slower code than
 /// the single word load it replaces, so the stock Yul path keeps the legacy
 /// `llvm.bswap.i256` lowering it was validated against.
+///
+/// The wide integer extension does the same again: with it the word is one load and
+/// `llvm.bswap.i256` is one instruction, so the unrolling has nothing left to win.
 pub(crate) fn build_efficient_load_swap<'ctx>(
     context: &Context<'ctx>,
     pointer: inkwell::values::PointerValue<'ctx>,
 ) -> anyhow::Result<BasicValueEnum<'ctx>> {
-    if !context.is_newyork() {
+    if !context.is_newyork() || context.has_wide_integer_extension() {
         let value = context
             .builder()
             .build_load(context.word_type(), pointer, "value")?;
@@ -198,13 +201,14 @@ pub(crate) fn build_efficient_load_swap<'ctx>(
 ///
 /// As with [`build_efficient_load_swap`], the unrolled form requires the
 /// `+unaligned-scalar-mem` target feature and is therefore reserved for newyork
-/// modules; the stock Yul path keeps the legacy `llvm.bswap.i256` lowering.
+/// modules without the wide integer extension; every other path keeps the
+/// `llvm.bswap.i256` lowering.
 pub(crate) fn build_efficient_store_swap<'ctx>(
     context: &Context<'ctx>,
     pointer: inkwell::values::PointerValue<'ctx>,
     value: inkwell::values::IntValue<'ctx>,
 ) -> anyhow::Result<()> {
-    if !context.is_newyork() {
+    if !context.is_newyork() || context.has_wide_integer_extension() {
         let swapped_value = context.build_byte_swap(value.into())?;
         context
             .builder()

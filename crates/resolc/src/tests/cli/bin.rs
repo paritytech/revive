@@ -180,11 +180,6 @@ fn compiles_newyork_folded_guard_inlined_loop() {
     assert_pvm_blob(&result);
 }
 
-/// Compile regression: a `_deployed` object with an empty code block crashed the newyork
-/// pipeline in `polkavm-linker` with "inconsistent reachability after optimization". The code
-/// block fell through to the function's `ret void`, which contradicts `__entry` being
-/// `noreturn`, so LLVM folded the runtime dispatch edge away and a call would have run the
-/// constructor. The implicit `stop` the legacy pipeline appends keeps the edge live.
 #[test]
 fn compiles_newyork_empty_runtime_object() {
     let path = absolute_path(YUL_EMPTY_RUNTIME_OBJECT_PATH);

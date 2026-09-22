@@ -74,11 +74,7 @@ impl WriteLLVM for WordToPointer {
     }
 }
 
-/// The revive runtime exit function.
-///
-/// A zero-length exit ignores its offset: EVM performs no memory expansion for an empty
-/// `return` or `revert`, so any offset, including one past the pointer width, must return
-/// empty data instead of trapping in the offset truncation.
+/// The revive runtime exit function. A zero-length exit ignores its offset.
 pub struct Exit;
 
 impl RuntimeFunction for Exit {

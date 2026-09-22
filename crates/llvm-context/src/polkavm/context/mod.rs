@@ -86,8 +86,7 @@ const MEMORY_READ_IMPORTS: &[&str] = &[
     revive_runtime_api::polkavm_imports::RETURNDATASIZE,
 ];
 
-/// The register sized operands of a `return` or `revert`, see
-/// [`Context::truncate_exit_operands`].
+/// The register sized operands of a `return` or `revert`.
 pub struct ExitOperands<'ctx> {
     /// The truncated offset. Meaningless when `is_empty` holds.
     pub offset: inkwell::values::IntValue<'ctx>,
@@ -1255,18 +1254,9 @@ impl<'ctx> Context<'ctx> {
         Ok(truncated)
     }
 
-    /// Truncate the `offset` and `length` of a `return` or `revert` to register size.
-    ///
-    /// EVM performs no memory expansion for a zero-length exit, so its offset is irrelevant
-    /// and must not trap even when it exceeds the pointer width. A non-zero length traps on
-    /// an offset that does not fit a register, and a length that does not fit always traps,
-    /// like [`Self::safe_truncate_int_to_xlen`]. The returned offset of an empty exit is the
-    /// bare truncation and carries no meaning; the caller must not address memory with it and
-    /// decides how to ignore it using [`ExitOperands::is_empty`].
-    ///
-    /// The emptiness test reads the truncated length before its overflow check, where LLVM
-    /// cannot yet prove the truncation lossless. Tested afterwards, it rewrites the register
-    /// compare into a word-sized one and every exit site grows by several instructions.
+    /// Truncates the operands of a `return` or `revert` to register size. A zero length
+    /// never traps on the offset, and the emptiness test reads the truncated length before
+    /// its overflow check so LLVM cannot widen the compare back to a word.
     pub fn truncate_exit_operands(
         &self,
         offset: inkwell::values::IntValue<'ctx>,
@@ -1323,8 +1313,7 @@ impl<'ctx> Context<'ctx> {
         }
     }
 
-    /// Whether `value` survives its truncation to `truncated` unchanged. `None` when `value`
-    /// is at most register sized and can never overflow.
+    /// Whether `value` survives the truncation, `None` for register sized values.
     fn build_fits_xlen(
         &self,
         value: inkwell::values::IntValue<'ctx>,

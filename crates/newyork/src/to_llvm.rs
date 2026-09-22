@@ -2352,11 +2352,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// and offset + length > heap_size) and traps if out of bounds.
     /// Then uses unchecked GEP + seal_return. This replaces the sbrk-based
     /// `__revive_exit` for dynamic return/revert in non-msize contracts.
-    ///
-    /// A zero length exits with empty data from the heap base whatever the
-    /// offset is: EVM performs no memory expansion for an empty exit, and the
-    /// call sites hand over an unchecked offset for it. Handling that here
-    /// keeps the per site cost at zero.
+    /// A zero length exits from the heap base whatever the offset is.
     fn get_or_create_exit_checked_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,

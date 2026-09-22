@@ -1,9 +1,4 @@
-/// Regression: a `return` of zero length must succeed with empty data for any offset,
-/// because EVM performs no memory expansion for it. The exit runtime function truncated
-/// the offset to the pointer width before looking at the length, so an offset at or
-/// above `2^32` trapped, and the `--newyork` checked exit also trapped on an offset past
-/// the heap size. Case 1 uses a literal offset of `not(0)`, case 2 a literal past the
-/// heap size, case 3 a calldata supplied offset.
+/// Zero-length returns from offsets past the pointer width and the heap size.
 object "ZeroLengthExit" {
   code { datacopy(0, dataoffset("ZeroLengthExit_deployed"), datasize("ZeroLengthExit_deployed")) return(0, datasize("ZeroLengthExit_deployed")) }
   object "ZeroLengthExit_deployed" {

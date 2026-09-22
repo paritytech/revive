@@ -4984,6 +4984,33 @@ fn calldatacopy_dynamic_dest_fmp_corruption() {
     run_differential(actions);
 }
 
+/// Regression (newyork FMP range proof): an `mcopy` destination or an external
+/// call's return range covering the free-memory-pointer word `[0x40, 0x60)`
+/// clobbers the pointer, but neither flagged it as possibly unbounded, so the
+/// surviving `FMP < heap_size` range proof truncated the clobbered `mload(0x40)`.
+/// Case 1 copies a calldata word onto `0x40` with `mcopy`; case 2 returns the
+/// contract's own `not(0)` answer into `0x40`. Compared newyork-PVM vs solc-EVM.
+#[test]
+fn copy_onto_fmp_word_disables_range_proof() {
+    let copied_word: U256 = (U256::from(1u64) << 200) | U256::from(0xabcdefu64);
+    let mut mcopy_case = U256::from(1).to_be_bytes::<32>().to_vec();
+    mcopy_case.extend_from_slice(&copied_word.to_be_bytes::<32>());
+    mcopy_case.extend_from_slice(&U256::from(0x40).to_be_bytes::<32>());
+    let staticcall_case = U256::from(2).to_be_bytes::<32>().to_vec();
+    for data in [mcopy_case, staticcall_case] {
+        let mut actions = instantiate_yul("contracts/CopyFmpBug.yul", "CopyFmpBug");
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+        run_differential(actions);
+    }
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so

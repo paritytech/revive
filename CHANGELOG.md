@@ -10,6 +10,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 
 ### Fixed
 - `--newyork`: A bug in dead call value analysis. [#589](https://github.com/paritytech/revive/pull/589)
+- `--newyork`: an `mcopy` destination or an external call return range covering the free memory pointer word did not disable the `FMP < heap_size` range proof, which truncated the clobbered `mload(0x40)`.
 
 ## v1.4.0
 

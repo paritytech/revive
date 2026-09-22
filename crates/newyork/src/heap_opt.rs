@@ -87,8 +87,7 @@ impl Default for MemorySlot {
 
 /// Heap optimization analysis context.
 pub struct HeapAnalysis {
-    /// The configured EVM heap size in bytes. A literal free memory pointer at or above it can
-    /// never be a valid pointer, so [`Self::is_trusted_fmp_source`] refuses to trust it.
+    /// The configured EVM heap size in bytes.
     heap_size: u64,
     /// Known static memory offsets and their access patterns.
     memory_accesses: BTreeMap<u64, AccessPattern>,
@@ -247,8 +246,7 @@ struct LoopIterationFmpCorruption {
 }
 
 impl HeapAnalysis {
-    /// Creates a new heap analysis context for a contract compiled with `heap_size` bytes of
-    /// EVM heap memory.
+    /// Creates a new heap analysis context for the given EVM heap size in bytes.
     pub fn new(heap_size: u64) -> Self {
         HeapAnalysis {
             heap_size,
@@ -1286,9 +1284,7 @@ impl HeapAnalysis {
     /// returns true iff its source expression matches a Solidity-allocator
     /// pattern that keeps the FMP < heap_size at runtime. Recognized
     /// patterns:
-    ///   - Literal below `heap_size` (`memoryguard(0x80)` collapses to
-    ///     this). A literal at or above the heap size can never be a
-    ///     valid free pointer, and the range proof would truncate it.
+    ///   - Literal below `heap_size` (`memoryguard(0x80)` collapses to this).
     ///   - `Var(x)` where `x` itself is trusted (forwarding chain).
     ///   - `Binary { Add, ... }` where at least one operand is trusted
     ///     (the canonical `add(mload(0x40), bounded_size)` pattern, or
@@ -1446,9 +1442,6 @@ impl Object {
     /// lowered byte-swapped (a variable offset can't be proven native-safe) while other still-literal
     /// accesses to the same word lower native-LE, corrupting that word's byte order. Deriving the
     /// results from the final IR keeps native-mode decisions consistent with what codegen emits.
-    ///
-    /// `heap_size` is the configured EVM heap size in bytes; it bounds the literal free memory
-    /// pointer values the analysis trusts.
     pub fn analyze_heap(&self, heap_size: u64) -> HeapOptResults {
         let mut analysis = HeapAnalysis::new(heap_size);
         analysis.analyze_object(self);
@@ -2030,16 +2023,12 @@ mod tests {
         object_with_code(statements, vec![])
     }
 
-    /// A literal free memory pointer below the heap size is the allocator's initial value and
-    /// keeps the `FMP < heap_size` range proof.
     #[test]
     fn fmp_literal_below_heap_size_is_trusted() {
         let results = object_with_fmp_literal_store(0x80).analyze_heap(TEST_HEAP_SIZE);
         assert!(!results.fmp_could_be_unbounded());
     }
 
-    /// A literal free memory pointer at or above the heap size can never be a valid pointer, so
-    /// the range proof that would truncate it must be disabled.
     #[test]
     fn fmp_literal_at_or_above_heap_size_is_untrusted() {
         for pointer in [TEST_HEAP_SIZE, 0xdeadbeef, u64::MAX] {

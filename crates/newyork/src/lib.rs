@@ -93,8 +93,7 @@ pub struct TranslationResult {
 /// let heap_opt = result.heap_opt;
 /// ```
 ///
-/// `heap_size` is the configured EVM heap size in bytes; the heap analysis uses it to decide
-/// which literal free memory pointer values keep the `FMP < heap_size` range proof sound.
+/// `heap_size` is the configured EVM heap size in bytes.
 pub fn translate_yul_object(
     yul_object: &revive_yul::parser::statement::object::Object,
     capture_ir_snapshot: bool,

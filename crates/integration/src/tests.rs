@@ -4235,11 +4235,7 @@ fn fmp_big_value_load() {
     }
 }
 
-/// Regression (newyork FMP range proof): a literal stored to the free memory pointer
-/// slot was trusted regardless of its magnitude, so `mstore(0x40, 0xdeadbeef)` kept the
-/// `FMP < heap_size` range proof and the surviving `mload(0x40)` read back `0x1beef`.
-/// Each switch case of `FmpBigLiteral.yul` stores a different literal; only the one
-/// below the heap size may keep the proof. Compared newyork-PVM vs solc-EVM.
+/// A literal free memory pointer at or above the heap size was trusted and range proved.
 #[test]
 fn fmp_big_literal_store() {
     for op in 0u64..=3 {
@@ -4254,6 +4250,21 @@ fn fmp_big_literal_store() {
         });
         run_differential(actions);
     }
+}
+
+/// Reproducer from paritytech/bugbounty_reports#214.
+#[test]
+fn fmp_literal_not_zero() {
+    let mut actions = instantiate("contracts/FmpLiteralNotZero.sol", "FmpLiteralNotZero");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"probe()")[..4].to_vec(),
+    });
+    run_differential(actions);
 }
 
 /// Generative differential fuzzer over memory ops with DYNAMIC (computed, non-constant)

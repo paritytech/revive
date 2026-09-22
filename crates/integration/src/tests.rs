@@ -4984,6 +4984,26 @@ fn calldatacopy_dynamic_dest_fmp_corruption() {
     run_differential(actions);
 }
 
+/// Regression (newyork heap analysis): a memory offset carried by a loop counter
+/// resolved to the initializer's static value on every iteration, so the loop's
+/// stores to `0x80` and `0xa0` were analyzed as a single store to `0x80`. Word
+/// `0xa0` stayed a native little-endian candidate for the literal `mload(0xa0)`
+/// while the loop wrote it byte-swapped, so the load returned the bytes reversed.
+/// Compared newyork-PVM vs solc-EVM.
+#[test]
+fn loop_carried_offset_is_dynamic() {
+    let mut actions = instantiate_yul("contracts/LoopOffsetNative.yul", "LoopOffsetNative");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: (1u8..=32).collect(),
+    });
+    run_differential(actions);
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so

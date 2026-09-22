@@ -404,27 +404,10 @@ impl HeapAnalysis {
 
             Statement::If { .. } | Statement::Switch { .. } | Statement::Block(_) => {}
 
-            Statement::For {
-                initial_values,
-                loop_variables,
-                condition,
-                outputs,
-                ..
-            } => {
-                for (initial_value, loop_variable) in
-                    initial_values.iter().zip(loop_variables.iter())
-                {
-                    if let Some(mut info) = self.offset_values.get(&initial_value.id.0).cloned() {
-                        info.from_literal = false;
-                        self.offset_values.insert(loop_variable.0, info);
-                    }
-                }
-                for (initial_value, output) in initial_values.iter().zip(outputs.iter()) {
-                    if let Some(mut info) = self.offset_values.get(&initial_value.id.0).cloned() {
-                        info.from_literal = false;
-                        self.offset_values.insert(output.0, info);
-                    }
-                }
+            // Loop variables, post inputs and outputs take a different value on every
+            // iteration, so they stay unknown offsets; seeding them from the initializer
+            // would resolve every iteration to the first one's address.
+            Statement::For { condition, .. } => {
                 self.analyze_expression_side_effects(condition);
             }
 
@@ -2001,6 +1984,76 @@ mod tests {
         assert!(
             !results.fmp_could_be_unbounded(),
             "an add(mload(0x40), k) destination is >= 0x80 and cannot hit the FMP word"
+        );
+    }
+
+    /// A memory offset carried by a loop counter must not resolve to the initializer's static
+    /// value: `for { let i := 0x80 } .. { i := add(i, 0x20) } { mstore(i, v) }` writes `0x80`
+    /// and `0xa0`, so a literal `mload(0xa0)` after the loop must not become a native
+    /// little-endian access, and a use of the loop output after the loop is dynamic too.
+    #[test]
+    fn loop_carried_offsets_are_dynamic() {
+        use crate::ir::{BinaryOperation, Region, Type, ValueId};
+        let statements = vec![
+            literal_binding(0, 0x80),
+            literal_binding(2, 0x1234),
+            literal_binding(3, 0x20),
+            Statement::For {
+                initial_values: vec![Value::int(ValueId(0))],
+                loop_variables: vec![ValueId(1)],
+                condition_statements: vec![],
+                condition: Expression::Literal {
+                    value: BigUint::from(1u64),
+                    value_type: Type::default(),
+                },
+                body: Region {
+                    statements: vec![Statement::MStore {
+                        offset: Value::int(ValueId(1)),
+                        value: Value::int(ValueId(2)),
+                        region: MemoryRegion::Unknown,
+                    }],
+                    yields: vec![Value::int(ValueId(1))],
+                },
+                post_input_variables: vec![ValueId(4)],
+                post: Region {
+                    statements: vec![Statement::Let {
+                        bindings: vec![ValueId(5)],
+                        value: Expression::Binary {
+                            operation: BinaryOperation::Add,
+                            lhs: Value::int(ValueId(4)),
+                            rhs: Value::int(ValueId(3)),
+                        },
+                    }],
+                    yields: vec![Value::int(ValueId(5))],
+                },
+                outputs: vec![ValueId(6)],
+            },
+            literal_binding(7, 0xa0),
+            Statement::Let {
+                bindings: vec![ValueId(8)],
+                value: Expression::MLoad {
+                    offset: Value::int(ValueId(7)),
+                    region: MemoryRegion::Dynamic,
+                },
+            },
+            Statement::MStore {
+                offset: Value::int(ValueId(6)),
+                value: Value::int(ValueId(2)),
+                region: MemoryRegion::Unknown,
+            },
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap();
+        assert!(
+            results.has_dynamic_accesses,
+            "the loop store and the post-loop store have no static offset"
+        );
+        assert!(
+            !results.native_safe_offsets.contains(&0x80),
+            "the first iteration's address must not be recorded as the loop's static access"
+        );
+        assert!(
+            !results.can_use_native(0xa0),
+            "a word the loop writes byte-swapped must not be read native"
         );
     }
 

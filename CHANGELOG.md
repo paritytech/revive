@@ -10,6 +10,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 
 ### Fixed
 - `--newyork`: A bug in dead call value analysis. [#589](https://github.com/paritytech/revive/pull/589)
+- `--newyork`: a memory offset carried by a loop counter resolved to its first iteration address on every iteration, leaving words written by later iterations eligible for native byte order, and a stale free memory pointer survived an unresolvable store inside a branch.
 
 ## v1.4.0
 

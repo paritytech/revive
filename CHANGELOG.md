@@ -10,6 +10,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 
 ### Fixed
 - `--newyork`: A bug in dead call value analysis. [#589](https://github.com/paritytech/revive/pull/589)
+- `--newyork`: the outlined mapping store helper hashed its key and slot from a private buffer while the fused `mstore(0, key)` and `mstore(0x20, slot)` had been eliminated, so a later read of scratch memory `[0, 0x40)` observed stale bytes.
 
 ## v1.4.0
 

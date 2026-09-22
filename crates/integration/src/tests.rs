@@ -4984,6 +4984,38 @@ fn calldatacopy_dynamic_dest_fmp_corruption() {
     run_differential(actions);
 }
 
+/// Regression: a zero-length `return` must succeed with empty data for any offset,
+/// since EVM performs no memory expansion for it. The exit runtime function truncated
+/// the offset to the pointer width before looking at the length, so `return(not(0), 0)`
+/// trapped, and the newyork checked exit also trapped on an offset past the heap size.
+/// Compared PVM vs solc-EVM through both pipelines.
+#[test]
+fn zero_length_return_ignores_offset() {
+    for data in zero_length_exit_calldata() {
+        let mut actions = instantiate_yul("contracts/ZeroLengthExit.yul", "ZeroLengthExit");
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+        run_differential(actions);
+    }
+}
+
+fn zero_length_exit_calldata() -> Vec<Vec<u8>> {
+    let huge_offset: U256 = U256::from(1u64) << 200;
+    let mut dynamic_offset_case = U256::from(3).to_be_bytes::<32>().to_vec();
+    dynamic_offset_case.extend_from_slice(&huge_offset.to_be_bytes::<32>());
+    vec![
+        U256::from(1).to_be_bytes::<32>().to_vec(),
+        U256::from(2).to_be_bytes::<32>().to_vec(),
+        dynamic_offset_case,
+    ]
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so

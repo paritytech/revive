@@ -86,6 +86,17 @@ const MEMORY_READ_IMPORTS: &[&str] = &[
     revive_runtime_api::polkavm_imports::RETURNDATASIZE,
 ];
 
+/// The register sized operands of a `return` or `revert`, see
+/// [`Context::truncate_exit_operands`].
+pub struct ExitOperands<'ctx> {
+    /// The truncated offset. Meaningless when `is_empty` holds.
+    pub offset: inkwell::values::IntValue<'ctx>,
+    /// The truncated length.
+    pub length: inkwell::values::IntValue<'ctx>,
+    /// Whether the length is zero, in which case the offset must be ignored.
+    pub is_empty: inkwell::values::IntValue<'ctx>,
+}
+
 /// The LLVM IR generator context.
 /// It is a not-so-big god-like object glueing all the compilers' complexity and act as an adapter
 /// and a superstructure over the inner `inkwell` LLVM context.
@@ -1242,6 +1253,116 @@ impl<'ctx> Context<'ctx> {
 
         self.set_basic_block(block_continue);
         Ok(truncated)
+    }
+
+    /// Truncate the `offset` and `length` of a `return` or `revert` to register size.
+    ///
+    /// EVM performs no memory expansion for a zero-length exit, so its offset is irrelevant
+    /// and must not trap even when it exceeds the pointer width. A non-zero length traps on
+    /// an offset that does not fit a register, and a length that does not fit always traps,
+    /// like [`Self::safe_truncate_int_to_xlen`]. The returned offset of an empty exit is the
+    /// bare truncation and carries no meaning; the caller must not address memory with it and
+    /// decides how to ignore it using [`ExitOperands::is_empty`].
+    ///
+    /// The emptiness test reads the truncated length before its overflow check, where LLVM
+    /// cannot yet prove the truncation lossless. Tested afterwards, it rewrites the register
+    /// compare into a word-sized one and every exit site grows by several instructions.
+    pub fn truncate_exit_operands(
+        &self,
+        offset: inkwell::values::IntValue<'ctx>,
+        length: inkwell::values::IntValue<'ctx>,
+    ) -> anyhow::Result<ExitOperands<'ctx>> {
+        let length_truncated = self.truncate_to_xlen_unchecked(length, "exit_length")?;
+        let is_empty = self.builder().build_int_compare(
+            inkwell::IntPredicate::EQ,
+            length_truncated,
+            self.xlen_type().const_zero(),
+            "exit_is_empty",
+        )?;
+        if let Some(length_fits) = self.build_fits_xlen(length, length_truncated, "exit_length")? {
+            self.build_trap_unless(length_fits, "exit_length")?;
+        }
+
+        let offset_truncated = self.truncate_to_xlen_unchecked(offset, "exit_offset")?;
+        if let Some(offset_fits) = self.build_fits_xlen(offset, offset_truncated, "exit_offset")? {
+            let is_valid = self
+                .builder()
+                .build_or(is_empty, offset_fits, "exit_offset_valid")?;
+            self.build_trap_unless(is_valid, "exit_offset")?;
+        }
+
+        Ok(ExitOperands {
+            offset: offset_truncated,
+            length: length_truncated,
+            is_empty,
+        })
+    }
+
+    /// Truncates or zero-extends `value` to register size without any overflow check.
+    fn truncate_to_xlen_unchecked(
+        &self,
+        value: inkwell::values::IntValue<'ctx>,
+        name: &str,
+    ) -> anyhow::Result<inkwell::values::IntValue<'ctx>> {
+        let value_width = value.get_type().get_bit_width();
+        let xlen_width = self.xlen_type().get_bit_width();
+        if value_width == xlen_width {
+            Ok(value)
+        } else if value_width < xlen_width {
+            Ok(self.builder().build_int_z_extend(
+                value,
+                self.xlen_type(),
+                &format!("{name}_xlen"),
+            )?)
+        } else {
+            Ok(self.builder().build_int_truncate(
+                value,
+                self.xlen_type(),
+                &format!("{name}_truncated"),
+            )?)
+        }
+    }
+
+    /// Whether `value` survives its truncation to `truncated` unchanged. `None` when `value`
+    /// is at most register sized and can never overflow.
+    fn build_fits_xlen(
+        &self,
+        value: inkwell::values::IntValue<'ctx>,
+        truncated: inkwell::values::IntValue<'ctx>,
+        name: &str,
+    ) -> anyhow::Result<Option<inkwell::values::IntValue<'ctx>>> {
+        if value.get_type().get_bit_width() <= self.xlen_type().get_bit_width() {
+            return Ok(None);
+        }
+        let extended = self.builder().build_int_z_extend(
+            truncated,
+            value.get_type(),
+            &format!("{name}_extended"),
+        )?;
+        Ok(Some(self.builder().build_int_compare(
+            inkwell::IntPredicate::EQ,
+            value,
+            extended,
+            &format!("{name}_fits"),
+        )?))
+    }
+
+    /// Continues in a fresh block when `condition` holds and traps with `INVALID` otherwise.
+    fn build_trap_unless(
+        &self,
+        condition: inkwell::values::IntValue<'ctx>,
+        name: &str,
+    ) -> anyhow::Result<()> {
+        let block_continue = self.append_basic_block(&format!("{name}_ok"));
+        let block_invalid = self.append_basic_block(&format!("{name}_overflow"));
+        self.build_conditional_branch(condition, block_continue, block_invalid)?;
+
+        self.set_basic_block(block_invalid);
+        self.build_runtime_call(revive_runtime_api::polkavm_imports::INVALID, &[]);
+        self.build_unreachable();
+
+        self.set_basic_block(block_continue);
+        Ok(())
     }
 
     /// Clip a memory offset to the maximum value that fits into a register.

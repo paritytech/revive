@@ -10,6 +10,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 
 ### Fixed
 - `--newyork`: A bug in dead call value analysis. [#589](https://github.com/paritytech/revive/pull/589)
+- A zero-length `return` or `revert` with an offset at or above `2^32` trapped instead of exiting with empty data; under `--newyork` a zero-length exit with an offset past the heap size trapped as well.
 
 ## v1.4.0
 

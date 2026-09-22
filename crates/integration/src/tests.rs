@@ -4984,12 +4984,7 @@ fn calldatacopy_dynamic_dest_fmp_corruption() {
     run_differential(actions);
 }
 
-/// Regression (newyork mapping outlining): the outlined `__revive_mapping_sstore`
-/// helper hashed its pre-image from a private alloca while the keccak fusion had
-/// dead-eliminated the `mstore(0, key)` / `mstore(0x20, slot)` staging stores, so
-/// scratch `[0, 0x40)` was left stale after a fused mapping store. `return(0, 0x40)`
-/// after nine mapping stores (the outlining threshold) returned zeros instead of
-/// `key || slot`. Compared newyork-PVM vs solc-EVM.
+/// Scratch `[0, 0x40)` must hold the key and slot after a fused mapping store.
 #[test]
 fn mapping_sstore_writes_scratch() {
     let mut actions = instantiate_yul("contracts/MappingSStoreScratch.yul", "MappingSStoreScratch");

@@ -1,10 +1,4 @@
-/// Regression (newyork mapping outlining): the outlined `__revive_mapping_sstore`
-/// helper hashed its pre-image from a private alloca, while the keccak fusion in
-/// `mem_opt` had already dead-eliminated the `mstore(0, key)` and `mstore(0x20, slot)`
-/// staging stores on the premise that the helper reproduces them. Scratch `[0, 0x40)`
-/// was therefore left stale after a fused mapping store, and `return(0, 0x40)`
-/// returned zeros where EVM returns `key || slot`. Nine mapping stores reach the
-/// outlining threshold; the last one leaves `key || 9` in scratch.
+/// Returns scratch `[0, 0x40)` after nine fused mapping stores.
 object "MappingSStoreScratch" {
   code { datacopy(0, dataoffset("MappingSStoreScratch_deployed"), datasize("MappingSStoreScratch_deployed")) return(0, datasize("MappingSStoreScratch_deployed")) }
   object "MappingSStoreScratch_deployed" {

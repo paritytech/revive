@@ -2723,14 +2723,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Combines keccak256_pair + sstore in a single function, eliminating the
     /// redundant bswap pair between keccak output and sstore key input.
     ///
-    /// The keccak pre-image is written to heap scratch `[0, 0x40)`, the same
-    /// as `__revive_mapping_sload` and `__revive_keccak256_two_words` do. The
-    /// keccak fusion in `mem_opt` dead-eliminates the source `mstore(0, key)`
-    /// and `mstore(0x20, slot)` on the premise that the fused helper reproduces
-    /// them, so a later read of scratch must observe the key and slot. Hashing
-    /// from a private alloca left scratch stale after a fused mapping store.
-    /// Because the helper writes the heap it carries no memory effect
-    /// attribute; heap loads are not forwarded across the call.
+    /// Writes the pre-image to heap scratch `[0, 0x40)` because the keccak
+    /// fusion removed the source `mstore`s expecting this helper to reproduce them.
     fn get_or_create_mapping_sstore_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,

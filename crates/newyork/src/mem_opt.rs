@@ -1322,9 +1322,10 @@ impl FmpPropagation {
     /// Offsets are resolved against `constants` — the caller's resolution scope — extended with
     /// literal bindings encountered during the (program-order) walk, mirroring the straight-line
     /// resolution in `propagate_statements`. An offset bound outside the passed scope resolves to
-    /// `None` and falls back to the region tag, exactly as straight-line code does. A dynamic
-    /// (unresolvable) store or `mstore8` that could wrap onto the FMP word is the same deliberate,
-    /// solc-unreachable gap as in straight-line `mstore8` handling (see the
+    /// `None` and falls back to the region tag, exactly as straight-line code does: a full-word
+    /// store with an unresolvable offset counts as modifying the word unless its region proves it
+    /// `Dynamic` or `Scratch`. A dynamic `mstore8` that could wrap onto the FMP word is the same
+    /// deliberate, solc-unreachable gap as in straight-line `mstore8` handling (see the
     /// `fmp_could_be_unbounded` field docs in `heap_opt`).
     fn statements_store_to_fmp_word(
         statements: &[Statement],
@@ -1344,6 +1345,9 @@ impl FmpPropagation {
                 let resolved_offset = Self::resolve_offset(&local_constants, offset);
                 if region.is_free_pointer_slot(resolved_offset)
                     || word_store_overlaps_free_pointer_slot(resolved_offset)
+                    || (resolved_offset.is_none()
+                        && *region != MemoryRegion::Dynamic
+                        && *region != MemoryRegion::Scratch)
                 {
                     found = true;
                 }
@@ -2363,6 +2367,53 @@ mod tests {
             fmp_loads_eliminated_across(middle, vec![]),
             1,
             "a scratch store below 0x21 cannot touch the FMP word"
+        );
+    }
+
+    /// A full-word store in a conditional branch whose offset cannot be resolved may land on
+    /// the FMP word, exactly as the straight-line propagation assumes, so the tracked constant
+    /// must not survive the `If`.
+    #[test]
+    fn branch_dynamic_store_invalidates_fmp() {
+        use crate::ir::MemoryRegion;
+        let middle = vec![conditional(
+            1,
+            vec![
+                fmp_literal_binding(10, 0xa0),
+                Statement::MStore {
+                    offset: make_value(11),
+                    value: make_value(10),
+                    region: MemoryRegion::Unknown,
+                },
+            ],
+        )];
+        assert_eq!(
+            fmp_loads_eliminated_across(middle, vec![]),
+            0,
+            "an unresolvable store in a branch may cover the FMP word"
+        );
+    }
+
+    /// A store in a conditional branch whose region proves the offset is at or above the
+    /// dynamic heap base cannot reach the FMP word, so the tracked constant survives.
+    #[test]
+    fn branch_dynamic_region_store_keeps_fmp() {
+        use crate::ir::MemoryRegion;
+        let middle = vec![conditional(
+            1,
+            vec![
+                fmp_literal_binding(10, 0xa0),
+                Statement::MStore {
+                    offset: make_value(11),
+                    value: make_value(10),
+                    region: MemoryRegion::Dynamic,
+                },
+            ],
+        )];
+        assert_eq!(
+            fmp_loads_eliminated_across(middle, vec![]),
+            1,
+            "a store proven to lie in the dynamic heap cannot touch the FMP word"
         );
     }
 

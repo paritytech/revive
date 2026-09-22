@@ -5004,6 +5004,31 @@ fn loop_carried_offset_is_dynamic() {
     run_differential(actions);
 }
 
+/// Regression (newyork FMP constant forwarding): the straight-line propagation drops
+/// its tracked free memory pointer on a full-word store with an unresolvable offset,
+/// since it may land on `[0x40, 0x60)`, but the region predicate used for branch and
+/// loop bodies did not. `if c { mstore(calldataload(32), 0xa0) }` with an offset of
+/// `0x40` therefore left the stale constant `0x80` forwarded to the `mload(0x40)`
+/// after the branch. First call takes the benign path, second call corrupts.
+/// Compared newyork-PVM vs solc-EVM.
+#[test]
+fn fmp_dynamic_store_in_branch_invalidates() {
+    let mut actions = instantiate_yul("contracts/FmpDynStoreBranchBug.yul", "FmpDynStoreBranchBug");
+    let mut corrupting = U256::from(1).to_be_bytes::<32>().to_vec();
+    corrupting.extend_from_slice(&U256::from(0x40).to_be_bytes::<32>());
+    for data in [vec![0u8; 32], corrupting] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+    }
+    run_differential(actions);
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so

@@ -4984,12 +4984,7 @@ fn calldatacopy_dynamic_dest_fmp_corruption() {
     run_differential(actions);
 }
 
-/// Regression (newyork heap analysis): a memory offset carried by a loop counter
-/// resolved to the initializer's static value on every iteration, so the loop's
-/// stores to `0x80` and `0xa0` were analyzed as a single store to `0x80`. Word
-/// `0xa0` stayed a native little-endian candidate for the literal `mload(0xa0)`
-/// while the loop wrote it byte-swapped, so the load returned the bytes reversed.
-/// Compared newyork-PVM vs solc-EVM.
+/// A word written by later loop iterations must not be read native.
 #[test]
 fn loop_carried_offset_is_dynamic() {
     let mut actions = instantiate_yul("contracts/LoopOffsetNative.yul", "LoopOffsetNative");
@@ -5004,13 +4999,7 @@ fn loop_carried_offset_is_dynamic() {
     run_differential(actions);
 }
 
-/// Regression (newyork FMP constant forwarding): the straight-line propagation drops
-/// its tracked free memory pointer on a full-word store with an unresolvable offset,
-/// since it may land on `[0x40, 0x60)`, but the region predicate used for branch and
-/// loop bodies did not. `if c { mstore(calldataload(32), 0xa0) }` with an offset of
-/// `0x40` therefore left the stale constant `0x80` forwarded to the `mload(0x40)`
-/// after the branch. First call takes the benign path, second call corrupts.
-/// Compared newyork-PVM vs solc-EVM.
+/// An unresolvable store inside a branch must drop the forwarded free memory pointer.
 #[test]
 fn fmp_dynamic_store_in_branch_invalidates() {
     let mut actions = instantiate_yul("contracts/FmpDynStoreBranchBug.yul", "FmpDynStoreBranchBug");
@@ -5026,6 +5015,21 @@ fn fmp_dynamic_store_in_branch_invalidates() {
             data,
         });
     }
+    run_differential(actions);
+}
+
+/// Reproducer from paritytech/bugbounty_reports#215.
+#[test]
+fn fmp_loop_mstore8() {
+    let mut actions = instantiate("contracts/FmpLoopMstore8.sol", "FmpLoopMstore8");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"probe()")[..4].to_vec(),
+    });
     run_differential(actions);
 }
 

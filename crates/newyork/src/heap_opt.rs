@@ -404,9 +404,7 @@ impl HeapAnalysis {
 
             Statement::If { .. } | Statement::Switch { .. } | Statement::Block(_) => {}
 
-            // Loop variables, post inputs and outputs take a different value on every
-            // iteration, so they stay unknown offsets; seeding them from the initializer
-            // would resolve every iteration to the first one's address.
+            // Loop-carried values stay unknown offsets.
             Statement::For { condition, .. } => {
                 self.analyze_expression_side_effects(condition);
             }
@@ -1987,10 +1985,6 @@ mod tests {
         );
     }
 
-    /// A memory offset carried by a loop counter must not resolve to the initializer's static
-    /// value: `for { let i := 0x80 } .. { i := add(i, 0x20) } { mstore(i, v) }` writes `0x80`
-    /// and `0xa0`, so a literal `mload(0xa0)` after the loop must not become a native
-    /// little-endian access, and a use of the loop output after the loop is dynamic too.
     #[test]
     fn loop_carried_offsets_are_dynamic() {
         use crate::ir::{BinaryOperation, Region, Type, ValueId};

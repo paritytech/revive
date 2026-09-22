@@ -989,10 +989,8 @@ impl FmpPropagation {
     /// invalidate the tracked FMP. `Dynamic` (offset proven `>= 0x80`) and `Scratch`
     /// (`< 0x40`) regions can't reach 0x40 even at runtime, so they are kept.
     ///
-    /// A statically-resolved `mstore8` into the FMP word `[0x40, 0x60)` overwrites one
-    /// byte of the pointer with an arbitrary value and invalidates likewise; a dynamic
-    /// `mstore8` that could wrap onto the word is the deliberate solc-unreachable gap
-    /// described in `heap_opt`'s `fmp_could_be_unbounded` field docs.
+    /// An `mstore8` into the FMP word `[0x40, 0x60)`, or one whose offset cannot be
+    /// resolved, invalidates likewise.
     fn propagate_statements(
         &mut self,
         statements: Vec<Statement>,
@@ -1030,11 +1028,12 @@ impl FmpPropagation {
                     });
                 }
 
-                Statement::MStore8 { ref offset, .. } => {
-                    if matches!(
-                        Self::resolve_offset(&constants, offset),
-                        Some(address) if (0x40..0x60).contains(&address)
-                    ) {
+                Statement::MStore8 {
+                    ref offset,
+                    ref region,
+                    ..
+                } => {
+                    if Self::byte_store_may_hit_fmp_word(&constants, offset, *region) {
                         fmp_value = None;
                     }
                     result.push(statement);
@@ -1277,6 +1276,18 @@ impl FmpPropagation {
         result
     }
 
+    /// Whether an `mstore8` at `offset` could land in the free-memory-pointer word `[0x40, 0x60)`.
+    fn byte_store_may_hit_fmp_word(
+        constants: &BTreeMap<u32, BigUint>,
+        offset: &Value,
+        region: MemoryRegion,
+    ) -> bool {
+        match Self::resolve_offset(constants, offset) {
+            Some(address) => (0x40..0x60).contains(&address),
+            None => region != MemoryRegion::Dynamic && region != MemoryRegion::Scratch,
+        }
+    }
+
     /// Whether a memory write of `length` bytes starting at `destination` could overlap the
     /// free-memory-pointer slot `[0x40, 0x60)`. Conservative: an unresolved destination,
     /// or an unresolved length from a destination below `0x60`, is treated as possibly
@@ -1322,11 +1333,9 @@ impl FmpPropagation {
     /// Offsets are resolved against `constants` — the caller's resolution scope — extended with
     /// literal bindings encountered during the (program-order) walk, mirroring the straight-line
     /// resolution in `propagate_statements`. An offset bound outside the passed scope resolves to
-    /// `None` and falls back to the region tag, exactly as straight-line code does: a full-word
-    /// store with an unresolvable offset counts as modifying the word unless its region proves it
-    /// `Dynamic` or `Scratch`. A dynamic `mstore8` that could wrap onto the FMP word is the same
-    /// deliberate, solc-unreachable gap as in straight-line `mstore8` handling (see the
-    /// `fmp_could_be_unbounded` field docs in `heap_opt`).
+    /// `None` and falls back to the region tag, exactly as straight-line code does: a store with
+    /// an unresolvable offset counts as modifying the word unless its region proves it `Dynamic`
+    /// or `Scratch`.
     fn statements_store_to_fmp_word(
         statements: &[Statement],
         constants: &BTreeMap<u32, BigUint>,
@@ -1352,11 +1361,8 @@ impl FmpPropagation {
                     found = true;
                 }
             }
-            Statement::MStore8 { offset, .. } => {
-                if matches!(
-                    Self::resolve_offset(&local_constants, offset),
-                    Some(address) if (0x40..0x60).contains(&address)
-                ) {
+            Statement::MStore8 { offset, region, .. } => {
+                if Self::byte_store_may_hit_fmp_word(&local_constants, offset, *region) {
                     found = true;
                 }
             }
@@ -2370,9 +2376,6 @@ mod tests {
         );
     }
 
-    /// A full-word store in a conditional branch whose offset cannot be resolved may land on
-    /// the FMP word, exactly as the straight-line propagation assumes, so the tracked constant
-    /// must not survive the `If`.
     #[test]
     fn branch_dynamic_store_invalidates_fmp() {
         use crate::ir::MemoryRegion;
@@ -2394,8 +2397,6 @@ mod tests {
         );
     }
 
-    /// A store in a conditional branch whose region proves the offset is at or above the
-    /// dynamic heap base cannot reach the FMP word, so the tracked constant survives.
     #[test]
     fn branch_dynamic_region_store_keeps_fmp() {
         use crate::ir::MemoryRegion;
@@ -2415,6 +2416,27 @@ mod tests {
             1,
             "a store proven to lie in the dynamic heap cannot touch the FMP word"
         );
+    }
+
+    #[test]
+    fn loop_dynamic_mstore8_invalidates_fmp() {
+        use crate::ir::MemoryRegion;
+        let mut loop_statement = loop_with_condition(Expression::Literal {
+            value: num::BigUint::from(1u64),
+            value_type: Type::Int(BitWidth::I256),
+        });
+        let Statement::For { body, .. } = &mut loop_statement else {
+            unreachable!()
+        };
+        body.statements = vec![
+            fmp_literal_binding(10, 0xff),
+            Statement::MStore8 {
+                offset: make_value(11),
+                value: make_value(10),
+                region: MemoryRegion::Unknown,
+            },
+        ];
+        assert_eq!(fmp_loads_eliminated_across(vec![loop_statement], vec![]), 0);
     }
 
     /// A function whose body does a misaligned overlap store corrupts the FMP for its

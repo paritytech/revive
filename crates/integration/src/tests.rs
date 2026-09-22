@@ -4984,12 +4984,7 @@ fn calldatacopy_dynamic_dest_fmp_corruption() {
     run_differential(actions);
 }
 
-/// Regression (newyork FMP range proof): an `mcopy` destination or an external
-/// call's return range covering the free-memory-pointer word `[0x40, 0x60)`
-/// clobbers the pointer, but neither flagged it as possibly unbounded, so the
-/// surviving `FMP < heap_size` range proof truncated the clobbered `mload(0x40)`.
-/// Case 1 copies a calldata word onto `0x40` with `mcopy`; case 2 returns the
-/// contract's own `not(0)` answer into `0x40`. Compared newyork-PVM vs solc-EVM.
+/// An `mcopy` or a call return range over the free memory pointer word must disable the range proof.
 #[test]
 fn copy_onto_fmp_word_disables_range_proof() {
     let copied_word: U256 = (U256::from(1u64) << 200) | U256::from(0xabcdefu64);
@@ -4999,6 +4994,29 @@ fn copy_onto_fmp_word_disables_range_proof() {
     let staticcall_case = U256::from(2).to_be_bytes::<32>().to_vec();
     for data in [mcopy_case, staticcall_case] {
         let mut actions = instantiate_yul("contracts/CopyFmpBug.yul", "CopyFmpBug");
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+        run_differential(actions);
+    }
+}
+
+/// Reproducers from paritytech/bugbounty_reports#216.
+#[test]
+fn fmp_staticcall_return_and_mcopy_straddle() {
+    let selector = keccak256(b"probe()")[..4].to_vec();
+    let mut mcopy_calldata = selector.clone();
+    mcopy_calldata.extend_from_slice(&[0xff; 32]);
+    for (contract, data) in [
+        ("FmpStaticcallReturn", selector),
+        ("FmpMcopyStraddle", mcopy_calldata),
+    ] {
+        let mut actions = instantiate(&format!("contracts/{contract}.sol"), contract);
         actions.push(Call {
             origin: TestAddress::Alice,
             dest: TestAddress::Instantiated(0),

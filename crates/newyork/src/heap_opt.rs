@@ -591,28 +591,9 @@ impl HeapAnalysis {
         }
     }
 
-    /// Flags the free-memory-pointer slot as possibly unbounded when a raw byte write of
-    /// `length` bytes to `destination` (a copy opcode's destination or an external call's
-    /// return range) can clobber it.
-    ///
-    /// A write that can overwrite the FMP slot `[0x40, 0x60)` replaces the free-memory
-    /// pointer with arbitrary, possibly out-of-range bytes. Downstream codegen that assumes
-    /// `FMP < heap_size` (the narrow `mload(0x40)` read and its range proof) would then
-    /// mis-read the corrupted value, so such a write sets `fmp_could_be_unbounded` — exactly
-    /// as an untrusted `mstore(0x40, ...)` does. Tainting word 0x40 alone only disables the
-    /// *native-mode* FMP read; the FMP *range proof* in `to_llvm` is gated on
-    /// `fmp_could_be_unbounded`, so that flag must be set too or the proof silently
-    /// truncates the clobbered value.
-    ///
-    /// The check is kept deliberately narrow to avoid a code-size regression: a write of
-    /// statically zero length never covers the slot (solc passes a zero return length to
-    /// `call` when it fetches the return data with `returndatacopy`), and only a static
-    /// destination+length that provably overlap the slot, a static destination *inside* the
-    /// FMP word with a dynamic length (whose first byte(s) land in the slot), or a dynamic
-    /// destination that is not provably free-pointer-relative flag unboundedness. A static
-    /// destination *outside* the word (proxy `calldatacopy(0, 0, size)`, OZ's FMP-relative
-    /// ABI-decode copies to `mload(0x40) >= 0x80`) is left to `has_dynamic_accesses` / the
-    /// native-mode guards.
+    /// Flags the free memory pointer as possibly unbounded when a raw write of `length`
+    /// bytes to `destination` can cover `[0x40, 0x60)`. A zero length never covers it,
+    /// and neither does a dynamic destination that is free pointer relative.
     fn flag_write_covering_fmp(&mut self, destination: &Value, length: &Value) {
         let destination_start = self.extract_static_offset(destination);
         let len = self.extract_static_offset(length);
@@ -630,8 +611,7 @@ impl HeapAnalysis {
 
     /// Taints the destination of a copy opcode (`calldatacopy`, `codecopy`,
     /// `returndatacopy`, …), which writes big-endian bytes that a later native
-    /// (little-endian) `mload` must not byte-reverse, and flags the free-memory-pointer
-    /// slot as possibly unbounded when the copy can clobber it.
+    /// (little-endian) `mload` must not byte-reverse.
     ///
     /// When the length is statically known, every word the copy covers is tainted
     /// — not just the start word — so a multi-word copy can't leave a later word a
@@ -2016,8 +1996,6 @@ mod tests {
         );
     }
 
-    /// Builds an `mcopy(destination, 0x80, length)` with the operands bound to value IDs 10
-    /// (`destination`), 11 (`0x80`) and 12 (`length`); `setup` binds the destination.
     fn object_with_mcopy(setup: Vec<Statement>, length: u64) -> Object {
         use crate::ir::ValueId;
         let mut statements = setup;
@@ -2031,9 +2009,6 @@ mod tests {
         object_with_code(statements, vec![])
     }
 
-    /// Builds a `staticcall` returning `return_length` bytes into `return_offset`, with the
-    /// operands bound to value IDs 10 (`return_offset`), 11 (`return_length`) and 12 (zero);
-    /// `setup` binds the return offset.
     fn object_with_external_call(setup: Vec<Statement>, return_length: u64) -> Object {
         use crate::ir::{CallKind, ValueId};
         let mut statements = setup;
@@ -2053,16 +2028,12 @@ mod tests {
         object_with_code(statements, vec![])
     }
 
-    /// An `mcopy` onto the FMP word replaces the pointer with arbitrary bytes, so it must
-    /// disable the range proof like every other copy does.
     #[test]
     fn mcopy_onto_fmp_word_flags_unbounded() {
         let results = object_with_mcopy(vec![literal(10, 0x40)], 0x20).analyze_heap();
         assert!(results.fmp_could_be_unbounded());
     }
 
-    /// An `mcopy` to a destination that is not provably free-pointer-relative can land on
-    /// the FMP word.
     #[test]
     fn mcopy_dynamic_destination_flags_unbounded() {
         use crate::ir::ValueId;
@@ -2076,17 +2047,12 @@ mod tests {
         assert!(results.fmp_could_be_unbounded());
     }
 
-    /// An external call whose return range covers the FMP word writes the callee's return
-    /// data over the pointer.
     #[test]
     fn external_call_return_onto_fmp_word_flags_unbounded() {
         let results = object_with_external_call(vec![literal(10, 0x40)], 0x20).analyze_heap();
         assert!(results.fmp_could_be_unbounded());
     }
 
-    /// solc fetches return data with `returndatacopy` and passes a zero return length to the
-    /// call itself; a zero-length return range writes nothing and must not disable the FMP
-    /// optimization even when its offset is dynamic.
     #[test]
     fn external_call_zero_length_return_stays_bounded() {
         use crate::ir::ValueId;

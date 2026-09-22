@@ -4984,6 +4984,28 @@ fn calldatacopy_dynamic_dest_fmp_corruption() {
     run_differential(actions);
 }
 
+/// Regression (newyork mapping outlining): the outlined `__revive_mapping_sstore`
+/// helper hashed its pre-image from a private alloca while the keccak fusion had
+/// dead-eliminated the `mstore(0, key)` / `mstore(0x20, slot)` staging stores, so
+/// scratch `[0, 0x40)` was left stale after a fused mapping store. `return(0, 0x40)`
+/// after nine mapping stores (the outlining threshold) returned zeros instead of
+/// `key || slot`. Compared newyork-PVM vs solc-EVM.
+#[test]
+fn mapping_sstore_writes_scratch() {
+    let mut actions = instantiate_yul("contracts/MappingSStoreScratch.yul", "MappingSStoreScratch");
+    let mut data = U256::from(0xabcdef0123u64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so

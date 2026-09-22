@@ -469,7 +469,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -480,7 +480,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -3500,7 +3500,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c54e03a951783e8b327515db3f2a2fd0e3bed362a96b066f341ce66ed49b4ead"
 dependencies = [
  "data-encoding",
- "syn 3.0.4",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -4147,7 +4147,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -10971,7 +10971,7 @@ dependencies = [
 [[package]]
 name = "polkavm"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#8bb0ea54bd9c965b5e94186e883c2d860be5602c"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#bee1ffc66ac8420cb7736534d9028cbe1d6434bf"
 dependencies = [
  "libc",
  "log",
@@ -10984,7 +10984,7 @@ dependencies = [
 [[package]]
 name = "polkavm-assembler"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#8bb0ea54bd9c965b5e94186e883c2d860be5602c"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#bee1ffc66ac8420cb7736534d9028cbe1d6434bf"
 dependencies = [
  "log",
 ]
@@ -10992,7 +10992,7 @@ dependencies = [
 [[package]]
 name = "polkavm-common"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#8bb0ea54bd9c965b5e94186e883c2d860be5602c"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#bee1ffc66ac8420cb7736534d9028cbe1d6434bf"
 dependencies = [
  "blake3",
  "log",
@@ -11003,7 +11003,7 @@ dependencies = [
 [[package]]
 name = "polkavm-derive"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#8bb0ea54bd9c965b5e94186e883c2d860be5602c"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#bee1ffc66ac8420cb7736534d9028cbe1d6434bf"
 dependencies = [
  "polkavm-derive-impl-macro",
 ]
@@ -11011,7 +11011,7 @@ dependencies = [
 [[package]]
 name = "polkavm-derive-impl"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#8bb0ea54bd9c965b5e94186e883c2d860be5602c"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#bee1ffc66ac8420cb7736534d9028cbe1d6434bf"
 dependencies = [
  "polkavm-common",
  "proc-macro2",
@@ -11022,7 +11022,7 @@ dependencies = [
 [[package]]
 name = "polkavm-derive-impl-macro"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#8bb0ea54bd9c965b5e94186e883c2d860be5602c"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#bee1ffc66ac8420cb7736534d9028cbe1d6434bf"
 dependencies = [
  "polkavm-derive-impl",
  "syn 2.0.119",
@@ -11031,7 +11031,7 @@ dependencies = [
 [[package]]
 name = "polkavm-disassembler"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#8bb0ea54bd9c965b5e94186e883c2d860be5602c"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#bee1ffc66ac8420cb7736534d9028cbe1d6434bf"
 dependencies = [
  "clap",
  "iced-x86",
@@ -11043,7 +11043,7 @@ dependencies = [
 [[package]]
 name = "polkavm-linker"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#8bb0ea54bd9c965b5e94186e883c2d860be5602c"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#bee1ffc66ac8420cb7736534d9028cbe1d6434bf"
 dependencies = [
  "dirs",
  "gimli 0.31.1",
@@ -11058,7 +11058,7 @@ dependencies = [
 [[package]]
 name = "polkavm-linux-raw"
 version = "0.37.0"
-source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#8bb0ea54bd9c965b5e94186e883c2d860be5602c"
+source = "git+https://github.com/paritytech/polkavm?branch=cl%2Fmore-instr#bee1ffc66ac8420cb7736534d9028cbe1d6434bf"
 
 [[package]]
 name = "polling"
@@ -11615,7 +11615,7 @@ dependencies = [
  "once_cell",
  "socket2 0.6.5",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -11628,7 +11628,7 @@ dependencies = [
  "libc",
  "socket2 0.6.5",
  "tracing",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -12617,7 +12617,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -14207,7 +14207,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -15103,7 +15103,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -15656,7 +15656,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -17102,7 +17102,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

@@ -3,7 +3,7 @@
 
 # revive
 
-Yul recompiler to LLVM, targetting RISC-V on [PolkaVM](https://github.com/koute/polkavm).
+Solidity compiler for Polkadot, targeting PolkaVM through `pallet-revive`.
 
 Check the [docs](https://paritytech.github.io/revive/) or visit [contracts.polkadot.io](https://docs.polkadot.com/develop/smart-contracts/) to learn more about `revive` and contracts on Polkadot!
 

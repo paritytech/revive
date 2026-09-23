@@ -19,6 +19,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use num::BigUint;
+
 use crate::ir::{
     for_each_statement, word_align, Block, Expression, FunctionId, MemoryRegion, Object, Statement,
     Value,
@@ -85,6 +87,8 @@ impl Default for MemorySlot {
 
 /// Heap optimization analysis context.
 pub struct HeapAnalysis {
+    /// The configured EVM heap size in bytes.
+    heap_size: u64,
     /// Known static memory offsets and their access patterns.
     memory_accesses: BTreeMap<u64, AccessPattern>,
     /// Values known to be memory offsets (for tracking alignment).
@@ -242,9 +246,10 @@ struct LoopIterationFmpCorruption {
 }
 
 impl HeapAnalysis {
-    /// Creates a new heap analysis context.
-    pub fn new() -> Self {
+    /// Creates a new heap analysis context for the given EVM heap size in bytes.
+    pub fn new(heap_size: u64) -> Self {
         HeapAnalysis {
+            heap_size,
             memory_accesses: BTreeMap::new(),
             offset_values: BTreeMap::new(),
             tainted_regions: BTreeSet::new(),
@@ -1279,10 +1284,7 @@ impl HeapAnalysis {
     /// returns true iff its source expression matches a Solidity-allocator
     /// pattern that keeps the FMP < heap_size at runtime. Recognized
     /// patterns:
-    ///   - Literal (`memoryguard(0x80)` collapses to this; any literal
-    ///     small enough that `mstore(0x40, <literal>)` would have to
-    ///     have been written by the contract author with the allocator
-    ///     invariant in mind — we trust them).
+    ///   - Literal below `heap_size` (`memoryguard(0x80)` collapses to this).
     ///   - `Var(x)` where `x` itself is trusted (forwarding chain).
     ///   - `Binary { Add, ... }` where at least one operand is trusted
     ///     (the canonical `add(mload(0x40), bounded_size)` pattern, or
@@ -1311,7 +1313,9 @@ impl HeapAnalysis {
                 return false;
             };
             match expression {
-                Expression::Literal { .. } => return true,
+                Expression::Literal { value, .. } => {
+                    return *value < BigUint::from(self.heap_size);
+                }
                 Expression::MLoad { offset, .. } => {
                     return self.extract_static_offset(offset) == Some(0x40);
                 }
@@ -1367,12 +1371,6 @@ impl HeapAnalysis {
             tainted_regions: self.tainted_regions.len(),
             escaping_regions: self.escaping_regions.len(),
         }
-    }
-}
-
-impl Default for HeapAnalysis {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
@@ -1444,8 +1442,8 @@ impl Object {
     /// lowered byte-swapped (a variable offset can't be proven native-safe) while other still-literal
     /// accesses to the same word lower native-LE, corrupting that word's byte order. Deriving the
     /// results from the final IR keeps native-mode decisions consistent with what codegen emits.
-    pub fn analyze_heap(&self) -> HeapOptResults {
-        let mut analysis = HeapAnalysis::new();
+    pub fn analyze_heap(&self, heap_size: u64) -> HeapOptResults {
+        let mut analysis = HeapAnalysis::new(heap_size);
         analysis.analyze_object(self);
         HeapOptResults::from_analysis(&analysis)
     }
@@ -1604,6 +1602,9 @@ mod tests {
     use super::*;
     use num::BigUint;
 
+    /// The default `--heap-size`.
+    const TEST_HEAP_SIZE: u64 = 131_072;
+
     /// Builds a `Statement::Let` binding `id` to the literal `value`.
     fn literal(id: u32, value: u64) -> Statement {
         use crate::ir::{Type, ValueId};
@@ -1756,7 +1757,8 @@ mod tests {
     /// possibly unbounded so codegen skips the `FMP < heap_size` range proof.
     #[test]
     fn overlap_store_observed_by_fmp_load_flags_unbounded() {
-        let results = object_with_overlap_store(observe_fmp_statements(4)).analyze_heap();
+        let results =
+            object_with_overlap_store(observe_fmp_statements(4)).analyze_heap(TEST_HEAP_SIZE);
         assert!(
             results.fmp_could_be_unbounded(),
             "an mstore overlapping 0x40 read back via mload(0x40) is observed corruption"
@@ -1774,7 +1776,7 @@ mod tests {
             offset: Value::int(ValueId(1)),
             length: Value::int(ValueId(0)),
         }];
-        let results = object_with_overlap_store(tail).analyze_heap();
+        let results = object_with_overlap_store(tail).analyze_heap(TEST_HEAP_SIZE);
         assert!(
             !results.fmp_could_be_unbounded(),
             "an mstore overlapping 0x40 followed only by a revert is unobserved corruption"
@@ -1810,7 +1812,8 @@ mod tests {
     /// `mload(0x40)` after the call is observed corruption and must flag.
     #[test]
     fn callee_overlap_store_observed_by_caller_flags_unbounded() {
-        let results = object_with_corrupting_call(observe_fmp_statements(4)).analyze_heap();
+        let results =
+            object_with_corrupting_call(observe_fmp_statements(4)).analyze_heap(TEST_HEAP_SIZE);
         assert!(
             results.fmp_could_be_unbounded(),
             "corruption escaping a callee and read back via mload(0x40) is observed"
@@ -1826,7 +1829,7 @@ mod tests {
             offset: Value::int(ValueId(1)),
             length: Value::int(ValueId(0)),
         }];
-        let results = object_with_corrupting_call(tail).analyze_heap();
+        let results = object_with_corrupting_call(tail).analyze_heap(TEST_HEAP_SIZE);
         assert!(
             !results.fmp_could_be_unbounded(),
             "callee corruption discarded by an immediate revert is unobserved"
@@ -1872,7 +1875,7 @@ mod tests {
             outputs: vec![],
         });
         statements.extend(observe_fmp_statements(30));
-        let results = object_with_code(statements, vec![]).analyze_heap();
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
         assert!(
             results.fmp_could_be_unbounded(),
             "a break skips the loop post, so its FMP restore must not mask the corrupted break path"
@@ -1916,7 +1919,7 @@ mod tests {
             offset: Value::int(ValueId(4)),
             region: MemoryRegion::FreePointerSlot,
         }));
-        let results = object_with_code(statements, vec![]).analyze_heap();
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
         assert!(
             results.fmp_could_be_unbounded(),
             "a loop condition reading mload(0x40) after an overlap store observes the corruption"
@@ -1935,7 +1938,7 @@ mod tests {
             offset: Value::int(ValueId(4)),
             region: MemoryRegion::FreePointerSlot,
         }));
-        let results = object_with_code(statements, vec![]).analyze_heap();
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
         assert!(
             !results.fmp_could_be_unbounded(),
             "reading mload(0x40) in a loop condition without corruption is not observed corruption"
@@ -1965,7 +1968,7 @@ mod tests {
                 },
             },
         ];
-        let results = object_with_dynamic_copy(dest_setup).analyze_heap();
+        let results = object_with_dynamic_copy(dest_setup).analyze_heap(TEST_HEAP_SIZE);
         assert!(
             results.fmp_could_be_unbounded(),
             "a masked calldata destination can hit the FMP word"
@@ -1997,16 +2000,49 @@ mod tests {
                 },
             },
         ];
-        let results = object_with_dynamic_copy(dest_setup).analyze_heap();
+        let results = object_with_dynamic_copy(dest_setup).analyze_heap(TEST_HEAP_SIZE);
         assert!(
             !results.fmp_could_be_unbounded(),
             "an add(mload(0x40), k) destination is >= 0x80 and cannot hit the FMP word"
         );
     }
 
+    /// Builds an object that stores the literal `pointer` to the FMP slot and reads it back.
+    fn object_with_fmp_literal_store(pointer: u64) -> Object {
+        use crate::ir::ValueId;
+        let mut statements = vec![
+            literal_binding(0, pointer),
+            literal_binding(1, 0x40),
+            Statement::MStore {
+                offset: Value::int(ValueId(1)),
+                value: Value::int(ValueId(0)),
+                region: MemoryRegion::FreePointerSlot,
+            },
+        ];
+        statements.extend(observe_fmp_statements(2));
+        object_with_code(statements, vec![])
+    }
+
+    #[test]
+    fn fmp_literal_below_heap_size_is_trusted() {
+        let results = object_with_fmp_literal_store(0x80).analyze_heap(TEST_HEAP_SIZE);
+        assert!(!results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn fmp_literal_at_or_above_heap_size_is_untrusted() {
+        for pointer in [TEST_HEAP_SIZE, 0xdeadbeef, u64::MAX] {
+            let results = object_with_fmp_literal_store(pointer).analyze_heap(TEST_HEAP_SIZE);
+            assert!(
+                results.fmp_could_be_unbounded(),
+                "a literal FMP of {pointer:#x} must not be trusted"
+            );
+        }
+    }
+
     #[test]
     fn test_offset_info_from_literal() {
-        let analysis = HeapAnalysis::new();
+        let analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
 
         let expression = Expression::Literal {
             value: BigUint::from(0u32),
@@ -2087,7 +2123,7 @@ mod tests {
             data: std::collections::BTreeMap::new(),
         };
 
-        let before = object.analyze_heap();
+        let before = object.analyze_heap(TEST_HEAP_SIZE);
         assert!(
             !before.has_dynamic_accesses,
             "pre-dedup: both offsets are literals, so no access is dynamic"
@@ -2099,7 +2135,7 @@ mod tests {
             "the two offset-only-differing functions must fuzzy-merge (offset parameterized)"
         );
 
-        let after = object.analyze_heap();
+        let after = object.analyze_heap(TEST_HEAP_SIZE);
         assert!(
             after.has_dynamic_accesses,
             "post-dedup: the merged body stores through a variable offset parameter"

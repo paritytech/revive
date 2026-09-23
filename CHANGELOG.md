@@ -10,6 +10,8 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 
 ### Fixed
 - `--newyork`: A bug in dead call value analysis. [#589](https://github.com/paritytech/revive/pull/589)
+- `--newyork`: a literal free memory pointer at or above the heap size, such as `mstore(0x40, not(0))`, was trusted, and the surviving `mload(0x40)` was truncated by the `FMP < heap_size` range proof.
+- `--newyork`: Object code that fell off the end was not terminated with the implicit EVM return, so LLVM folded away the runtime dispatch and a call would have run the constructor. [#598](https://github.com/paritytech/revive/pull/598)
 
 ## v1.4.0
 

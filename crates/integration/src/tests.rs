@@ -4235,6 +4235,38 @@ fn fmp_big_value_load() {
     }
 }
 
+/// A literal free memory pointer at or above the heap size was trusted and range proved.
+#[test]
+fn fmp_big_literal_store() {
+    for op in 0u64..=3 {
+        let mut actions = instantiate_yul("contracts/FmpBigLiteral.yul", "FmpBigLiteral");
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: U256::from(op).to_be_bytes::<32>().to_vec(),
+        });
+        run_differential(actions);
+    }
+}
+
+/// Reproducer from paritytech/bugbounty_reports#214.
+#[test]
+fn fmp_literal_not_zero() {
+    let mut actions = instantiate("contracts/FmpLiteralNotZero.sol", "FmpLiteralNotZero");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"probe()")[..4].to_vec(),
+    });
+    run_differential(actions);
+}
+
 /// Generative differential fuzzer over memory ops with DYNAMIC (computed, non-constant)
 /// offsets — `and(<expr>, mask)` keeps them bounded but non-literal, exercising the
 /// offset-narrowing + bounds-check codegen path (distinct from the static-offset mem

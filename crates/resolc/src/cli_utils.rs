@@ -34,6 +34,8 @@ pub const YUL_DUPLICATE_FUNCTIONS_SWITCH_PATH: &str =
 /// Yul contract with duplicate function names in deeply nested switch cases.
 pub const YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH: &str =
     "src/tests/data/yul/duplicate_functions_deep_nesting.yul";
+/// Yul contract whose `_deployed` runtime object has an empty code block.
+pub const YUL_EMPTY_RUNTIME_OBJECT_PATH: &str = "src/tests/data/yul/empty_runtime_object.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =

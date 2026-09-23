@@ -35,6 +35,7 @@ test_spec!(erc20, "ERC20", "ERC20.sol");
 test_spec!(computation, "Computation", "Computation.sol");
 test_spec!(msize, "MSize", "MSize.sol");
 test_spec!(sha1, "SHA1", "SHA1.sol");
+test_spec!(sha256, "Sha256", "Sha256.sol");
 test_spec!(block, "Block", "Block.sol");
 test_spec!(mcopy, "MCopy", "MCopy.sol");
 test_spec!(mcopy_overlap, "MCopyOverlap", "MCopyOverlap.sol");

@@ -3496,6 +3496,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
         self.generate_block(&object.code, context)?;
 
+        // The EVM lets the code return implicitly.
+        revive_llvm_context::polkavm_evm_return::stop(context)
+            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
+
         context
             .set_debug_location(0, 0, None)
             .map_err(|error| CodegenError::Llvm(error.to_string()))?;

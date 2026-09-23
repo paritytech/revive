@@ -6033,31 +6033,29 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     }
 
                     BinaryOperation::Shl => {
-                        if let Some(db) = demand_bits {
-                            if db <= 64 {
-                                if let Some(shift) = Self::try_get_small_constant(lhs_value) {
-                                    if shift >= 64 {
-                                        let i64_type = context.llvm().i64_type();
-                                        return Ok(i64_type.const_zero().as_basic_value_enum());
-                                    }
-                                    let rhs_narrow = self.ensure_exact_width(
-                                        context,
-                                        rhs_value,
-                                        64,
-                                        "dnshl_val",
-                                    )?;
-                                    let lhs_narrow = self.ensure_exact_width(
-                                        context,
-                                        lhs_value,
-                                        64,
-                                        "dnshl_amt",
-                                    )?;
-                                    let result = context
-                                        .builder()
-                                        .build_left_shift(rhs_narrow, lhs_narrow, "shl_dn")
-                                        .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-                                    return Ok(result.as_basic_value_enum());
+                        if let Some(shift) = Self::try_get_small_constant(lhs_value) {
+                            // The result is below 2^(operand width + shift), so a 64-bit shift is
+                            // exact whenever that bound fits in 64 bits. When it does not, a demand
+                            // of at most 64 bits still makes the low 64 bits exact, and those are
+                            // the only bits the consumer reads.
+                            let result_fits_i64 = u64::from(self.inferred_width(rhs.id).bits())
+                                .saturating_add(shift)
+                                <= 64;
+                            let low_bits_demanded = demand_bits.is_some_and(|bits| bits <= 64);
+                            if result_fits_i64 || low_bits_demanded {
+                                if shift >= 64 {
+                                    let i64_type = context.llvm().i64_type();
+                                    return Ok(i64_type.const_zero().as_basic_value_enum());
                                 }
+                                let rhs_narrow =
+                                    self.ensure_exact_width(context, rhs_value, 64, "dnshl_val")?;
+                                let lhs_narrow =
+                                    self.ensure_exact_width(context, lhs_value, 64, "dnshl_amt")?;
+                                let result = context
+                                    .builder()
+                                    .build_left_shift(rhs_narrow, lhs_narrow, "shl_dn")
+                                    .map_err(|error| CodegenError::Llvm(error.to_string()))?;
+                                return Ok(result.as_basic_value_enum());
                             }
                         }
                         let lhs_value = self.ensure_word_type(context, lhs_value, "binop_lhs")?;

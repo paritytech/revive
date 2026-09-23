@@ -97,6 +97,7 @@ test_spec!(
     "SubUnderflowZext",
     "SubUnderflowZext.sol"
 );
+test_spec!(constant_shifts, "ConstantShifts", "ConstantShifts.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {

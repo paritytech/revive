@@ -1713,7 +1713,10 @@ impl TypeInference {
     ///   stays full width; when both operands are narrow and non-negative the
     ///   result is `<= dividend`.
     /// - `Shr` by a known constant shifts in zero high bits, bounding the result
-    ///   to `256 - shift` bits; a non-constant shift falls back to `rhs` width.
+    ///   to the operand's own width minus the shift amount; a non-constant shift
+    ///   falls back to `rhs` width.
+    /// - `Shl` by a known constant occupies at most the operand's width plus the
+    ///   shift amount, capped at the 256-bit word the result wraps in.
     /// - `Sar` sign-extends, so it is *not* bounded by `256 - shift`: a negative
     ///   value keeps its high bits set. It is bounded by the operand's own width
     ///   (`rhs`) — a non-negative operand has `rhs_width < 256`, a negative one
@@ -1759,15 +1762,20 @@ impl TypeInference {
                         lhs_width.max(rhs_width)
                     }
 
-                    BinaryOperation::Shl => BitWidth::I256,
+                    BinaryOperation::Shl => {
+                        if let Some(&shift) = self.known_constants.get(&lhs.id.0) {
+                            let occupied = u64::from(rhs_width.bits())
+                                .saturating_add(shift)
+                                .min(u64::from(BitWidth::I256.bits()));
+                            BitWidth::from_bits(occupied as u32)
+                        } else {
+                            BitWidth::I256
+                        }
+                    }
                     BinaryOperation::Shr => {
                         if let Some(&shift) = self.known_constants.get(&lhs.id.0) {
-                            if shift >= 256 {
-                                BitWidth::I1
-                            } else {
-                                let remaining = 256u64.saturating_sub(shift);
-                                BitWidth::from_bits(remaining.max(1) as u32)
-                            }
+                            let remaining = u64::from(rhs_width.bits()).saturating_sub(shift);
+                            BitWidth::from_bits(remaining.max(1) as u32)
                         } else {
                             rhs_width
                         }
@@ -2395,5 +2403,93 @@ mod tests {
 
         assert_eq!(inference.inferred_width(inner_output), BitWidth::I64);
         assert_eq!(inference.inferred_width(outer_output), BitWidth::I1);
+    }
+
+    /// A `shr` by a constant is bounded by the shifted operand, not just by the 256-bit word.
+    /// `shr(6, x: i32)` yields 26 bits, which lets codegen emit a narrow shift instead of a wide
+    /// one. `shl` is bounded symmetrically by the operand width plus the shift amount. Shifting
+    /// past the operand width and past the word are covered too, and a `u64::MAX` shift pins the
+    /// saturating arithmetic that plain `+`/`-` would overflow.
+    #[test]
+    fn constant_shift_amounts_bound_the_result_by_the_operand_width() {
+        let mut inference = TypeInference::new();
+        let shift = ValueId(0);
+        let operand = ValueId(1);
+        let past_operand_shift = ValueId(2);
+        let past_word_shift = ValueId(3);
+        let huge_shift = ValueId(4);
+
+        inference.known_constants.insert(shift.0, 6);
+        inference.known_constants.insert(past_operand_shift.0, 40);
+        inference.known_constants.insert(past_word_shift.0, 300);
+        inference.known_constants.insert(huge_shift.0, u64::MAX);
+        inference.widen(operand, BitWidth::I32);
+
+        let shift_right = Expression::Binary {
+            operation: BinaryOperation::Shr,
+            lhs: Value::int(shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(
+            inference.infer_expression_width(&shift_right),
+            BitWidth::I32
+        );
+
+        let shift_left = Expression::Binary {
+            operation: BinaryOperation::Shl,
+            lhs: Value::int(shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(inference.infer_expression_width(&shift_left), BitWidth::I64);
+
+        let shift_right_past_operand = Expression::Binary {
+            operation: BinaryOperation::Shr,
+            lhs: Value::int(past_operand_shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(
+            inference.infer_expression_width(&shift_right_past_operand),
+            BitWidth::I1
+        );
+
+        let shift_left_past_word = Expression::Binary {
+            operation: BinaryOperation::Shl,
+            lhs: Value::int(past_word_shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(
+            inference.infer_expression_width(&shift_left_past_word),
+            BitWidth::I256
+        );
+
+        let shift_right_past_word = Expression::Binary {
+            operation: BinaryOperation::Shr,
+            lhs: Value::int(past_word_shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(
+            inference.infer_expression_width(&shift_right_past_word),
+            BitWidth::I1
+        );
+
+        let shift_left_huge = Expression::Binary {
+            operation: BinaryOperation::Shl,
+            lhs: Value::int(huge_shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(
+            inference.infer_expression_width(&shift_left_huge),
+            BitWidth::I256
+        );
+
+        let shift_right_huge = Expression::Binary {
+            operation: BinaryOperation::Shr,
+            lhs: Value::int(huge_shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(
+            inference.infer_expression_width(&shift_right_huge),
+            BitWidth::I1
+        );
     }
 }

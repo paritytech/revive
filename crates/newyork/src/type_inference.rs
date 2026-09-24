@@ -2147,6 +2147,20 @@ mod tests {
         }
     }
 
+    /// Wraps `statement` in an `if` on `condition`, the way loop control appears inside a body.
+    fn guarded(condition: ValueId, statement: Statement) -> Statement {
+        Statement::If {
+            condition: Value::int(condition),
+            inputs: Vec::new(),
+            then_region: Region {
+                statements: vec![statement],
+                yields: Vec::new(),
+            },
+            else_region: None,
+            outputs: Vec::new(),
+        }
+    }
+
     /// Runs inference over an object whose top-level code is `statements`.
     fn infer_statements(statements: Vec<Statement>) -> TypeInference {
         let mut object = Object::new("Test".to_string());
@@ -2303,17 +2317,6 @@ mod tests {
         let post_input = ValueId(4);
         let output = ValueId(5);
 
-        let guarded = |statement: Statement| Statement::If {
-            condition: Value::int(narrow),
-            inputs: Vec::new(),
-            then_region: Region {
-                statements: vec![statement],
-                yields: Vec::new(),
-            },
-            else_region: None,
-            outputs: Vec::new(),
-        };
-
         let inference = infer_statements(vec![
             literal(narrow, BigUint::from(1u8)),
             literal(continue_value, BigUint::from(u32::MAX)),
@@ -2325,12 +2328,18 @@ mod tests {
                 condition: Expression::Var(narrow),
                 body: Region {
                     statements: vec![
-                        guarded(Statement::Continue {
-                            values: vec![Value::int(continue_value)],
-                        }),
-                        guarded(Statement::Break {
-                            values: vec![Value::int(break_value)],
-                        }),
+                        guarded(
+                            narrow,
+                            Statement::Continue {
+                                values: vec![Value::int(continue_value)],
+                            },
+                        ),
+                        guarded(
+                            narrow,
+                            Statement::Break {
+                                values: vec![Value::int(break_value)],
+                            },
+                        ),
                     ],
                     yields: vec![Value::int(narrow)],
                 },
@@ -2403,6 +2412,75 @@ mod tests {
 
         assert_eq!(inference.inferred_width(inner_output), BitWidth::I64);
         assert_eq!(inference.inferred_width(outer_output), BitWidth::I1);
+    }
+
+    /// Loop control may carry fewer values than the loop has variables. Codegen then forwards the
+    /// loop variable itself for the missing positions, so the join must read the loop variable's
+    /// width there. The body yields a masked copy of the second variable, so without the fallback
+    /// the post input would come out as narrow as the mask although a `continue` hands it the
+    /// unmasked loop variable.
+    #[test]
+    fn short_loop_control_forwards_the_loop_variable_for_missing_positions() {
+        let narrow = ValueId(0);
+        let unmasked_initial = ValueId(1);
+        let carried = ValueId(2);
+        let mask = ValueId(3);
+        let first_variable = ValueId(4);
+        let second_variable = ValueId(5);
+        let masked = ValueId(6);
+        let first_post_input = ValueId(7);
+        let second_post_input = ValueId(8);
+        let first_output = ValueId(9);
+        let second_output = ValueId(10);
+
+        let inference = infer_statements(vec![
+            literal(narrow, BigUint::from(1u8)),
+            literal(unmasked_initial, BigUint::from(u32::MAX)),
+            literal(carried, BigUint::from(u64::MAX)),
+            literal(mask, BigUint::from(u8::MAX)),
+            Statement::For {
+                initial_values: vec![Value::int(narrow), Value::int(unmasked_initial)],
+                loop_variables: vec![first_variable, second_variable],
+                condition_statements: Vec::new(),
+                condition: Expression::Var(narrow),
+                body: Region {
+                    statements: vec![
+                        Statement::Let {
+                            bindings: vec![masked],
+                            value: Expression::Binary {
+                                operation: BinaryOperation::And,
+                                lhs: Value::int(second_variable),
+                                rhs: Value::int(mask),
+                            },
+                        },
+                        guarded(
+                            narrow,
+                            Statement::Continue {
+                                values: vec![Value::int(carried)],
+                            },
+                        ),
+                        guarded(
+                            narrow,
+                            Statement::Break {
+                                values: vec![Value::int(carried)],
+                            },
+                        ),
+                    ],
+                    yields: vec![Value::int(first_variable), Value::int(masked)],
+                },
+                post_input_variables: vec![first_post_input, second_post_input],
+                post: Region {
+                    statements: Vec::new(),
+                    yields: vec![Value::int(first_post_input), Value::int(second_post_input)],
+                },
+                outputs: vec![first_output, second_output],
+            },
+        ]);
+
+        assert_eq!(inference.inferred_width(first_post_input), BitWidth::I64);
+        assert_eq!(inference.inferred_width(second_post_input), BitWidth::I32);
+        assert_eq!(inference.inferred_width(first_output), BitWidth::I64);
+        assert_eq!(inference.inferred_width(second_output), BitWidth::I32);
     }
 
     /// A `shr` by a constant is bounded by the shifted operand, not just by the 256-bit word.

@@ -5018,6 +5018,81 @@ fn calldatacopy_dynamic_dest_fmp_corruption() {
     run_differential(actions);
 }
 
+/// A word written by later loop iterations must not be read native.
+#[test]
+fn loop_carried_offset_is_dynamic() {
+    let mut actions = instantiate_yul("contracts/LoopOffsetNative.yul", "LoopOffsetNative");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: (1u8..=32).collect(),
+    });
+    run_differential(actions);
+}
+
+/// An unresolvable store inside a branch must drop the forwarded free memory pointer.
+#[test]
+fn fmp_dynamic_store_in_branch_invalidates() {
+    let mut actions = instantiate_yul("contracts/FmpDynStoreBranchBug.yul", "FmpDynStoreBranchBug");
+    let mut corrupting = U256::from(1).to_be_bytes::<32>().to_vec();
+    corrupting.extend_from_slice(&U256::from(0x40).to_be_bytes::<32>());
+    for data in [vec![0u8; 32], corrupting] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+    }
+    run_differential(actions);
+}
+
+/// Reproducer from paritytech/bugbounty_reports#215.
+#[test]
+fn fmp_loop_mstore8() {
+    let mut actions = instantiate("contracts/FmpLoopMstore8.sol", "FmpLoopMstore8");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"probe()")[..4].to_vec(),
+    });
+    run_differential(actions);
+}
+
+/// Stores and copies that reach the free memory pointer word must not leave a stale or truncated pointer.
+#[test]
+fn fmp_word_reached_by_loop_or_branch_store() {
+    for name in [
+        "LoopStoreFmpWord",
+        "LoopStoreFmpOverlap",
+        "LoopStoreFmpDescending",
+        "LoopCopyLengthFmp",
+        "ScratchStoreBranchFmp",
+    ] {
+        let mut actions = instantiate_yul(&format!("contracts/{name}.yul"), name);
+        let mut data = vec![0xff; 32];
+        data.extend([0x11; 32]);
+        data.extend([0xff; 32]);
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+        run_differential(actions);
+    }
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so

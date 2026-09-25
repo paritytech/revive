@@ -5033,6 +5033,32 @@ fn fmp_loop_mstore8() {
     run_differential(actions);
 }
 
+/// Stores and copies that reach the free memory pointer word must not leave a stale or truncated pointer.
+#[test]
+fn fmp_word_reached_by_loop_or_branch_store() {
+    for name in [
+        "LoopStoreFmpWord",
+        "LoopStoreFmpOverlap",
+        "LoopStoreFmpDescending",
+        "LoopCopyLengthFmp",
+        "ScratchStoreBranchFmp",
+    ] {
+        let mut actions = instantiate_yul(&format!("contracts/{name}.yul"), name);
+        let mut data = vec![0xff; 32];
+        data.extend([0x11; 32]);
+        data.extend([0xff; 32]);
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+        run_differential(actions);
+    }
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so

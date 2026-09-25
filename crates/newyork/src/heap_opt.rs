@@ -180,6 +180,9 @@ pub struct OffsetInfo {
     /// When false, the LLVM IR value may not be a constant even though the
     /// newyork analysis can resolve it statically.
     pub from_literal: bool,
+    /// Smallest value the offset takes on any loop iteration, for offsets built from literals
+    /// and literal-seeded loop counters, ignoring 256-bit wrap-around.
+    pub lower_bound: Option<u64>,
 }
 
 impl Default for OffsetInfo {
@@ -188,6 +191,7 @@ impl Default for OffsetInfo {
             static_value: None,
             alignment: 1,
             from_literal: false,
+            lower_bound: None,
         }
     }
 }
@@ -339,6 +343,9 @@ impl HeapAnalysis {
                 if is_fmp_store && !self.is_trusted_fmp_source(value.id.0) {
                     self.fmp_could_be_unbounded = true;
                 }
+                if static_offset.is_none() && self.loop_offset_may_reach_fmp_word(offset) {
+                    self.fmp_could_be_unbounded = true;
+                }
             }
 
             Statement::MStore8 { offset, .. } => {
@@ -404,8 +411,48 @@ impl HeapAnalysis {
 
             Statement::If { .. } | Statement::Switch { .. } | Statement::Block(_) => {}
 
-            // Loop-carried values stay unknown offsets.
-            Statement::For { condition, .. } => {
+            Statement::For {
+                initial_values,
+                loop_variables,
+                condition,
+                body,
+                post_input_variables,
+                post,
+                outputs,
+                ..
+            } => {
+                for (index, initial_value) in initial_values.iter().enumerate() {
+                    let Some(seed) = self
+                        .offset_values
+                        .get(&initial_value.id.0)
+                        .and_then(|info| info.lower_bound)
+                    else {
+                        continue;
+                    };
+                    let counter = loop_variables[index];
+                    let ascending = loop_counter_ascends(
+                        index,
+                        counter,
+                        body,
+                        post_input_variables[index],
+                        post,
+                    );
+                    let counter_bound = if ascending { seed } else { 0 };
+                    let exit_bound = if loop_exits_keep_counter(index, counter, body) {
+                        counter_bound
+                    } else {
+                        0
+                    };
+                    for (value, bound) in [(counter, counter_bound), (outputs[index], exit_bound)] {
+                        self.offset_values.insert(
+                            value.0,
+                            OffsetInfo {
+                                lower_bound: Some(bound),
+                                ..OffsetInfo::default()
+                            },
+                        );
+                    }
+                }
                 self.analyze_expression_side_effects(condition);
             }
 
@@ -604,12 +651,18 @@ impl HeapAnalysis {
         let destination_start = self.extract_static_offset(destination);
         let len = self.extract_static_offset(length);
 
+        let loop_length = self.loop_varying(length);
         let covers_fmp = match (destination_start, len) {
             (Some(address), Some(size)) => {
                 size > 0 && address < 0x60 && address.saturating_add(size) > 0x40
             }
-            (Some(address), None) => (0x40..0x60).contains(&address),
-            (None, _) => !self.is_free_pointer_relative(destination.id.0),
+            (Some(address), None) => {
+                (0x40..0x60).contains(&address) || (loop_length && address < 0x60)
+            }
+            (None, _) => {
+                !self.is_free_pointer_relative(destination.id.0)
+                    && !self.loop_offset_at_or_above_fmp_word_end(destination)
+            }
         };
         if covers_fmp {
             self.fmp_could_be_unbounded = true;
@@ -623,9 +676,34 @@ impl HeapAnalysis {
             }
             (Some(address), None) => {
                 self.tainted_regions.insert(word_align(address));
+                if loop_length {
+                    self.has_dynamic_accesses = true;
+                }
             }
             (None, _) => self.has_dynamic_accesses = true,
         }
+    }
+
+    /// Whether `value` is computed from a literal-seeded loop counter, so it varies per iteration.
+    fn loop_varying(&self, value: &Value) -> bool {
+        self.offset_values
+            .get(&value.id.0)
+            .is_some_and(|info| info.static_value.is_none() && info.lower_bound.is_some())
+    }
+
+    /// Whether a word store through a loop-varying `offset` could overlap the FMP word.
+    fn loop_offset_may_reach_fmp_word(&self, offset: &Value) -> bool {
+        self.loop_varying(offset) && !self.loop_offset_at_or_above_fmp_word_end(offset)
+    }
+
+    /// Whether a loop-varying `offset` never drops below the end of the FMP word.
+    fn loop_offset_at_or_above_fmp_word_end(&self, offset: &Value) -> bool {
+        self.loop_varying(offset)
+            && self
+                .offset_values
+                .get(&offset.id.0)
+                .and_then(|info| info.lower_bound)
+                .is_some_and(|bound| bound >= 0x60)
     }
 
     /// Whether a dynamic memory destination is a free-memory-pointer-relative address, and so
@@ -1064,6 +1142,7 @@ impl HeapAnalysis {
                     static_value: Some(static_value),
                     alignment: compute_alignment(static_value),
                     from_literal: true,
+                    lower_bound: Some(static_value),
                 })
             }
 
@@ -1096,10 +1175,21 @@ impl HeapAnalysis {
                             _ => None,
                         };
 
+                        let lower_bound = match (
+                            lhs_info.and_then(|info| info.lower_bound),
+                            rhs_info.and_then(|info| info.lower_bound),
+                        ) {
+                            (Some(lhs_bound), Some(rhs_bound)) => {
+                                Some(lhs_bound.saturating_add(rhs_bound))
+                            }
+                            _ => None,
+                        };
+
                         Some(OffsetInfo {
                             static_value,
                             alignment: result_align,
                             from_literal: false,
+                            lower_bound,
                         })
                     }
 
@@ -1123,10 +1213,21 @@ impl HeapAnalysis {
                             _ => 1,
                         };
 
+                        let lower_bound = match (
+                            lhs_info.and_then(|info| info.lower_bound),
+                            rhs_info.and_then(|info| info.lower_bound),
+                        ) {
+                            (Some(lhs_bound), Some(rhs_bound)) => {
+                                Some(lhs_bound.saturating_mul(rhs_bound))
+                            }
+                            _ => None,
+                        };
+
                         Some(OffsetInfo {
                             static_value,
                             alignment: mult_align,
                             from_literal: false,
+                            lower_bound,
                         })
                     }
 
@@ -1137,6 +1238,7 @@ impl HeapAnalysis {
                                 static_value: None,
                                 alignment: align.max(1),
                                 from_literal: false,
+                                lower_bound: None,
                             })
                         } else {
                             None
@@ -1151,6 +1253,7 @@ impl HeapAnalysis {
                                     static_value: None,
                                     alignment: base_align.saturating_mul(1 << shift),
                                     from_literal: false,
+                                    lower_bound: None,
                                 })
                             } else {
                                 None
@@ -1561,6 +1664,66 @@ impl HeapOptResults {
     pub fn has_any_native(&self) -> bool {
         !self.native_safe_regions.is_empty()
     }
+}
+
+/// Whether loop counter `index` only grows: the body and every `continue` hand it to `post`
+/// unchanged, and `post` yields it plus some addend.
+fn loop_counter_ascends(
+    index: usize,
+    counter: crate::ir::ValueId,
+    body: &crate::ir::Region,
+    post_input: crate::ir::ValueId,
+    post: &crate::ir::Region,
+) -> bool {
+    if body.yields.get(index).map(|value| value.id) != Some(counter) {
+        return false;
+    }
+    let mut continues_keep_counter = true;
+    for_each_statement(&body.statements, &mut |statement| {
+        if let Statement::Continue { values } = statement {
+            if values.get(index).map(|value| value.id) != Some(counter) {
+                continues_keep_counter = false;
+            }
+        }
+    });
+    if !continues_keep_counter {
+        return false;
+    }
+    let Some(next) = post.yields.get(index).map(|value| value.id) else {
+        return false;
+    };
+    if next == post_input {
+        return true;
+    }
+    post.statements.iter().any(|statement| match statement {
+        Statement::Let {
+            bindings,
+            value:
+                Expression::Binary {
+                    operation: crate::ir::BinaryOperation::Add,
+                    lhs,
+                    rhs,
+                },
+        } => bindings.as_slice() == [next] && (lhs.id == post_input || rhs.id == post_input),
+        _ => false,
+    })
+}
+
+/// Whether every `break` of the loop leaves counter `index` unchanged.
+fn loop_exits_keep_counter(
+    index: usize,
+    counter: crate::ir::ValueId,
+    body: &crate::ir::Region,
+) -> bool {
+    let mut breaks_keep_counter = true;
+    for_each_statement(&body.statements, &mut |statement| {
+        if let Statement::Break { values } = statement {
+            if values.get(index).map(|value| value.id) != Some(counter) {
+                breaks_keep_counter = false;
+            }
+        }
+    });
+    breaks_keep_counter
 }
 
 /// Computes the alignment of a value (highest power of 2 that divides it).
@@ -2049,6 +2212,98 @@ mod tests {
             !results.can_use_native(0xa0),
             "a word the loop writes byte-swapped must not be read native"
         );
+    }
+
+    /// Builds `for { let p := seed } 1 { p := step(p, 0x20) } { mstore(p, 0x1234) }` with ids 0 to 6.
+    fn counter_store_loop(seed: u64, step: crate::ir::BinaryOperation) -> Vec<Statement> {
+        use crate::ir::{Region, Type, ValueId};
+        vec![
+            literal_binding(0, seed),
+            literal_binding(2, 0x1234),
+            literal_binding(3, 0x20),
+            Statement::For {
+                initial_values: vec![Value::int(ValueId(0))],
+                loop_variables: vec![ValueId(1)],
+                condition_statements: vec![],
+                condition: Expression::Literal {
+                    value: BigUint::from(1u64),
+                    value_type: Type::default(),
+                },
+                body: Region {
+                    statements: vec![Statement::MStore {
+                        offset: Value::int(ValueId(1)),
+                        value: Value::int(ValueId(2)),
+                        region: MemoryRegion::Unknown,
+                    }],
+                    yields: vec![Value::int(ValueId(1))],
+                },
+                post_input_variables: vec![ValueId(4)],
+                post: Region {
+                    statements: vec![Statement::Let {
+                        bindings: vec![ValueId(5)],
+                        value: Expression::Binary {
+                            operation: step,
+                            lhs: Value::int(ValueId(4)),
+                            rhs: Value::int(ValueId(3)),
+                        },
+                    }],
+                    yields: vec![Value::int(ValueId(5))],
+                },
+                outputs: vec![ValueId(6)],
+            },
+        ]
+    }
+
+    #[test]
+    fn ascending_counter_store_from_fmp_word_is_unbounded() {
+        use crate::ir::BinaryOperation;
+        let statements = counter_store_loop(0x40, BinaryOperation::Add);
+        let results = object_with_code(statements, vec![]).analyze_heap();
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn ascending_counter_store_overlapping_fmp_word_is_unbounded() {
+        use crate::ir::BinaryOperation;
+        let statements = counter_store_loop(0x30, BinaryOperation::Add);
+        let results = object_with_code(statements, vec![]).analyze_heap();
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn descending_counter_store_is_unbounded() {
+        use crate::ir::BinaryOperation;
+        let statements = counter_store_loop(0x80, BinaryOperation::Sub);
+        let results = object_with_code(statements, vec![]).analyze_heap();
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn ascending_counter_store_above_fmp_word_stays_bounded() {
+        use crate::ir::BinaryOperation;
+        let statements = counter_store_loop(0x80, BinaryOperation::Add);
+        let results = object_with_code(statements, vec![]).analyze_heap();
+        assert!(!results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn counter_length_copy_below_fmp_word_is_unbounded() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = counter_store_loop(0x40, BinaryOperation::Add);
+        let Statement::For { body, .. } = &mut statements[3] else {
+            unreachable!()
+        };
+        body.statements = vec![
+            literal_binding(7, 0),
+            Statement::CallDataCopy {
+                destination: Value::int(ValueId(7)),
+                offset: Value::int(ValueId(7)),
+                length: Value::int(ValueId(1)),
+            },
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap();
+        assert!(results.fmp_could_be_unbounded());
+        assert!(results.has_dynamic_accesses);
     }
 
     #[test]

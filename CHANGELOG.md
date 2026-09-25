@@ -8,8 +8,15 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 
 - Support for solc v0.8.37. The new `slotnum()` Yul builtin (EIP-7843) is rejected with an unsupported instruction error, as `pallet-revive` has no notion of a beacon chain slot number.
 
+### Changed
+
+- `--newyork`: Loop-carried variables are typed as the join of the widths flowing into them instead of being forced to `I256`, and constant shifts are bounded by the operand width and emitted at 64 bits when the result fits, so masked 32-bit loop variables such as those of a SHA-256 round loop stay narrow through the loop. [#615](https://github.com/paritytech/revive/pull/615)
+
 ### Fixed
 - `--newyork`: A bug in dead call value analysis. [#589](https://github.com/paritytech/revive/pull/589)
+- `--newyork`: a literal free memory pointer at or above the heap size, such as `mstore(0x40, not(0))`, was trusted, and the surviving `mload(0x40)` was truncated by the `FMP < heap_size` range proof. [611](https://github.com/paritytech/revive/pull/611)
+- `--newyork`: Object code that fell off the end was not terminated with the implicit EVM return, so LLVM folded away the runtime dispatch and a call would have run the constructor. [#598](https://github.com/paritytech/revive/pull/598)
+- Yul objects carrying deploy code only, without a `_deployed` runtime sub-object, failed to compile with an LLVM IR verification error. [#597](https://github.com/paritytech/revive/pull/597)
 - `--newyork`: a memory offset carried by a loop counter resolved to its first iteration address on every iteration, leaving words written by later iterations eligible for native byte order, and a stale free memory pointer survived an unresolvable `mstore8`, or an unresolvable `mstore` inside a branch, loop, or called function. [#612](https://github.com/paritytech/revive/pull/612)
 
 ## v1.4.0

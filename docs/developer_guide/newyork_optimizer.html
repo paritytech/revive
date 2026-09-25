@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-1c1482c5.js";
+            window.path_to_searchindex_js = "../searchindex-42581ec6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f74aae8e.js"></script>
@@ -249,6 +249,7 @@ Yul AST ──────────► │                  newyork IR       
 <li><strong>Forward</strong>: computes minimum width from literal values and operation semantics (e.g., <code>add(I64, I8)</code> produces <code>I65</code>, rounded up to <code>I128</code>).</li>
 <li><strong>Backward use tracking</strong>: classifies each value’s uses into 9 context categories (<code>MemoryOffset</code>, <code>MemoryValue</code>, <code>StorageAccess</code>, <code>Comparison</code>, <code>Arithmetic</code>, <code>FunctionArg</code>, <code>FunctionReturn</code>, <code>ExternalCall</code>, <code>General</code>). All categories conservatively demand the full <code>I256</code> width by default; the categorization is what enables the interprocedural phase to selectively relax the demand for narrowed function arguments. Earlier versions narrowed directly from the use category, but that was unsound for memory offsets — <code>mload(2^128)</code> aliased to <code>mload(0)</code> because the bounds check ran on an already-truncated value (commit <code>ccca38df</code>).</li>
 <li><strong>Transparent demand propagation</strong>: for modular-arithmetic operations (<code>Add</code>, <code>Sub</code>, <code>Mul</code>, <code>And</code>, <code>Or</code>, <code>Xor</code>), propagates narrow demands backward through operands, exploiting the property that <code>trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N))</code>.</li>
+<li><strong>Loop-carried join</strong>: a <code>for</code> loop joins the forward widths of every control edge reaching its phis — initializers and post yields for the loop variables, body yields and <code>continue</code> values for the post-region inputs, loop variables and <code>break</code> values for the outputs. Codegen builds the matching phi at that width, so a hash round written with <code>uint32</code> locals keeps its working variables 32-bit through the loop instead of being forced to <code>I256</code>.</li>
 <li><strong>Interprocedural</strong>: iteratively narrows function parameter and return types in up to four rounds, combining four narrowing strategies — body-driven parameter narrowing, caller-driven parameter narrowing, forward-based return narrowing, and demand-based return narrowing — and re-running full inference between rounds. Parameters are clamped to at least <code>I32</code> (XLEN on PolkaVM).</li>
 </ul>
 <p>This allows LLVM to emit native 32/64-bit instructions instead of software-emulated 256-bit arithmetic, and eliminates expensive multi-instruction comparison sequences (16-20 RISC-V instructions for i256 comparisons reduced to 1-2 for i64).</p>
@@ -442,7 +443,7 @@ can observe it.</p>
 <li><strong>Adaptive inlining thresholds</strong>: Current thresholds are static constants. Profile-guided or contract-size-aware heuristics could improve decisions for diverse contract sizes.</li>
 <li><strong>Extended fuzzy deduplication</strong>: The current pass only parameterizes literals in <code>Let</code> bindings and <code>SStore</code> slots. Extending it to consider literals inside <code>MStore</code>, <code>Return</code>, <code>Revert</code>, and <code>Log</code> statements would find more deduplication opportunities.</li>
 <li><strong>Type checking in validation</strong>: The validator checks SSA well-formedness and structure, but not operation type consistency. Type discipline is maintained by construction (type inference and codegen), with LLVM’s IR verifier as the backstop.</li>
-<li><strong>Loop variable narrowing</strong>: Loop-carried variables are conservatively widened to <code>I256</code>. Reaching a fixed-point across loop iterations could allow narrower types for simple counters.</li>
+<li><strong>Loop counter range narrowing</strong>: Loop-carried variables take the join of every control edge reaching them, so masked working variables narrow, but a self-incrementing counter still saturates at <code>I256</code> because <code>add</code> widens by one level per round. Narrowing a bounded counter needs a range argument that the width lattice cannot express.</li>
 <li><strong>Functions with <code>leave</code> inside a <code>for</code> loop are not inlined</strong>: the IR-level inliner defers such functions to LLVM’s inliner, so they miss the interprocedural constant propagation and width narrowing the IR-level pass provides.</li>
 </ul>
 <h2 id="debug-output"><a class="header" href="#debug-output">Debug output</a></h2>
@@ -520,6 +521,22 @@ can observe it.</p>
         <template id=fa-play><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 384 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M73 39c-14.8-9.1-33.4-9.4-48.5-.9S0 62.6 0 80V432c0 17.4 9.4 33.4 24.5 41.9s33.7 8.1 48.5-.9L361 297c14.3-8.7 23-24.2 23-41s-8.7-32.2-23-41L73 39z"/></svg></span></template>
         <template id=fa-clock-rotate-left><span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M75 75L41 41C25.9 25.9 0 36.6 0 57.9V168c0 13.3 10.7 24 24 24H134.1c21.4 0 32.1-25.9 17-41l-30.8-30.8C155 85.5 203 64 256 64c106 0 192 86 192 192s-86 192-192 192c-40.8 0-78.6-12.7-109.7-34.4c-14.5-10.1-34.4-6.6-44.6 7.9s-6.6 34.4 7.9 44.6C151.2 495 201.7 512 256 512c141.4 0 256-114.6 256-256S397.4 0 256 0C185.3 0 121.3 28.7 75 75zm181 53c-13.3 0-24 10.7-24 24V256c0 6.4 2.5 12.5 7 17l72 72c9.4 9.4 24.6 9.4 33.9 0s9.4-24.6 0-33.9l-65-65V152c0-13.3-10.7-24-24-24z"/></svg></span></template>
 
+        <!-- Livereload script (if served using the cli tool) -->
+        <script>
+            const wsProtocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsAddress = wsProtocol + "//" + location.host + "/" + "__livereload";
+            const socket = new WebSocket(wsAddress);
+            socket.onmessage = function (event) {
+                if (event.data === "reload") {
+                    socket.close();
+                    location.reload();
+                }
+            };
+
+            window.onbeforeunload = function() {
+                socket.close();
+            }
+        </script>
 
 
         <script>

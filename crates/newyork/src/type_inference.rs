@@ -1400,23 +1400,48 @@ impl TypeInference {
         }
     }
 
-    /// Widens each output from the corresponding input for a branch with a missing edge —
-    /// an `if` without `else` or a `switch` without `default`.
-    ///
-    /// On that edge codegen routes `inputs` straight through to `outputs` unchanged (the IR
-    /// `If`/`Switch` "defaults to yielding inputs unchanged" contract; see `to_llvm`'s phi
-    /// construction). An output therefore carries an input value that may be wider than every
-    /// region yield (e.g. the `leave`-elimination wrapper's pre-`leave` accumulator). Widening
-    /// only from region yields under-estimates the forward width, and codegen then bare-truncates
-    /// the live value where the output feeds a memory offset or comparison.
-    fn widen_outputs_from_fallthrough_inputs(&mut self, inputs: &[Value], outputs: &[ValueId]) {
-        for (input_value, output) in inputs.iter().zip(outputs.iter()) {
-            let input_constraint = self.get(input_value.id);
-            self.widen(*output, input_constraint.min_width);
+    /// Widens each target to the forward width of the value id at the same position.
+    fn widen_from_value_ids(
+        &mut self,
+        targets: &[ValueId],
+        value_ids: impl IntoIterator<Item = ValueId>,
+    ) {
+        for (target, value_id) in targets.iter().zip(value_ids) {
+            let value_constraint = self.get(value_id);
+            self.widen(*target, value_constraint.min_width);
         }
     }
 
+    /// Widens each target to the forward width of the value at the same position.
+    fn widen_from_values(&mut self, targets: &[ValueId], values: &[Value]) {
+        self.widen_from_value_ids(targets, values.iter().map(|value| value.id));
+    }
+
+    /// Widens each target to the forward width of the value a `break` or `continue` hands to it.
+    ///
+    /// Loop control may carry fewer values than the loop has variables. For the missing positions
+    /// codegen's `Break`/`Continue` arms forward the loop variable's own phi value, so those
+    /// positions join the loop variable's width.
+    fn widen_from_loop_control_values(
+        &mut self,
+        targets: &[ValueId],
+        values: &[Value],
+        loop_variables: &[ValueId],
+    ) {
+        let carried = values.iter().map(|value| value.id);
+        let forwarded = loop_variables.iter().copied().skip(values.len());
+        self.widen_from_value_ids(targets, carried.chain(forwarded));
+    }
+
     /// Forward pass: infers types for a statement.
+    ///
+    /// A `For` joins each loop-carried variable from every control edge that reaches it, the same
+    /// edges codegen wires into the matching phi: initializers and post yields for the loop
+    /// variables, body yields and `continue` values for the post inputs, loop variables and `break`
+    /// values for the outputs. Because every incoming value is joined, a variable's width holds on
+    /// loop entry and is preserved by each iteration. [`Self::infer_object`] repeats the pass until
+    /// no width changes. Widths only grow over a finite lattice, so this terminates, and a
+    /// self-incrementing counter simply saturates at I256.
     fn infer_statement_forward(&mut self, statement: &Statement) {
         match statement {
             Statement::Let { bindings, value } => {
@@ -1473,14 +1498,17 @@ impl TypeInference {
                 }
 
                 for region in std::iter::once(then_region).chain(else_region.as_ref()) {
-                    for (yield_value, output) in region.yields.iter().zip(outputs.iter()) {
-                        let yield_constraint = self.get(yield_value.id);
-                        self.widen(*output, yield_constraint.min_width);
-                    }
+                    self.widen_from_values(outputs, &region.yields);
                 }
 
+                // Without an `else`, codegen routes `inputs` straight through to `outputs` (the
+                // IR "defaults to yielding inputs unchanged" contract; see `to_llvm`'s phi
+                // construction), so an output can carry an input wider than every region yield,
+                // e.g. the `leave`-elimination wrapper's pre-`leave` accumulator. Widening only from
+                // region yields under-estimates the forward width, and codegen then bare-truncates
+                // the live value where the output feeds a memory offset or comparison.
                 if else_region.is_none() {
-                    self.widen_outputs_from_fallthrough_inputs(inputs, outputs);
+                    self.widen_from_values(outputs, inputs);
                 }
             }
 
@@ -1494,23 +1522,19 @@ impl TypeInference {
                 self.widen(scrutinee.id, BitWidth::I64);
                 for case in cases {
                     self.infer_region_forward(&case.body);
-                    for (yield_value, output) in case.body.yields.iter().zip(outputs.iter()) {
-                        let yield_constraint = self.get(yield_value.id);
-                        self.widen(*output, yield_constraint.min_width);
-                    }
+                    self.widen_from_values(outputs, &case.body.yields);
                 }
                 if let Some(default) = default {
                     self.infer_region_forward(default);
-                    for (yield_value, output) in default.yields.iter().zip(outputs.iter()) {
-                        let yield_constraint = self.get(yield_value.id);
-                        self.widen(*output, yield_constraint.min_width);
-                    }
+                    self.widen_from_values(outputs, &default.yields);
                 } else {
-                    self.widen_outputs_from_fallthrough_inputs(inputs, outputs);
+                    // A missing `default` is the same fall-through edge as an `if` without `else`.
+                    self.widen_from_values(outputs, inputs);
                 }
             }
 
             Statement::For {
+                initial_values,
                 loop_variables,
                 condition,
                 condition_statements,
@@ -1518,17 +1542,16 @@ impl TypeInference {
                 post,
                 post_input_variables,
                 outputs,
-                ..
             } => {
-                for loop_variable in loop_variables {
-                    self.widen(*loop_variable, BitWidth::I256);
-                }
-                for post_variable in post_input_variables {
-                    self.widen(*post_variable, BitWidth::I256);
-                }
-                for output in outputs {
-                    self.widen(*output, BitWidth::I256);
-                }
+                let mut break_values = Vec::new();
+                let mut continue_values = Vec::new();
+                collect_loop_control_values(
+                    &body.statements,
+                    &mut break_values,
+                    &mut continue_values,
+                );
+
+                self.widen_from_values(loop_variables, initial_values);
 
                 for statement in condition_statements {
                     self.infer_statement_forward(statement);
@@ -1537,7 +1560,24 @@ impl TypeInference {
                 let _ = condition_width;
 
                 self.infer_region_forward(body);
+
+                self.widen_from_values(post_input_variables, &body.yields);
+                for values in &continue_values {
+                    self.widen_from_loop_control_values(
+                        post_input_variables,
+                        values,
+                        loop_variables,
+                    );
+                }
+
                 self.infer_region_forward(post);
+
+                self.widen_from_values(loop_variables, &post.yields);
+
+                self.widen_from_value_ids(outputs, loop_variables.iter().copied());
+                for values in &break_values {
+                    self.widen_from_loop_control_values(outputs, values, loop_variables);
+                }
             }
 
             Statement::Revert { offset, length } | Statement::Return { offset, length } => {
@@ -1673,7 +1713,10 @@ impl TypeInference {
     ///   stays full width; when both operands are narrow and non-negative the
     ///   result is `<= dividend`.
     /// - `Shr` by a known constant shifts in zero high bits, bounding the result
-    ///   to `256 - shift` bits; a non-constant shift falls back to `rhs` width.
+    ///   to the operand's own width minus the shift amount; a non-constant shift
+    ///   falls back to `rhs` width.
+    /// - `Shl` by a known constant occupies at most the operand's width plus the
+    ///   shift amount, capped at the 256-bit word the result wraps in.
     /// - `Sar` sign-extends, so it is *not* bounded by `256 - shift`: a negative
     ///   value keeps its high bits set. It is bounded by the operand's own width
     ///   (`rhs`) — a non-negative operand has `rhs_width < 256`, a negative one
@@ -1719,15 +1762,20 @@ impl TypeInference {
                         lhs_width.max(rhs_width)
                     }
 
-                    BinaryOperation::Shl => BitWidth::I256,
+                    BinaryOperation::Shl => {
+                        if let Some(&shift) = self.known_constants.get(&lhs.id.0) {
+                            let occupied = u64::from(rhs_width.bits())
+                                .saturating_add(shift)
+                                .min(u64::from(BitWidth::I256.bits()));
+                            BitWidth::from_bits(occupied as u32)
+                        } else {
+                            BitWidth::I256
+                        }
+                    }
                     BinaryOperation::Shr => {
                         if let Some(&shift) = self.known_constants.get(&lhs.id.0) {
-                            if shift >= 256 {
-                                BitWidth::I1
-                            } else {
-                                let remaining = 256u64.saturating_sub(shift);
-                                BitWidth::from_bits(remaining.max(1) as u32)
-                            }
+                            let remaining = u64::from(rhs_width.bits()).saturating_sub(shift);
+                            BitWidth::from_bits(remaining.max(1) as u32)
                         } else {
                             rhs_width
                         }
@@ -1884,6 +1932,55 @@ impl Default for TypeInference {
     }
 }
 
+/// Collects the values carried by every `break` and `continue` that binds to the loop whose body
+/// is `statements`, into `breaks` and `continues` respectively.
+///
+/// Loop control inside a nested loop's body belongs to that loop and is skipped. Loop control
+/// in a nested loop's condition or post region belongs to the outer loop, because the Yul
+/// translator and codegen keep a loop's frame on their stacks only while handling its body.
+fn collect_loop_control_values<'a>(
+    statements: &'a [Statement],
+    breaks: &mut Vec<&'a [Value]>,
+    continues: &mut Vec<&'a [Value]>,
+) {
+    for statement in statements {
+        match statement {
+            Statement::Break { values } => breaks.push(values),
+            Statement::Continue { values } => continues.push(values),
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                collect_loop_control_values(&then_region.statements, breaks, continues);
+                if let Some(else_region) = else_region {
+                    collect_loop_control_values(&else_region.statements, breaks, continues);
+                }
+            }
+            Statement::Switch { cases, default, .. } => {
+                for case in cases {
+                    collect_loop_control_values(&case.body.statements, breaks, continues);
+                }
+                if let Some(default) = default {
+                    collect_loop_control_values(&default.statements, breaks, continues);
+                }
+            }
+            Statement::For {
+                condition_statements,
+                post,
+                ..
+            } => {
+                collect_loop_control_values(condition_statements, breaks, continues);
+                collect_loop_control_values(&post.statements, breaks, continues);
+            }
+            Statement::Block(region) => {
+                collect_loop_control_values(&region.statements, breaks, continues)
+            }
+            _ => {}
+        }
+    }
+}
+
 /// Widens a bit width by one level (e.g., I8 -> I32).
 pub fn widen_by_one(width: BitWidth) -> BitWidth {
     match width {
@@ -2037,5 +2134,440 @@ mod tests {
         inference.apply_backward_constraints();
 
         assert_eq!(inference.get(key).max_width, BitWidth::I256);
+    }
+
+    /// Builds a `Statement::Let` binding `id` to the literal `value`.
+    fn literal(id: ValueId, value: BigUint) -> Statement {
+        Statement::Let {
+            bindings: vec![id],
+            value: Expression::Literal {
+                value,
+                value_type: Type::default(),
+            },
+        }
+    }
+
+    /// Wraps `statement` in an `if` on `condition`, the way loop control appears inside a body.
+    fn guarded(condition: ValueId, statement: Statement) -> Statement {
+        Statement::If {
+            condition: Value::int(condition),
+            inputs: Vec::new(),
+            then_region: Region {
+                statements: vec![statement],
+                yields: Vec::new(),
+            },
+            else_region: None,
+            outputs: Vec::new(),
+        }
+    }
+
+    /// Runs inference over an object whose top-level code is `statements`.
+    fn infer_statements(statements: Vec<Statement>) -> TypeInference {
+        let mut object = Object::new("Test".to_string());
+        object.code.statements = statements;
+        let mut inference = TypeInference::new();
+        inference.infer_object(&object);
+        inference
+    }
+
+    /// The masked working variables of a hash function's round loop (`h := and(..., 0xffffffff)`)
+    /// are a case the loop-carried join exists for. Every edge reaching them is 32 bits wide, so
+    /// forcing the phi to I256 would emit 256-bit logic and shifts for what is 32-bit arithmetic.
+    #[test]
+    fn masked_loop_variable_narrows_to_the_join_of_its_edges() {
+        let initial_word = ValueId(0);
+        let mask = ValueId(1);
+        let loop_variable = ValueId(2);
+        let post_input = ValueId(3);
+        let masked_word = ValueId(4);
+        let output = ValueId(5);
+
+        let inference = infer_statements(vec![
+            literal(initial_word, BigUint::from(0x6a09e667u32)),
+            literal(mask, BigUint::from(u32::MAX)),
+            Statement::For {
+                initial_values: vec![Value::int(initial_word)],
+                loop_variables: vec![loop_variable],
+                condition_statements: Vec::new(),
+                condition: Expression::Var(mask),
+                body: Region {
+                    statements: vec![Statement::Let {
+                        bindings: vec![masked_word],
+                        value: Expression::Binary {
+                            operation: BinaryOperation::And,
+                            lhs: Value::int(loop_variable),
+                            rhs: Value::int(mask),
+                        },
+                    }],
+                    yields: vec![Value::int(masked_word)],
+                },
+                post_input_variables: vec![post_input],
+                post: Region {
+                    statements: Vec::new(),
+                    yields: vec![Value::int(post_input)],
+                },
+                outputs: vec![output],
+            },
+        ]);
+
+        assert_eq!(inference.inferred_width(loop_variable), BitWidth::I32);
+        assert_eq!(inference.inferred_width(post_input), BitWidth::I32);
+        assert_eq!(inference.inferred_width(output), BitWidth::I32);
+    }
+
+    /// A modular-arithmetic accumulator is genuinely 256 bits wide. `mulmod` is bounded only by its
+    /// modulus, so the join must keep the phi full width. Narrowing it would truncate field elements.
+    #[test]
+    fn modular_accumulator_loop_variable_keeps_full_width() {
+        let initial_accumulator = ValueId(0);
+        let modulus = ValueId(1);
+        let loop_variable = ValueId(2);
+        let post_input = ValueId(3);
+        let squared = ValueId(4);
+        let output = ValueId(5);
+
+        let inference = infer_statements(vec![
+            literal(initial_accumulator, BigUint::from(2u8)),
+            literal(modulus, (BigUint::from(1u8) << 255) - BigUint::from(19u8)),
+            Statement::For {
+                initial_values: vec![Value::int(initial_accumulator)],
+                loop_variables: vec![loop_variable],
+                condition_statements: Vec::new(),
+                condition: Expression::Var(modulus),
+                body: Region {
+                    statements: vec![Statement::Let {
+                        bindings: vec![squared],
+                        value: Expression::Ternary {
+                            operation: BinaryOperation::MulMod,
+                            a: Value::int(loop_variable),
+                            b: Value::int(loop_variable),
+                            n: Value::int(modulus),
+                        },
+                    }],
+                    yields: vec![Value::int(squared)],
+                },
+                post_input_variables: vec![post_input],
+                post: Region {
+                    statements: Vec::new(),
+                    yields: vec![Value::int(post_input)],
+                },
+                outputs: vec![output],
+            },
+        ]);
+
+        assert_eq!(inference.inferred_width(loop_variable), BitWidth::I256);
+        assert_eq!(inference.inferred_width(post_input), BitWidth::I256);
+        assert_eq!(inference.inferred_width(output), BitWidth::I256);
+    }
+
+    /// An unmasked `i := add(i, 1)` counter has no width bound. `Add` widens by one level per
+    /// round, so the join climbs the lattice until it saturates at I256. Narrowing such a counter
+    /// needs a range argument the width lattice cannot currently express.
+    #[test]
+    fn self_incremented_counter_saturates_at_full_width() {
+        let initial_counter = ValueId(0);
+        let stride = ValueId(1);
+        let loop_variable = ValueId(2);
+        let post_input = ValueId(3);
+        let incremented = ValueId(4);
+        let output = ValueId(5);
+
+        let inference = infer_statements(vec![
+            literal(initial_counter, BigUint::from(0u8)),
+            literal(stride, BigUint::from(1u8)),
+            Statement::For {
+                initial_values: vec![Value::int(initial_counter)],
+                loop_variables: vec![loop_variable],
+                condition_statements: Vec::new(),
+                condition: Expression::Var(stride),
+                body: Region {
+                    statements: Vec::new(),
+                    yields: vec![Value::int(loop_variable)],
+                },
+                post_input_variables: vec![post_input],
+                post: Region {
+                    statements: vec![Statement::Let {
+                        bindings: vec![incremented],
+                        value: Expression::Binary {
+                            operation: BinaryOperation::Add,
+                            lhs: Value::int(post_input),
+                            rhs: Value::int(stride),
+                        },
+                    }],
+                    yields: vec![Value::int(incremented)],
+                },
+                outputs: vec![output],
+            },
+        ]);
+
+        assert_eq!(inference.inferred_width(loop_variable), BitWidth::I256);
+        assert_eq!(inference.inferred_width(output), BitWidth::I256);
+    }
+
+    /// `break` and `continue` are control edges into the loop's phis just like the yields.
+    /// Codegen routes a `continue` value into the post-region input and a `break` value into the
+    /// loop output. Each must be joined into its own target and nothing else, so the three widths
+    /// here are deliberately distinct.
+    #[test]
+    fn break_and_continue_values_join_their_own_loop_targets() {
+        let narrow = ValueId(0);
+        let continue_value = ValueId(1);
+        let break_value = ValueId(2);
+        let loop_variable = ValueId(3);
+        let post_input = ValueId(4);
+        let output = ValueId(5);
+
+        let inference = infer_statements(vec![
+            literal(narrow, BigUint::from(1u8)),
+            literal(continue_value, BigUint::from(u32::MAX)),
+            literal(break_value, BigUint::from(u64::MAX)),
+            Statement::For {
+                initial_values: vec![Value::int(narrow)],
+                loop_variables: vec![loop_variable],
+                condition_statements: Vec::new(),
+                condition: Expression::Var(narrow),
+                body: Region {
+                    statements: vec![
+                        guarded(
+                            narrow,
+                            Statement::Continue {
+                                values: vec![Value::int(continue_value)],
+                            },
+                        ),
+                        guarded(
+                            narrow,
+                            Statement::Break {
+                                values: vec![Value::int(break_value)],
+                            },
+                        ),
+                    ],
+                    yields: vec![Value::int(narrow)],
+                },
+                post_input_variables: vec![post_input],
+                post: Region {
+                    statements: Vec::new(),
+                    yields: vec![Value::int(narrow)],
+                },
+                outputs: vec![output],
+            },
+        ]);
+
+        assert_eq!(inference.inferred_width(loop_variable), BitWidth::I1);
+        assert_eq!(inference.inferred_width(post_input), BitWidth::I32);
+        assert_eq!(inference.inferred_width(output), BitWidth::I64);
+    }
+
+    /// Loop control binds to the innermost enclosing loop body, so an inner `break` must not
+    /// widen the outer loop's output, otherwise every nested loop would poison its parent.
+    #[test]
+    fn inner_loop_break_does_not_widen_the_outer_loop() {
+        let narrow = ValueId(0);
+        let wide = ValueId(1);
+        let outer_variable = ValueId(2);
+        let outer_post_input = ValueId(3);
+        let outer_output = ValueId(4);
+        let inner_variable = ValueId(5);
+        let inner_post_input = ValueId(6);
+        let inner_output = ValueId(7);
+
+        let inner_loop = Statement::For {
+            initial_values: vec![Value::int(narrow)],
+            loop_variables: vec![inner_variable],
+            condition_statements: Vec::new(),
+            condition: Expression::Var(narrow),
+            body: Region {
+                statements: vec![Statement::Break {
+                    values: vec![Value::int(wide)],
+                }],
+                yields: vec![Value::int(narrow)],
+            },
+            post_input_variables: vec![inner_post_input],
+            post: Region {
+                statements: Vec::new(),
+                yields: vec![Value::int(narrow)],
+            },
+            outputs: vec![inner_output],
+        };
+
+        let inference = infer_statements(vec![
+            literal(narrow, BigUint::from(1u8)),
+            literal(wide, BigUint::from(u64::MAX)),
+            Statement::For {
+                initial_values: vec![Value::int(narrow)],
+                loop_variables: vec![outer_variable],
+                condition_statements: Vec::new(),
+                condition: Expression::Var(narrow),
+                body: Region {
+                    statements: vec![inner_loop],
+                    yields: vec![Value::int(narrow)],
+                },
+                post_input_variables: vec![outer_post_input],
+                post: Region {
+                    statements: Vec::new(),
+                    yields: vec![Value::int(narrow)],
+                },
+                outputs: vec![outer_output],
+            },
+        ]);
+
+        assert_eq!(inference.inferred_width(inner_output), BitWidth::I64);
+        assert_eq!(inference.inferred_width(outer_output), BitWidth::I1);
+    }
+
+    /// Loop control may carry fewer values than the loop has variables. Codegen then forwards the
+    /// loop variable itself for the missing positions, so the join must read the loop variable's
+    /// width there. The body yields a masked copy of the second variable, so without the fallback
+    /// the post input would come out as narrow as the mask although a `continue` hands it the
+    /// unmasked loop variable.
+    #[test]
+    fn short_loop_control_forwards_the_loop_variable_for_missing_positions() {
+        let narrow = ValueId(0);
+        let unmasked_initial = ValueId(1);
+        let carried = ValueId(2);
+        let mask = ValueId(3);
+        let first_variable = ValueId(4);
+        let second_variable = ValueId(5);
+        let masked = ValueId(6);
+        let first_post_input = ValueId(7);
+        let second_post_input = ValueId(8);
+        let first_output = ValueId(9);
+        let second_output = ValueId(10);
+
+        let inference = infer_statements(vec![
+            literal(narrow, BigUint::from(1u8)),
+            literal(unmasked_initial, BigUint::from(u32::MAX)),
+            literal(carried, BigUint::from(u64::MAX)),
+            literal(mask, BigUint::from(u8::MAX)),
+            Statement::For {
+                initial_values: vec![Value::int(narrow), Value::int(unmasked_initial)],
+                loop_variables: vec![first_variable, second_variable],
+                condition_statements: Vec::new(),
+                condition: Expression::Var(narrow),
+                body: Region {
+                    statements: vec![
+                        Statement::Let {
+                            bindings: vec![masked],
+                            value: Expression::Binary {
+                                operation: BinaryOperation::And,
+                                lhs: Value::int(second_variable),
+                                rhs: Value::int(mask),
+                            },
+                        },
+                        guarded(
+                            narrow,
+                            Statement::Continue {
+                                values: vec![Value::int(carried)],
+                            },
+                        ),
+                        guarded(
+                            narrow,
+                            Statement::Break {
+                                values: vec![Value::int(carried)],
+                            },
+                        ),
+                    ],
+                    yields: vec![Value::int(first_variable), Value::int(masked)],
+                },
+                post_input_variables: vec![first_post_input, second_post_input],
+                post: Region {
+                    statements: Vec::new(),
+                    yields: vec![Value::int(first_post_input), Value::int(second_post_input)],
+                },
+                outputs: vec![first_output, second_output],
+            },
+        ]);
+
+        assert_eq!(inference.inferred_width(first_post_input), BitWidth::I64);
+        assert_eq!(inference.inferred_width(second_post_input), BitWidth::I32);
+        assert_eq!(inference.inferred_width(first_output), BitWidth::I64);
+        assert_eq!(inference.inferred_width(second_output), BitWidth::I32);
+    }
+
+    /// A `shr` by a constant is bounded by the shifted operand, not just by the 256-bit word.
+    /// `shr(6, x: i32)` yields 26 bits, which lets codegen emit a narrow shift instead of a wide
+    /// one. `shl` is bounded symmetrically by the operand width plus the shift amount. Shifting
+    /// past the operand width and past the word are covered too, and a `u64::MAX` shift pins the
+    /// saturating arithmetic that plain `+`/`-` would overflow.
+    #[test]
+    fn constant_shift_amounts_bound_the_result_by_the_operand_width() {
+        let mut inference = TypeInference::new();
+        let shift = ValueId(0);
+        let operand = ValueId(1);
+        let past_operand_shift = ValueId(2);
+        let past_word_shift = ValueId(3);
+        let huge_shift = ValueId(4);
+
+        inference.known_constants.insert(shift.0, 6);
+        inference.known_constants.insert(past_operand_shift.0, 40);
+        inference.known_constants.insert(past_word_shift.0, 300);
+        inference.known_constants.insert(huge_shift.0, u64::MAX);
+        inference.widen(operand, BitWidth::I32);
+
+        let shift_right = Expression::Binary {
+            operation: BinaryOperation::Shr,
+            lhs: Value::int(shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(
+            inference.infer_expression_width(&shift_right),
+            BitWidth::I32
+        );
+
+        let shift_left = Expression::Binary {
+            operation: BinaryOperation::Shl,
+            lhs: Value::int(shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(inference.infer_expression_width(&shift_left), BitWidth::I64);
+
+        let shift_right_past_operand = Expression::Binary {
+            operation: BinaryOperation::Shr,
+            lhs: Value::int(past_operand_shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(
+            inference.infer_expression_width(&shift_right_past_operand),
+            BitWidth::I1
+        );
+
+        let shift_left_past_word = Expression::Binary {
+            operation: BinaryOperation::Shl,
+            lhs: Value::int(past_word_shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(
+            inference.infer_expression_width(&shift_left_past_word),
+            BitWidth::I256
+        );
+
+        let shift_right_past_word = Expression::Binary {
+            operation: BinaryOperation::Shr,
+            lhs: Value::int(past_word_shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(
+            inference.infer_expression_width(&shift_right_past_word),
+            BitWidth::I1
+        );
+
+        let shift_left_huge = Expression::Binary {
+            operation: BinaryOperation::Shl,
+            lhs: Value::int(huge_shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(
+            inference.infer_expression_width(&shift_left_huge),
+            BitWidth::I256
+        );
+
+        let shift_right_huge = Expression::Binary {
+            operation: BinaryOperation::Shr,
+            lhs: Value::int(huge_shift),
+            rhs: Value::int(operand),
+        };
+        assert_eq!(
+            inference.infer_expression_width(&shift_right_huge),
+            BitWidth::I1
+        );
     }
 }

@@ -35,6 +35,7 @@ test_spec!(erc20, "ERC20", "ERC20.sol");
 test_spec!(computation, "Computation", "Computation.sol");
 test_spec!(msize, "MSize", "MSize.sol");
 test_spec!(sha1, "SHA1", "SHA1.sol");
+test_spec!(sha256, "Sha256", "Sha256.sol");
 test_spec!(block, "Block", "Block.sol");
 test_spec!(mcopy, "MCopy", "MCopy.sol");
 test_spec!(mcopy_overlap, "MCopyOverlap", "MCopyOverlap.sol");
@@ -96,6 +97,7 @@ test_spec!(
     "SubUnderflowZext",
     "SubUnderflowZext.sol"
 );
+test_spec!(constant_shifts, "ConstantShifts", "ConstantShifts.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
@@ -4233,6 +4235,38 @@ fn fmp_big_value_load() {
         });
         run_differential(actions);
     }
+}
+
+/// A literal free memory pointer at or above the heap size was trusted and range proved.
+#[test]
+fn fmp_big_literal_store() {
+    for op in 0u64..=3 {
+        let mut actions = instantiate_yul("contracts/FmpBigLiteral.yul", "FmpBigLiteral");
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: U256::from(op).to_be_bytes::<32>().to_vec(),
+        });
+        run_differential(actions);
+    }
+}
+
+/// Reproducer from paritytech/bugbounty_reports#214.
+#[test]
+fn fmp_literal_not_zero() {
+    let mut actions = instantiate("contracts/FmpLiteralNotZero.sol", "FmpLiteralNotZero");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"probe()")[..4].to_vec(),
+    });
+    run_differential(actions);
 }
 
 /// Generative differential fuzzer over memory ops with DYNAMIC (computed, non-constant)

@@ -4128,12 +4128,14 @@ mod tests {
         let block = &mut Block { statements };
         simplifier.simplify_block(block);
 
-        if let Statement::Return { offset, .. } = &block.statements[block.statements.len() - 1] {
-            assert!(
-                offset.id.0 == 1
-                    || matches!(block.statements.last(), Some(Statement::Return { .. }))
-            );
-        }
+        let Some(Statement::Return { offset, length }) = block.statements.last() else {
+            panic!("the block must still end in a return");
+        };
+        assert_eq!(
+            (offset.id, length.id),
+            (ValueId(1), ValueId(1)),
+            "uses of the copy `v2 := v1` must be rewritten to its source"
+        );
     }
 
     #[test]

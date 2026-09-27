@@ -17,6 +17,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 - `--newyork`: a literal free memory pointer at or above the heap size, such as `mstore(0x40, not(0))`, was trusted, and the surviving `mload(0x40)` was truncated by the `FMP < heap_size` range proof. [611](https://github.com/paritytech/revive/pull/611)
 - `--newyork`: Object code that fell off the end was not terminated with the implicit EVM return, so LLVM folded away the runtime dispatch and a call would have run the constructor. [#598](https://github.com/paritytech/revive/pull/598)
 - Yul objects carrying deploy code only, without a `_deployed` runtime sub-object, failed to compile with an LLVM IR verification error. [#597](https://github.com/paritytech/revive/pull/597)
+- `--newyork`: The memory optimization passes evaluated `shl` and `shr` of compile-time constants with swapped operands, and did not reduce `add` and `mul` of compile-time constants modulo 2^256. In rare cases, mostly hand-written inline assembly, a memory load could then return the wrong word, a live store could be removed, or a free memory pointer moved down could make comparisons fold wrongly or crash the compiler. [#618](https://github.com/paritytech/revive/pull/618)
 
 ## v1.4.0
 

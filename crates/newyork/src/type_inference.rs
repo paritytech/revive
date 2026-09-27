@@ -1938,7 +1938,7 @@ impl Default for TypeInference {
 /// Loop control inside a nested loop's body belongs to that loop and is skipped. Loop control
 /// in a nested loop's condition or post region belongs to the outer loop, because the Yul
 /// translator and codegen keep a loop's frame on their stacks only while handling its body.
-fn collect_loop_control_values<'a>(
+pub(crate) fn collect_loop_control_values<'a>(
     statements: &'a [Statement],
     breaks: &mut Vec<&'a [Value]>,
     continues: &mut Vec<&'a [Value]>,

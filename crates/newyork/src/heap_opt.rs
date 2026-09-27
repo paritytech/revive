@@ -135,8 +135,10 @@ pub struct HeapAnalysis {
     /// semantics. Conservatively starts false; set by inspecting every
     /// `MStore` whose target is the FMP slot.
     ///
-    /// **Known gap (deliberate).** A dynamic-offset full-word `MStore` does not set this flag,
-    /// even though its offset could wrap (mod 2^256) to the FMP word `[0x40, 0x5f]` and overwrite
+    /// **Known gap (deliberate).** A dynamic-offset full-word `MStore` sets this flag when its
+    /// offset is computed from literals and literal-seeded loop counters and can drop below `0x60`
+    /// ([`OffsetInfo::iteration_range`]). Any other dynamic offset does not set it, even though it
+    /// could land on the FMP word `[0x40, 0x5f]` directly or by wrapping (mod 2^256) and overwrite
     /// the pointer with an arbitrary value. There is no cheap sound discriminator: the wrapped
     /// offset is in-bounds (`safe_truncate` only traps offsets `>= heap_size`), and 256-bit wrap
     /// lets any computed offset reach `0x40`, so it cannot be proven to miss the slot from
@@ -176,17 +178,18 @@ pub struct HeapAnalysis {
 /// Information about a value used as a memory offset.
 #[derive(Clone, Debug)]
 pub struct OffsetInfo {
-    /// Known static value, if any.
+    /// The value itself, when the analysis knows it is the same constant on every evaluation.
     pub static_value: Option<u64>,
     /// Known alignment (in bytes). 32 means word-aligned.
     pub alignment: u32,
-    /// Whether this value originates from a literal expression (not a variable).
-    /// When false, the LLVM IR value may not be a constant even though the
-    /// newyork analysis can resolve it statically.
+    /// Whether the IR value is itself a literal expression rather than a variable, which decides
+    /// whether the LLVM IR value is a constant. When false, the LLVM IR value may not be a
+    /// constant even though `static_value` resolves it.
     pub from_literal: bool,
-    /// Smallest value the offset takes on any loop iteration, for offsets built from literals
-    /// and literal-seeded loop counters, ignoring 256-bit wrap-around.
-    pub lower_bound: Option<u64>,
+    /// The range of values it takes over all its evaluations, including every loop iteration, when
+    /// it is computed only from literals and literal-seeded loop counters, whether or not it has a
+    /// `static_value`. `None` when it has any other source, such as `mload(0x40)`, a parameter or a call.
+    pub iteration_range: Option<IterationRange>,
 }
 
 impl Default for OffsetInfo {
@@ -195,7 +198,119 @@ impl Default for OffsetInfo {
             static_value: None,
             alignment: 1,
             from_literal: false,
-            lower_bound: None,
+            iteration_range: None,
+        }
+    }
+}
+
+/// The range of values that an offset computed only from literals and literal-seeded loop counters
+/// takes over all its evaluations ([`OffsetInfo::iteration_range`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IterationRange {
+    /// Never below `minimum` and always below `2^bit_ceiling`, where `bit_ceiling` is at most
+    /// [`revive_common::BIT_LENGTH_WORD`]: the exact result of every operation that computed the
+    /// value fits the word, so none wrapped around 2^256 and `minimum` holds.
+    AtLeast {
+        /// A lower bound of the value on every evaluation.
+        minimum: u64,
+        /// An upper bound of the value's bit length on every evaluation.
+        bit_ceiling: u32,
+    },
+    /// No provable minimum: the value may descend or wrap around 2^256, or went through an
+    /// operation other than `add`, `mul` and `shl` by a static shift.
+    Unknown,
+}
+
+impl IterationRange {
+    /// The range of a value that is always `value`.
+    fn exactly(value: u64) -> Self {
+        Self::AtLeast {
+            minimum: value,
+            bit_ceiling: u64::BITS - value.leading_zeros(),
+        }
+    }
+
+    /// `AtLeast`, unless `bit_ceiling` exceeds the word: the value may then have wrapped around
+    /// 2^256, and `minimum` no longer holds.
+    fn at_least(minimum: u64, bit_ceiling: u32) -> Self {
+        if bit_ceiling as usize <= revive_common::BIT_LENGTH_WORD {
+            Self::AtLeast {
+                minimum,
+                bit_ceiling,
+            }
+        } else {
+            Self::Unknown
+        }
+    }
+
+    /// The range of `add(lhs, rhs)` for `lhs` in `self` and `rhs` in `other`.
+    fn plus(self, other: Self) -> Self {
+        match (self, other) {
+            (
+                Self::AtLeast {
+                    minimum: lhs_minimum,
+                    bit_ceiling: lhs_ceiling,
+                },
+                Self::AtLeast {
+                    minimum: rhs_minimum,
+                    bit_ceiling: rhs_ceiling,
+                },
+            ) => Self::at_least(
+                lhs_minimum.saturating_add(rhs_minimum),
+                lhs_ceiling.max(rhs_ceiling) + 1,
+            ),
+            _ => Self::Unknown,
+        }
+    }
+
+    /// The range of `mul(lhs, rhs)` for `lhs` in `self` and `rhs` in `other`.
+    fn times(self, other: Self) -> Self {
+        match (self, other) {
+            (
+                Self::AtLeast {
+                    minimum: lhs_minimum,
+                    bit_ceiling: lhs_ceiling,
+                },
+                Self::AtLeast {
+                    minimum: rhs_minimum,
+                    bit_ceiling: rhs_ceiling,
+                },
+            ) => Self::at_least(
+                lhs_minimum.saturating_mul(rhs_minimum),
+                lhs_ceiling + rhs_ceiling,
+            ),
+            _ => Self::Unknown,
+        }
+    }
+
+    /// The range of `shl(shift, value)` for `value` in `self`.
+    fn shifted_left(self, shift: u64) -> Self {
+        match (self, u32::try_from(shift)) {
+            (
+                Self::AtLeast {
+                    minimum,
+                    bit_ceiling,
+                },
+                Ok(shift),
+            ) => Self::at_least(
+                minimum.saturating_mul(2u64.saturating_pow(shift)),
+                bit_ceiling.saturating_add(shift),
+            ),
+            _ => Self::Unknown,
+        }
+    }
+
+    /// The range of a loop counter seeded in `self` that only steps up by static steps.
+    ///
+    /// A loop runs fewer than 2^64 steps (gas keeps it far below that), each below 2^64 because
+    /// a static step is a `u64`, so the counter exceeds its seed by less than 2^(2 * 64).
+    fn stepped_up(self) -> Self {
+        match self {
+            Self::AtLeast {
+                minimum,
+                bit_ceiling,
+            } => Self::at_least(minimum, bit_ceiling.max(2 * u64::BITS) + 1),
+            Self::Unknown => Self::Unknown,
         }
     }
 }
@@ -426,38 +541,14 @@ impl HeapAnalysis {
                 outputs,
                 ..
             } => {
-                for (index, initial_value) in initial_values.iter().enumerate() {
-                    let Some(seed) = self
-                        .offset_values
-                        .get(&initial_value.id.0)
-                        .and_then(|info| info.lower_bound)
-                    else {
-                        continue;
-                    };
-                    let counter = loop_variables[index];
-                    let ascending = loop_counter_ascends(
-                        index,
-                        counter,
-                        body,
-                        post_input_variables[index],
-                        post,
-                    );
-                    let counter_bound = if ascending { seed } else { 0 };
-                    let exit_bound = if loop_exits_keep_counter(index, counter, body) {
-                        counter_bound
-                    } else {
-                        0
-                    };
-                    for (value, bound) in [(counter, counter_bound), (outputs[index], exit_bound)] {
-                        self.offset_values.insert(
-                            value.0,
-                            OffsetInfo {
-                                lower_bound: Some(bound),
-                                ..OffsetInfo::default()
-                            },
-                        );
-                    }
-                }
+                self.record_loop_variable_ranges(
+                    initial_values,
+                    loop_variables,
+                    body,
+                    post_input_variables,
+                    post,
+                    outputs,
+                );
                 self.analyze_expression_side_effects(condition);
             }
 
@@ -514,6 +605,75 @@ impl HeapAnalysis {
             | Statement::ErrorStringRevert { .. }
             | Statement::CustomErrorRevert { .. }
             | Statement::SetImmutable { .. } => {}
+        }
+    }
+
+    /// Records the iteration ranges of a loop's variables whose seeds are computed from literals
+    /// and literal-seeded loop counters, and of their `post` inputs and loop outputs. A variable
+    /// gets its seed's range stepped up when the body's yield, every `continue` and `post` hand it
+    /// on unchanged or plus a static step, and `Unknown` otherwise; its output keeps that range
+    /// only when every `break` hands it on the same way, since a stepped-up value is one more such step.
+    fn record_loop_variable_ranges(
+        &mut self,
+        initial_values: &[Value],
+        loop_variables: &[crate::ir::ValueId],
+        body: &crate::ir::Region,
+        post_input_variables: &[crate::ir::ValueId],
+        post: &crate::ir::Region,
+        outputs: &[crate::ir::ValueId],
+    ) {
+        let mut definitions = BTreeMap::new();
+        collect_loop_definitions(&body.statements, &mut definitions);
+        collect_loop_definitions(&post.statements, &mut definitions);
+        let mut breaks = Vec::new();
+        let mut continues = Vec::new();
+        crate::type_inference::collect_loop_control_values(
+            &body.statements,
+            &mut breaks,
+            &mut continues,
+        );
+        for (index, initial_value) in initial_values.iter().enumerate() {
+            let Some(seed) = self
+                .offset_values
+                .get(&initial_value.id.0)
+                .and_then(|info| info.iteration_range)
+            else {
+                continue;
+            };
+            let counter = loop_variables[index];
+            let post_input = post_input_variables[index];
+            let steps_up = |handed: Option<&Value>, base| self.steps_up(handed, base, &definitions);
+            let ascends = steps_up(body.yields.get(index), counter)
+                && continues
+                    .iter()
+                    .all(|values| steps_up(values.get(index), counter))
+                && steps_up(post.yields.get(index), post_input);
+            let counter_range = if ascends {
+                seed.stepped_up()
+            } else {
+                IterationRange::Unknown
+            };
+            let output_range = if breaks
+                .iter()
+                .all(|values| steps_up(values.get(index), counter))
+            {
+                counter_range
+            } else {
+                IterationRange::Unknown
+            };
+            for (value, range) in [
+                (counter, counter_range),
+                (post_input, counter_range),
+                (outputs[index], output_range),
+            ] {
+                self.offset_values.insert(
+                    value.0,
+                    OffsetInfo {
+                        iteration_range: Some(range),
+                        ..OffsetInfo::default()
+                    },
+                );
+            }
         }
     }
 
@@ -628,11 +788,10 @@ impl HeapAnalysis {
     ///
     /// When the length is statically known, every word the copy covers is tainted
     /// — not just the start word — so a multi-word copy can't leave a later word a
-    /// native candidate. When the length is dynamic we taint only the start word
-    /// and deliberately do NOT set `has_dynamic_accesses`: doing so would disable
-    /// native mode for the entire contract (e.g. every ABI-decode `calldatacopy`),
-    /// a large code-size regression for no soundness gain over the existing
-    /// dynamic-offset guards.
+    /// native candidate. A dynamic length taints only the start word. A loop-varying
+    /// length also sets `has_dynamic_accesses`, because later iterations copy past it;
+    /// any other dynamic length does not, which keeps native mode for every ABI-decode
+    /// `calldatacopy` but leaves a later literal word native (a known gap).
     /// Records the memory tainted by a copy (`calldatacopy`/`codecopy`/`mcopy`/…) with
     /// destination `destination` and length `length`, and flags the free-memory-pointer slot as
     /// possibly unbounded when the copy can clobber it.
@@ -646,12 +805,14 @@ impl HeapAnalysis {
     /// `fmp_could_be_unbounded`, so that flag must be set too or the proof silently
     /// truncates the clobbered value.
     ///
-    /// `covers_fmp` is kept deliberately narrow to avoid a code-size regression: only a
-    /// static destination+length that provably overlap the slot, or a static destination
-    /// *inside* the FMP word with a dynamic length (whose first byte(s) land in the slot),
-    /// flag unboundedness. A fully-dynamic destination, or a static destination *outside*
-    /// the word (proxy `calldatacopy(0, 0, size)`, OZ's FMP-relative ABI-decode copies to
-    /// `mload(0x40) >= 0x80`), is left to `has_dynamic_accesses` / the native-mode guards.
+    /// `covers_fmp` is kept deliberately narrow to avoid a code-size regression. It flags a
+    /// static destination+length that provably overlap the slot, a static destination *inside*
+    /// the FMP word with a dynamic length, a static destination below `0x60` with a loop-varying
+    /// length, a loop-varying destination unless it never drops below `0x60`, and any other
+    /// dynamic destination unless it is free-pointer-relative (OZ's ABI-decode copies to
+    /// `mload(0x40) >= 0x80`). A static destination below `0x40` with any other dynamic length
+    /// (proxy `calldatacopy(0, 0, size)`) does not set it, although a length above `0x40`
+    /// overwrites the pointer (a known gap).
     fn taint_copy_destination(&mut self, destination: &Value, length: &Value) {
         let destination_start = self.extract_static_offset(destination);
         let len = self.extract_static_offset(length);
@@ -664,10 +825,10 @@ impl HeapAnalysis {
             (Some(address), None) => {
                 (0x40..0x60).contains(&address) || (loop_length && address < 0x60)
             }
-            (None, _) => {
-                !self.is_free_pointer_relative(destination.id.0)
-                    && !self.loop_offset_at_or_above_fmp_word_end(destination)
+            (None, _) if self.loop_varying(destination) => {
+                self.loop_offset_may_reach_fmp_word(destination)
             }
+            (None, _) => !self.is_free_pointer_relative(destination.id.0),
         };
         if covers_fmp {
             self.fmp_could_be_unbounded = true;
@@ -689,14 +850,15 @@ impl HeapAnalysis {
         }
     }
 
-    /// Whether `value` is computed from a literal-seeded loop counter, so it varies per iteration.
+    /// Whether `value` is computed only from literals and literal-seeded loop counters but has no
+    /// static value, such as a loop counter or an offset computed from one.
     fn loop_varying(&self, value: &Value) -> bool {
         self.offset_values
             .get(&value.id.0)
-            .is_some_and(|info| info.static_value.is_none() && info.lower_bound.is_some())
+            .is_some_and(|info| info.static_value.is_none() && info.iteration_range.is_some())
     }
 
-    /// Whether a word store through a loop-varying `offset` could overlap the FMP word.
+    /// Whether a word store or copy through a loop-varying `offset` could overlap the FMP word.
     fn loop_offset_may_reach_fmp_word(&self, offset: &Value) -> bool {
         self.loop_varying(offset) && !self.loop_offset_at_or_above_fmp_word_end(offset)
     }
@@ -707,8 +869,43 @@ impl HeapAnalysis {
             && self
                 .offset_values
                 .get(&offset.id.0)
-                .and_then(|info| info.lower_bound)
-                .is_some_and(|bound| bound >= 0x60)
+                .and_then(|info| info.iteration_range)
+                .is_some_and(|range| match range {
+                    IterationRange::AtLeast { minimum, .. } => minimum >= 0x60,
+                    IterationRange::Unknown => false,
+                })
+    }
+
+    /// Whether `handed`, a value that a loop hands to its next iteration or to its outputs, is
+    /// `base` itself or `add(base, step)` with a static `step`, in either operand order.
+    /// `definitions` holds the loop's own bindings, which the analysis has not reached yet.
+    fn steps_up(
+        &self,
+        handed: Option<&Value>,
+        base: crate::ir::ValueId,
+        definitions: &BTreeMap<crate::ir::ValueId, &Expression>,
+    ) -> bool {
+        let Some(handed) = handed else {
+            return false;
+        };
+        if handed.id == base {
+            return true;
+        }
+        let Some(Expression::Binary {
+            operation: crate::ir::BinaryOperation::Add,
+            lhs,
+            rhs,
+        }) = definitions.get(&handed.id)
+        else {
+            return false;
+        };
+        let is_static_step = |step: &Value| match definitions.get(&step.id) {
+            Some(expression) => self
+                .analyze_expression_offset(expression)
+                .is_some_and(|info| info.static_value.is_some()),
+            None => self.extract_static_offset(step).is_some(),
+        };
+        (lhs.id == base && is_static_step(rhs)) || (rhs.id == base && is_static_step(lhs))
     }
 
     /// Whether a dynamic memory destination is a free-memory-pointer-relative address, and so
@@ -1141,13 +1338,17 @@ impl HeapAnalysis {
                 } else if digits.len() == 1 {
                     digits[0]
                 } else {
-                    return None;
+                    return Some(OffsetInfo {
+                        from_literal: true,
+                        iteration_range: Some(IterationRange::Unknown),
+                        ..OffsetInfo::default()
+                    });
                 };
                 Some(OffsetInfo {
                     static_value: Some(static_value),
                     alignment: compute_alignment(static_value),
                     from_literal: true,
-                    lower_bound: Some(static_value),
+                    iteration_range: Some(IterationRange::exactly(static_value)),
                 })
             }
 
@@ -1163,8 +1364,25 @@ impl HeapAnalysis {
             } => {
                 let lhs_info = self.offset_values.get(&lhs.id.0);
                 let rhs_info = self.offset_values.get(&rhs.id.0);
+                let iteration_range = match (
+                    lhs_info.and_then(|info| info.iteration_range),
+                    rhs_info.and_then(|info| info.iteration_range),
+                ) {
+                    (Some(lhs_range), Some(rhs_range)) => Some(match operation {
+                        crate::ir::BinaryOperation::Add => lhs_range.plus(rhs_range),
+                        crate::ir::BinaryOperation::Mul => lhs_range.times(rhs_range),
+                        crate::ir::BinaryOperation::Shl => {
+                            match lhs_info.and_then(|info| info.static_value) {
+                                Some(shift) => rhs_range.shifted_left(shift),
+                                None => IterationRange::Unknown,
+                            }
+                        }
+                        _ => IterationRange::Unknown,
+                    }),
+                    _ => None,
+                };
 
-                match operation {
+                let info = match operation {
                     crate::ir::BinaryOperation::Add => {
                         let lhs_align = lhs_info.map(|info| info.alignment).unwrap_or(1);
                         let rhs_align = rhs_info.map(|info| info.alignment).unwrap_or(1);
@@ -1180,21 +1398,11 @@ impl HeapAnalysis {
                             _ => None,
                         };
 
-                        let lower_bound = match (
-                            lhs_info.and_then(|info| info.lower_bound),
-                            rhs_info.and_then(|info| info.lower_bound),
-                        ) {
-                            (Some(lhs_bound), Some(rhs_bound)) => {
-                                Some(lhs_bound.saturating_add(rhs_bound))
-                            }
-                            _ => None,
-                        };
-
                         Some(OffsetInfo {
                             static_value,
                             alignment: result_align,
                             from_literal: false,
-                            lower_bound,
+                            iteration_range,
                         })
                     }
 
@@ -1218,21 +1426,11 @@ impl HeapAnalysis {
                             _ => 1,
                         };
 
-                        let lower_bound = match (
-                            lhs_info.and_then(|info| info.lower_bound),
-                            rhs_info.and_then(|info| info.lower_bound),
-                        ) {
-                            (Some(lhs_bound), Some(rhs_bound)) => {
-                                Some(lhs_bound.saturating_mul(rhs_bound))
-                            }
-                            _ => None,
-                        };
-
                         Some(OffsetInfo {
                             static_value,
                             alignment: mult_align,
                             from_literal: false,
-                            lower_bound,
+                            iteration_range,
                         })
                     }
 
@@ -1243,7 +1441,7 @@ impl HeapAnalysis {
                                 static_value: None,
                                 alignment: align.max(1),
                                 from_literal: false,
-                                lower_bound: None,
+                                iteration_range,
                             })
                         } else {
                             None
@@ -1251,14 +1449,14 @@ impl HeapAnalysis {
                     }
 
                     crate::ir::BinaryOperation::Shl => {
-                        if let Some(shift) = rhs_info.and_then(|info| info.static_value) {
+                        if let Some(shift) = lhs_info.and_then(|info| info.static_value) {
                             if shift < 32 {
-                                let base_align = lhs_info.map(|info| info.alignment).unwrap_or(1);
+                                let base_align = rhs_info.map(|info| info.alignment).unwrap_or(1);
                                 Some(OffsetInfo {
                                     static_value: None,
                                     alignment: base_align.saturating_mul(1 << shift),
                                     from_literal: false,
-                                    lower_bound: None,
+                                    iteration_range,
                                 })
                             } else {
                                 None
@@ -1269,8 +1467,22 @@ impl HeapAnalysis {
                     }
 
                     _ => None,
-                }
+                };
+                info.or_else(|| {
+                    iteration_range.map(|range| OffsetInfo {
+                        iteration_range: Some(range),
+                        ..OffsetInfo::default()
+                    })
+                })
             }
+
+            Expression::Unary { operand, .. } => self.operation_without_minimum(&[operand]),
+
+            Expression::Ternary { a, b, n, .. } => self.operation_without_minimum(&[a, b, n]),
+
+            Expression::Truncate { value, .. }
+            | Expression::ZeroExtend { value, .. }
+            | Expression::SignExtendTo { value, .. } => self.operation_without_minimum(&[value]),
 
             Expression::MLoad { .. } => None,
 
@@ -1278,6 +1490,23 @@ impl HeapAnalysis {
 
             _ => None,
         }
+    }
+
+    /// The offset info of a pure operation that [`Self::analyze_expression_offset`] has no
+    /// minimum rule for, such as `not`: computed from literals and literal-seeded loop counters,
+    /// without a provable minimum, when all its `operands` are, and nothing otherwise.
+    fn operation_without_minimum(&self, operands: &[&Value]) -> Option<OffsetInfo> {
+        operands
+            .iter()
+            .all(|operand| {
+                self.offset_values
+                    .get(&operand.id.0)
+                    .is_some_and(|info| info.iteration_range.is_some())
+            })
+            .then(|| OffsetInfo {
+                iteration_range: Some(IterationRange::Unknown),
+                ..OffsetInfo::default()
+            })
     }
 
     /// Analyzes expression side effects on memory.
@@ -1664,64 +1893,42 @@ impl HeapOptResults {
     }
 }
 
-/// Whether loop counter `index` only grows: the body and every `continue` hand it to `post`
-/// unchanged, and `post` yields it plus some addend.
-fn loop_counter_ascends(
-    index: usize,
-    counter: crate::ir::ValueId,
-    body: &crate::ir::Region,
-    post_input: crate::ir::ValueId,
-    post: &crate::ir::Region,
-) -> bool {
-    if body.yields.get(index).map(|value| value.id) != Some(counter) {
-        return false;
-    }
-    let mut continues_keep_counter = true;
-    for_each_statement(&body.statements, &mut |statement| {
-        if let Statement::Continue { values } = statement {
-            if values.get(index).map(|value| value.id) != Some(counter) {
-                continues_keep_counter = false;
+/// Collects the single-binding `Let` expressions of a loop's body or `post` `statements`, including
+/// those in nested `if`, `switch` and block regions, where a loop computes the values it hands on.
+/// Nested loops are skipped: their bindings are out of scope for this loop's hand-overs.
+fn collect_loop_definitions<'a>(
+    statements: &'a [Statement],
+    definitions: &mut BTreeMap<crate::ir::ValueId, &'a Expression>,
+) {
+    for statement in statements {
+        match statement {
+            Statement::Let { bindings, value } => {
+                if let [binding] = bindings.as_slice() {
+                    definitions.insert(*binding, value);
+                }
             }
-        }
-    });
-    if !continues_keep_counter {
-        return false;
-    }
-    let Some(next) = post.yields.get(index).map(|value| value.id) else {
-        return false;
-    };
-    if next == post_input {
-        return true;
-    }
-    post.statements.iter().any(|statement| match statement {
-        Statement::Let {
-            bindings,
-            value:
-                Expression::Binary {
-                    operation: crate::ir::BinaryOperation::Add,
-                    lhs,
-                    rhs,
-                },
-        } => bindings.as_slice() == [next] && (lhs.id == post_input || rhs.id == post_input),
-        _ => false,
-    })
-}
-
-/// Whether every `break` of the loop leaves counter `index` unchanged.
-fn loop_exits_keep_counter(
-    index: usize,
-    counter: crate::ir::ValueId,
-    body: &crate::ir::Region,
-) -> bool {
-    let mut breaks_keep_counter = true;
-    for_each_statement(&body.statements, &mut |statement| {
-        if let Statement::Break { values } = statement {
-            if values.get(index).map(|value| value.id) != Some(counter) {
-                breaks_keep_counter = false;
+            Statement::If {
+                then_region,
+                else_region,
+                ..
+            } => {
+                collect_loop_definitions(&then_region.statements, definitions);
+                if let Some(else_region) = else_region {
+                    collect_loop_definitions(&else_region.statements, definitions);
+                }
             }
+            Statement::Switch { cases, default, .. } => {
+                for case in cases {
+                    collect_loop_definitions(&case.body.statements, definitions);
+                }
+                if let Some(default) = default {
+                    collect_loop_definitions(&default.statements, definitions);
+                }
+            }
+            Statement::Block(region) => collect_loop_definitions(&region.statements, definitions),
+            _ => {}
         }
-    });
-    breaks_keep_counter
+    }
 }
 
 /// Computes the alignment of a value (highest power of 2 that divides it).
@@ -2250,13 +2457,18 @@ mod tests {
         );
     }
 
-    /// Builds `for { let p := seed } 1 { p := step(p, 0x20) } { mstore(p, 0x1234) }` with ids 0 to 6.
-    fn counter_store_loop(seed: u64, step: crate::ir::BinaryOperation) -> Vec<Statement> {
+    /// Builds `for { let p := seed } 1 { p := operation(p, step) } { mstore(p, 0x1234) }` with ids
+    /// 0 to 6 (the seed, `p`, `0x1234`, `step`, `post`'s input, its result and the loop output),
+    /// binding `step` inside `post` as the translator does.
+    fn counter_store_loop(
+        seed: u64,
+        operation: crate::ir::BinaryOperation,
+        step: BigUint,
+    ) -> Vec<Statement> {
         use crate::ir::{Region, Type, ValueId};
         vec![
             literal_binding(0, seed),
             literal_binding(2, 0x1234),
-            literal_binding(3, 0x20),
             Statement::For {
                 initial_values: vec![Value::int(ValueId(0))],
                 loop_variables: vec![ValueId(1)],
@@ -2266,23 +2478,21 @@ mod tests {
                     value_type: Type::default(),
                 },
                 body: Region {
-                    statements: vec![Statement::MStore {
-                        offset: Value::int(ValueId(1)),
-                        value: Value::int(ValueId(2)),
-                        region: MemoryRegion::Unknown,
-                    }],
+                    statements: vec![word_store(1)],
                     yields: vec![Value::int(ValueId(1))],
                 },
                 post_input_variables: vec![ValueId(4)],
                 post: Region {
-                    statements: vec![Statement::Let {
-                        bindings: vec![ValueId(5)],
-                        value: Expression::Binary {
-                            operation: step,
-                            lhs: Value::int(ValueId(4)),
-                            rhs: Value::int(ValueId(3)),
+                    statements: vec![
+                        Statement::Let {
+                            bindings: vec![ValueId(3)],
+                            value: Expression::Literal {
+                                value: step,
+                                value_type: Type::default(),
+                            },
                         },
-                    }],
+                        binary_binding(5, operation, 4, 3),
+                    ],
                     yields: vec![Value::int(ValueId(5))],
                 },
                 outputs: vec![ValueId(6)],
@@ -2290,43 +2500,545 @@ mod tests {
         ]
     }
 
+    /// Builds `mstore(offset, 0x1234)`, storing the value `counter_store_loop` binds to id 2.
+    fn word_store(offset: u32) -> Statement {
+        use crate::ir::ValueId;
+        Statement::MStore {
+            offset: Value::int(ValueId(offset)),
+            value: Value::int(ValueId(2)),
+            region: MemoryRegion::Unknown,
+        }
+    }
+
+    /// Builds `let id := operation(lhs, rhs)`.
+    fn binary_binding(
+        id: u32,
+        operation: crate::ir::BinaryOperation,
+        lhs: u32,
+        rhs: u32,
+    ) -> Statement {
+        use crate::ir::ValueId;
+        Statement::Let {
+            bindings: vec![ValueId(id)],
+            value: Expression::Binary {
+                operation,
+                lhs: Value::int(ValueId(lhs)),
+                rhs: Value::int(ValueId(rhs)),
+            },
+        }
+    }
+
+    /// `not(0x1f)`, since solc's optimizer rewrites `sub(p, 0x20)` into `add(p, not(0x1f))`.
+    fn not_0x1f() -> BigUint {
+        (BigUint::from(1u32) << revive_common::BIT_LENGTH_WORD) - BigUint::from(0x20u32)
+    }
+
+    /// Builds a loop nested in another loop's body whose own body is `statements`, reusing the
+    /// outer seed (id 0) and ids 20 to 22.
+    fn nested_loop(statements: Vec<Statement>) -> Statement {
+        use crate::ir::{Region, Type, ValueId};
+        Statement::For {
+            initial_values: vec![Value::int(ValueId(0))],
+            loop_variables: vec![ValueId(20)],
+            condition_statements: vec![],
+            condition: Expression::Literal {
+                value: BigUint::from(1u64),
+                value_type: Type::default(),
+            },
+            body: Region {
+                statements,
+                yields: vec![Value::int(ValueId(20))],
+            },
+            post_input_variables: vec![ValueId(21)],
+            post: Region {
+                statements: vec![],
+                yields: vec![Value::int(ValueId(21))],
+            },
+            outputs: vec![ValueId(22)],
+        }
+    }
+
+    /// A counter from `0x40` stores on the FMP word in its first iteration, so a later
+    /// `mload(0x40)` must not be truncated by the range proof.
     #[test]
     fn ascending_counter_store_from_fmp_word_is_unbounded() {
         use crate::ir::BinaryOperation;
-        let statements = counter_store_loop(0x40, BinaryOperation::Add);
+        let statements = counter_store_loop(0x40, BinaryOperation::Add, BigUint::from(0x20u32));
         let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
-        assert!(results.fmp_could_be_unbounded());
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "the first store lands on the FMP word"
+        );
     }
 
+    /// A counter from `0x5f`, the last start whose word store overlaps the FMP word, overwrites
+    /// its last byte, which pins the `0x60` threshold from below.
     #[test]
     fn ascending_counter_store_overlapping_fmp_word_is_unbounded() {
         use crate::ir::BinaryOperation;
-        let statements = counter_store_loop(0x30, BinaryOperation::Add);
+        let statements = counter_store_loop(0x5f, BinaryOperation::Add, BigUint::from(0x20u32));
         let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
-        assert!(results.fmp_could_be_unbounded());
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "a store at 0x5f overlaps the last byte of the FMP word"
+        );
     }
 
+    /// `sub(p, 0x20)` from `0x80` stores on the FMP word in its third iteration, so a counter
+    /// that is not handed on stepped up has no minimum.
     #[test]
     fn descending_counter_store_is_unbounded() {
         use crate::ir::BinaryOperation;
-        let statements = counter_store_loop(0x80, BinaryOperation::Sub);
+        let statements = counter_store_loop(0x80, BinaryOperation::Sub, BigUint::from(0x20u32));
         let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
-        assert!(results.fmp_could_be_unbounded());
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "sub(p, 0x20) from 0x80 reaches the FMP word"
+        );
     }
 
+    /// A counter from `0x60` that only steps up never reaches the FMP word, so the range proof
+    /// stays; this pins the `0x60` threshold from above.
     #[test]
     fn ascending_counter_store_above_fmp_word_stays_bounded() {
         use crate::ir::BinaryOperation;
-        let statements = counter_store_loop(0x80, BinaryOperation::Add);
+        let statements = counter_store_loop(0x60, BinaryOperation::Add, BigUint::from(0x20u32));
         let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
-        assert!(!results.fmp_could_be_unbounded());
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "stores from 0x60 upward cannot reach the FMP word"
+        );
     }
 
+    /// The translator binds a step inside `post`, but other passes can leave it bound before the
+    /// loop, where the analysis has already resolved it; the counter still only steps up.
+    #[test]
+    fn step_bound_before_loop_keeps_counter_bounded() {
+        use crate::ir::BinaryOperation;
+        let mut statements = counter_store_loop(0x60, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { post, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        let step = post.statements.remove(0);
+        statements.insert(0, step);
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "a static step bound before the loop steps the counter up"
+        );
+    }
+
+    /// solc's optimizer rewrites `sub(p, 0x20)` into `add(p, not(0x1f))`, which descends onto the
+    /// FMP word: only a static step makes an `add` step up.
+    #[test]
+    fn descending_by_addition_counter_store_is_unbounded() {
+        use crate::ir::BinaryOperation;
+        let statements = counter_store_loop(0x80, BinaryOperation::Add, not_0x1f());
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "add(p, not(0x1f)) from 0x80 reaches the FMP word"
+        );
+    }
+
+    /// The same descending counter as a copy destination overwrites the FMP word too, so its seed
+    /// `0x80` must not exempt the copy.
+    #[test]
+    fn descending_by_addition_counter_copy_is_unbounded() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = counter_store_loop(0x80, BinaryOperation::Add, not_0x1f());
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements = vec![
+            literal_binding(7, 0),
+            literal_binding(8, 0x20),
+            Statement::CallDataCopy {
+                destination: Value::int(ValueId(1)),
+                offset: Value::int(ValueId(7)),
+                length: Value::int(ValueId(8)),
+            },
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "a copy to add(p, not(0x1f)) from 0x80 covers the FMP word"
+        );
+    }
+
+    /// solc's array copy loop steps its write pointer up in the body (`mpos := add(mpos, 32)`)
+    /// and leaves `post` alone. Stepped up by `add(0x20, p)`, the other operand order, a pointer
+    /// from `0xa0` never reaches the FMP word, so the range proof stays.
+    #[test]
+    fn ascending_in_body_counter_store_above_fmp_word_stays_bounded() {
+        use crate::ir::{BinaryOperation, Region, ValueId};
+        let mut statements = counter_store_loop(0xa0, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, post, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements.extend([
+            literal_binding(7, 0x20),
+            binary_binding(8, BinaryOperation::Add, 7, 1),
+        ]);
+        body.yields = vec![Value::int(ValueId(8))];
+        *post = Region {
+            statements: vec![],
+            yields: vec![Value::int(ValueId(4))],
+        };
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "a pointer ascending by 0x20 from 0xa0 stays above the FMP word"
+        );
+    }
+
+    /// A body that hands `post` a new value (`0x20`, which `post` steps onto `0x40`) instead of
+    /// the counter breaks the ascent.
+    #[test]
+    fn body_with_other_counter_value_is_unbounded() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = counter_store_loop(0x80, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements.push(literal_binding(7, 0x20));
+        body.yields = vec![Value::int(ValueId(7))];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "the body's 0x20 steps onto the FMP word"
+        );
+    }
+
+    /// A `continue` hands `post` its values like the body's yield, so one that hands on a new
+    /// value (`0x20`) breaks the ascent too.
+    #[test]
+    fn continue_with_other_counter_value_is_unbounded() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = counter_store_loop(0x80, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements.extend([
+            literal_binding(7, 0x20),
+            Statement::Continue {
+                values: vec![Value::int(ValueId(7))],
+            },
+        ]);
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "the continue's 0x20 steps onto the FMP word"
+        );
+    }
+
+    /// `add(0x80, k)` with `k` descending from `0` wraps below `0x80` onto the FMP word, so a
+    /// counter that does not step up must carry no minimum, not `0`.
+    #[test]
+    fn literal_plus_descending_counter_store_is_unbounded() {
+        use crate::ir::BinaryOperation;
+        let mut statements = counter_store_loop(0, BinaryOperation::Sub, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements = vec![
+            literal_binding(7, 0x80),
+            binary_binding(8, BinaryOperation::Add, 7, 1),
+            word_store(8),
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "add(0x80, k) with k descending from 0 reaches the FMP word"
+        );
+    }
+
+    /// The same `add(0x80, k)` as a copy destination: `is_free_pointer_relative` accepts its
+    /// literal base, but a destination computed from a counter is decided by its range.
+    #[test]
+    fn literal_plus_descending_counter_copy_is_unbounded() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = counter_store_loop(0, BinaryOperation::Sub, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements = vec![
+            literal_binding(7, 0x80),
+            binary_binding(8, BinaryOperation::Add, 7, 1),
+            literal_binding(9, 0),
+            literal_binding(10, 0x20),
+            Statement::CallDataCopy {
+                destination: Value::int(ValueId(8)),
+                offset: Value::int(ValueId(9)),
+                length: Value::int(ValueId(10)),
+            },
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "a copy to add(0x80, k) with k descending from 0 covers the FMP word"
+        );
+    }
+
+    /// Builds `counter_store_loop` stepping by 1 whose body stores at `add(base, shl(5, p))`, or
+    /// at `shl(5, p)` without a base: newyork's rewrite of `mul(p, 0x20)`, with the shift in `lhs`.
+    fn shifted_counter_store_loop(seed: u64, base: Option<u64>) -> Vec<Statement> {
+        use crate::ir::BinaryOperation;
+        let mut statements = counter_store_loop(seed, BinaryOperation::Add, BigUint::from(1u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements = vec![
+            literal_binding(7, 5),
+            binary_binding(8, BinaryOperation::Shl, 7, 1),
+        ];
+        let offset = match base {
+            Some(base) => {
+                body.statements.extend([
+                    literal_binding(9, base),
+                    binary_binding(10, BinaryOperation::Add, 9, 8),
+                ]);
+                10
+            }
+            None => 8,
+        };
+        body.statements.push(word_store(offset));
+        statements
+    }
+
+    /// newyork rewrites `mul(p, 0x20)` into `shl(5, p)`, which from `p = 2` lands on the FMP word.
+    #[test]
+    fn shifted_counter_store_from_fmp_word_is_unbounded() {
+        let statements = shifted_counter_store_loop(2, None);
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "shl(5, p) from p = 2 is 0x40"
+        );
+    }
+
+    /// A shifted counter above a literal base keeps the base as its minimum, so solc's indexed
+    /// stores `add(base, shl(5, i))` keep the range proof; reading the shift from the wrong
+    /// operand loses it.
+    #[test]
+    fn shifted_counter_store_above_fmp_word_stays_bounded() {
+        let statements = shifted_counter_store_loop(0, Some(0x80));
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "add(0x80, shl(5, p)) never drops below 0x80"
+        );
+    }
+
+    /// A minimum through `mul` holds only while the exact product fits the word. A counter stepping
+    /// by 2^63, multiplied by `u64::MAX` three times, exceeds 2^256 from the fourth iteration on,
+    /// and a wrapped product can be any value, so `add(0x80, product)` has no minimum even though
+    /// the product's minimum is `0`.
+    #[test]
+    fn multiplied_counter_store_may_wrap_is_unbounded() {
+        use crate::ir::BinaryOperation;
+        let mut statements = counter_store_loop(0, BinaryOperation::Add, BigUint::from(1u64 << 63));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements = vec![
+            literal_binding(7, u64::MAX),
+            binary_binding(8, BinaryOperation::Mul, 1, 7),
+            binary_binding(9, BinaryOperation::Mul, 8, 7),
+            binary_binding(10, BinaryOperation::Mul, 9, 7),
+            literal_binding(11, 0x80),
+            binary_binding(12, BinaryOperation::Add, 11, 10),
+            word_store(12),
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "the product can wrap, so 0x80 is no minimum of the sum"
+        );
+    }
+
+    /// Operations other than `add`, `mul` and `shl` by a static shift have no minimum rule, and
+    /// `sub` can take a counter below its seed: `sub(p, 0x40)` from `0x80` starts on the FMP word.
+    #[test]
+    fn counter_through_other_operation_store_is_unbounded() {
+        use crate::ir::BinaryOperation;
+        let mut statements = counter_store_loop(0x80, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements = vec![
+            literal_binding(7, 0x40),
+            binary_binding(8, BinaryOperation::Sub, 1, 7),
+            word_store(8),
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "sub(p, 0x40) from 0x80 is 0x40"
+        );
+    }
+
+    /// A unary operation has no minimum rule either: `add(not(p), 0x60)`, which is `0x5f - p`,
+    /// starts on the FMP word for `p` from `0x1f`.
+    #[test]
+    fn counter_through_unary_operation_store_is_unbounded() {
+        use crate::ir::{BinaryOperation, UnaryOperation, ValueId};
+        let mut statements = counter_store_loop(0x1f, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements = vec![
+            Statement::Let {
+                bindings: vec![ValueId(7)],
+                value: Expression::Unary {
+                    operation: UnaryOperation::Not,
+                    operand: Value::int(ValueId(1)),
+                },
+            },
+            literal_binding(8, 0x60),
+            binary_binding(9, BinaryOperation::Add, 7, 8),
+            word_store(9),
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "add(not(p), 0x60) from 0x1f is 0x40"
+        );
+    }
+
+    /// A literal too wide for a static offset, such as `not(0x1f)`, still counts as computed
+    /// from literals: `add(p, not(0x1f))` from `0x60` starts on the FMP word.
+    #[test]
+    fn counter_plus_wide_literal_store_is_unbounded() {
+        use crate::ir::{BinaryOperation, Type, ValueId};
+        let mut statements = counter_store_loop(0x60, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements = vec![
+            Statement::Let {
+                bindings: vec![ValueId(7)],
+                value: Expression::Literal {
+                    value: not_0x1f(),
+                    value_type: Type::default(),
+                },
+            },
+            binary_binding(8, BinaryOperation::Add, 1, 7),
+            word_store(8),
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "add(p, not(0x1f)) from 0x60 is 0x40"
+        );
+    }
+
+    /// A store in `post` goes through `post`'s input, which carries the counter's values, so it
+    /// is checked like one in the body.
+    #[test]
+    fn post_block_counter_store_is_unbounded() {
+        use crate::ir::BinaryOperation;
+        let mut statements = counter_store_loop(0x40, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, post, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements.clear();
+        post.statements.insert(0, word_store(4));
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "post's input is 0x40 on the first iteration"
+        );
+    }
+
+    /// The loop output is the counter's last value, so a store through the output of a loop from
+    /// `0x40` can land on the FMP word.
+    #[test]
+    fn output_store_after_counter_from_fmp_word_is_unbounded() {
+        use crate::ir::BinaryOperation;
+        let mut statements = counter_store_loop(0x40, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements.clear();
+        statements.push(word_store(6));
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "the output of a loop from 0x40 can be 0x40"
+        );
+    }
+
+    /// A `break` hands the output its values, so one that hands on a new value (`0x40`) leaves
+    /// the output without the counter's minimum.
+    #[test]
+    fn break_with_other_counter_value_output_store_is_unbounded() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = counter_store_loop(0x80, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements = vec![
+            literal_binding(7, 0x40),
+            Statement::Break {
+                values: vec![Value::int(ValueId(7))],
+            },
+        ];
+        statements.push(word_store(6));
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "the output is 0x40 after the break"
+        );
+    }
+
+    /// A `continue` in a nested loop's body binds to that loop, so the outer counter still steps
+    /// up and keeps the range proof.
+    #[test]
+    fn inner_loop_continue_keeps_outer_counter_bounded() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = counter_store_loop(0x80, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements.push(nested_loop(vec![Statement::Continue {
+            values: vec![Value::int(ValueId(0))],
+        }]));
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "the inner continue does not hand on the outer counter"
+        );
+    }
+
+    /// A `break` in a nested loop's body binds to that loop, so the outer loop's output keeps the
+    /// outer counter's minimum and a store through it keeps the range proof.
+    #[test]
+    fn inner_loop_break_keeps_outer_output_bounded() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = counter_store_loop(0x80, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements.push(nested_loop(vec![Statement::Break {
+            values: vec![Value::int(ValueId(0))],
+        }]));
+        statements.push(word_store(6));
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "the inner break does not hand on the outer output"
+        );
+    }
+
+    /// A copy from `0` whose length is a counter from `0x40` covers the FMP word from the second
+    /// iteration on, and later iterations write words past the start word, so the pointer is
+    /// unbounded and no access may be native.
     #[test]
     fn counter_length_copy_below_fmp_word_is_unbounded() {
         use crate::ir::{BinaryOperation, ValueId};
-        let mut statements = counter_store_loop(0x40, BinaryOperation::Add);
-        let Statement::For { body, .. } = &mut statements[3] else {
+        let mut statements = counter_store_loop(0x40, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
             unreachable!()
         };
         body.statements = vec![
@@ -2338,8 +3050,45 @@ mod tests {
             },
         ];
         let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
-        assert!(results.fmp_could_be_unbounded());
-        assert!(results.has_dynamic_accesses);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "a copy of 0x60 bytes from 0 covers the FMP word"
+        );
+        assert!(
+            results.has_dynamic_accesses,
+            "later iterations write words the analysis does not see"
+        );
+    }
+
+    /// A copy length through `shl` is computed from the counter too: `shl(1, n)` from `0x20`
+    /// grows past `0x40`, so a copy from `0` overwrites the FMP word and writes words the
+    /// analysis does not see.
+    #[test]
+    fn shifted_counter_length_copy_is_unbounded() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = counter_store_loop(0x20, BinaryOperation::Add, BigUint::from(1u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements = vec![
+            literal_binding(7, 0),
+            literal_binding(8, 1),
+            binary_binding(9, BinaryOperation::Shl, 8, 1),
+            Statement::CallDataCopy {
+                destination: Value::int(ValueId(7)),
+                offset: Value::int(ValueId(7)),
+                length: Value::int(ValueId(9)),
+            },
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "a copy of shl(1, n) bytes from 0 covers the FMP word"
+        );
+        assert!(
+            results.has_dynamic_accesses,
+            "later iterations write words the analysis does not see"
+        );
     }
 
     #[test]

@@ -2428,7 +2428,9 @@ mod tests {
         );
     }
 
-    /// Reviewer example: `let o := 0x30 if c { mstore(o, v) r := mload(0x40) }`.
+    /// A full-word store at `0x30` overwrites the upper half of the FMP word. Its offset is bound
+    /// before the branch, so the walk inside the branch must resolve it from the enclosing
+    /// constants and not forward `0x80` to the `mload(0x40)` after it.
     #[test]
     fn branch_scratch_store_bound_outside_invalidates_fmp() {
         use crate::ir::{MemoryRegion, Object};
@@ -2454,9 +2456,14 @@ mod tests {
         };
         let mut fmp = FmpPropagation::new();
         fmp.propagate_object(&mut object);
-        assert_eq!(fmp.loads_eliminated, 0);
+        assert_eq!(
+            fmp.loads_eliminated, 0,
+            "a store at 0x30 overlaps the FMP word"
+        );
     }
 
+    /// `Scratch` bounds only the first byte of a store, so a full-word store with an unresolved
+    /// `Scratch` offset may still start in `0x21..0x3f` and overwrite the FMP word.
     #[test]
     fn unresolved_scratch_word_store_invalidates_fmp() {
         use crate::ir::MemoryRegion;
@@ -2465,7 +2472,11 @@ mod tests {
             value: make_value(11),
             region: MemoryRegion::Scratch,
         }];
-        assert_eq!(fmp_loads_eliminated_across(middle, vec![]), 0);
+        assert_eq!(
+            fmp_loads_eliminated_across(middle, vec![]),
+            0,
+            "an unresolved Scratch word store may reach the FMP word"
+        );
     }
 
     #[test]

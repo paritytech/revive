@@ -52,14 +52,14 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use num::{BigUint, Zero};
+use num::BigUint;
+use revive_common::BYTE_LENGTH_WORD;
 
 use crate::ir::{
-    for_each_statement, word_align, word_store_overlaps_free_pointer_slot, BinaryOperation,
-    BitWidth, Block, Expression, FunctionId, MemoryRegion, Object, Region, Statement, Type, Value,
-    ValueId,
+    for_each_statement, word_align, word_store_overlaps_free_pointer_slot, BitWidth, Block,
+    Expression, FunctionId, MemoryRegion, Object, Region, Statement, Type, Value, ValueId,
 };
-use revive_common::BYTE_LENGTH_WORD;
+use crate::simplify::fold_binary;
 
 /// Results of memory optimization.
 #[derive(Clone, Debug, Default)]
@@ -813,64 +813,9 @@ impl MemoryOptimizer {
         })
     }
 
-    /// Tries to evaluate an expression to a constant value.
-    fn try_eval_const(&self, expression: &Expression) -> Option<BigUint> {
-        match expression {
-            Expression::Literal { value, .. } => Some(value.clone()),
-            Expression::Var(id) => self.constant_values.get(&id.0).cloned(),
-            Expression::Binary {
-                operation,
-                lhs,
-                rhs,
-            } => {
-                let left = self.constant_values.get(&lhs.id.0)?;
-                let right = self.constant_values.get(&rhs.id.0)?;
-                match operation {
-                    BinaryOperation::Add => Some(left + right),
-                    BinaryOperation::Sub => {
-                        if left >= right {
-                            Some(left - right)
-                        } else {
-                            None
-                        }
-                    }
-                    BinaryOperation::Mul => Some(left * right),
-                    BinaryOperation::Div => {
-                        if right.is_zero() {
-                            None
-                        } else {
-                            Some(left / right)
-                        }
-                    }
-                    BinaryOperation::And => Some(left & right),
-                    BinaryOperation::Or => Some(left | right),
-                    BinaryOperation::Xor => Some(left ^ right),
-                    BinaryOperation::Shl => {
-                        let shift = right.to_u32_digits().first().copied().unwrap_or(0);
-                        if shift < 256 {
-                            Some(left << shift as usize)
-                        } else {
-                            Some(BigUint::from(0u32))
-                        }
-                    }
-                    BinaryOperation::Shr => {
-                        let shift = right.to_u32_digits().first().copied().unwrap_or(0);
-                        if shift < 256 {
-                            Some(left >> shift as usize)
-                        } else {
-                            Some(BigUint::from(0u32))
-                        }
-                    }
-                    _ => None,
-                }
-            }
-            _ => None,
-        }
-    }
-
     /// Records a constant binding if the expression is constant.
     fn record_constant(&mut self, binding_id: ValueId, expression: &Expression) {
-        if let Some(value) = self.try_eval_const(expression) {
+        if let Some(value) = evaluate_constant(&self.constant_values, expression) {
             self.constant_values.insert(binding_id.0, value);
         }
     }
@@ -1069,7 +1014,7 @@ impl FmpPropagation {
                     let final_value = new_value.unwrap_or(value);
 
                     if bindings.len() == 1 {
-                        if let Some(constant) = Self::eval_const(&constants, &final_value) {
+                        if let Some(constant) = evaluate_constant(&constants, &final_value) {
                             constants.insert(bindings[0].0, constant);
                         }
                     }
@@ -1335,7 +1280,7 @@ impl FmpPropagation {
         for_each_statement(statements, &mut |statement| match statement {
             Statement::Let { bindings, value } => {
                 if bindings.len() == 1 {
-                    if let Some(constant) = Self::eval_const(&local_constants, value) {
+                    if let Some(constant) = evaluate_constant(&local_constants, value) {
                         local_constants.insert(bindings[0].0, constant);
                     }
                 }
@@ -1470,42 +1415,66 @@ impl FmpPropagation {
     fn resolve_value(constants: &BTreeMap<u32, BigUint>, value: &Value) -> Option<BigUint> {
         constants.get(&value.id.0).cloned()
     }
+}
 
-    /// Evaluates an expression to a constant if possible.
-    fn eval_const(constants: &BTreeMap<u32, BigUint>, expression: &Expression) -> Option<BigUint> {
-        match expression {
-            Expression::Literal { value, .. } => Some(value.clone()),
-            Expression::Var(id) => constants.get(&id.0).cloned(),
-            Expression::Binary {
-                operation,
-                lhs,
-                rhs,
-            } => {
-                let left = constants.get(&lhs.id.0)?;
-                let right = constants.get(&rhs.id.0)?;
-                match operation {
-                    BinaryOperation::Add => Some(left + right),
-                    BinaryOperation::Sub => {
-                        if left >= right {
-                            Some(left - right)
-                        } else {
-                            None
-                        }
-                    }
-                    BinaryOperation::And => Some(left & right),
-                    BinaryOperation::Or => Some(left | right),
-                    _ => None,
-                }
-            }
-            _ => None,
-        }
+/// Evaluates an expression to a constant if possible.
+///
+/// Binary operations go through the simplifier's [`fold_binary`], so the memory offsets and free
+/// memory pointer values computed here follow the same EVM semantics as the simplifier's folds.
+fn evaluate_constant(
+    constants: &BTreeMap<u32, BigUint>,
+    expression: &Expression,
+) -> Option<BigUint> {
+    match expression {
+        Expression::Literal { value, .. } => Some(value.clone()),
+        Expression::Var(id) => constants.get(&id.0).cloned(),
+        Expression::Binary {
+            operation,
+            lhs,
+            rhs,
+        } => fold_binary(
+            *operation,
+            constants.get(&lhs.id.0)?,
+            constants.get(&rhs.id.0)?,
+        ),
+        _ => None,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{BitWidth, Type};
+    use crate::ir::{BinaryOperation, BitWidth, Type};
+
+    /// Builds a `Let` binding `id` to the literal `value`.
+    /// Values wider than 64 bits need `big_literal_binding`.
+    fn literal_binding(id: u32, value: u64) -> Statement {
+        big_literal_binding(id, BigUint::from(value))
+    }
+
+    /// Builds a `Let` binding `id` to the literal `value`, which may be wider than
+    /// 64 bits, such as 2^128 or `not(0x7f)`.
+    fn big_literal_binding(id: u32, value: BigUint) -> Statement {
+        Statement::Let {
+            bindings: vec![ValueId(id)],
+            value: Expression::Literal {
+                value,
+                value_type: Type::Int(BitWidth::I256),
+            },
+        }
+    }
+
+    /// Builds a `Let` binding `id` to `operation(lhs_id, rhs_id)`.
+    fn binary_binding(id: u32, operation: BinaryOperation, lhs_id: u32, rhs_id: u32) -> Statement {
+        Statement::Let {
+            bindings: vec![ValueId(id)],
+            value: Expression::Binary {
+                operation,
+                lhs: make_value(lhs_id),
+                rhs: make_value(rhs_id),
+            },
+        }
+    }
 
     fn make_value(id: u32) -> Value {
         Value {
@@ -1594,15 +1563,6 @@ mod tests {
     fn msize_prevents_dead_store_elimination() {
         use crate::ir::{MemoryRegion, Object};
 
-        fn literal(id: u32, value: u64) -> Statement {
-            Statement::Let {
-                bindings: vec![ValueId(id)],
-                value: Expression::Literal {
-                    value: BigUint::from(value),
-                    value_type: Type::Int(BitWidth::I256),
-                },
-            }
-        }
         fn int(id: u32) -> Value {
             Value {
                 id: ValueId(id),
@@ -1611,8 +1571,8 @@ mod tests {
         }
 
         let statements = vec![
-            literal(1, 288),
-            literal(2, 1),
+            literal_binding(1, 288),
+            literal_binding(2, 1),
             Statement::MStore {
                 offset: int(1),
                 value: int(2),
@@ -1622,7 +1582,7 @@ mod tests {
                 bindings: vec![ValueId(3)],
                 value: Expression::MSize,
             },
-            literal(4, 2),
+            literal_binding(4, 2),
             Statement::MStore {
                 offset: int(1),
                 value: int(4),
@@ -1654,15 +1614,6 @@ mod tests {
     fn overlapping_load_prevents_dead_store_elimination() {
         use crate::ir::{MemoryRegion, Object};
 
-        fn literal(id: u32, value: u64) -> Statement {
-            Statement::Let {
-                bindings: vec![ValueId(id)],
-                value: Expression::Literal {
-                    value: BigUint::from(value),
-                    value_type: Type::Int(BitWidth::I256),
-                },
-            }
-        }
         fn int(id: u32) -> Value {
             Value {
                 id: ValueId(id),
@@ -1671,14 +1622,14 @@ mod tests {
         }
 
         let statements = vec![
-            literal(1, 1),
-            literal(2, 0xdead),
+            literal_binding(1, 1),
+            literal_binding(2, 0xdead),
             Statement::MStore {
                 offset: int(1),
                 value: int(2),
                 region: MemoryRegion::Scratch,
             },
-            literal(3, 8),
+            literal_binding(3, 8),
             Statement::Let {
                 bindings: vec![ValueId(4)],
                 value: Expression::MLoad {
@@ -2233,25 +2184,13 @@ mod tests {
         );
     }
 
-    /// Builds a `Let` binding `id` to the literal `value`.
-    fn fmp_literal_binding(id: u32, value: u64) -> Statement {
-        use num::BigUint;
-        Statement::Let {
-            bindings: vec![ValueId(id)],
-            value: Expression::Literal {
-                value: BigUint::from(value),
-                value_type: Type::Int(BitWidth::I256),
-            },
-        }
-    }
-
     /// Builds the statements establishing the FMP (`mstore(0x40, 0x80)`) with value
     /// IDs 1 (`0x80`) and 2 (`0x40`).
     fn fmp_establish_statements() -> Vec<Statement> {
         use crate::ir::MemoryRegion;
         vec![
-            fmp_literal_binding(1, 0x80),
-            fmp_literal_binding(2, 0x40),
+            literal_binding(1, 0x80),
+            literal_binding(2, 0x40),
             Statement::MStore {
                 offset: make_value(2),
                 value: make_value(1),
@@ -2304,8 +2243,8 @@ mod tests {
     fn overlap_store_statements(first_id: u32) -> Vec<Statement> {
         use crate::ir::MemoryRegion;
         vec![
-            fmp_literal_binding(first_id, 0xdead),
-            fmp_literal_binding(first_id + 1, 0x38),
+            literal_binding(first_id, 0xdead),
+            literal_binding(first_id + 1, 0x38),
             Statement::MStore {
                 offset: make_value(first_id + 1),
                 value: make_value(first_id),
@@ -2350,8 +2289,8 @@ mod tests {
         let middle = vec![conditional(
             1,
             vec![
-                fmp_literal_binding(10, 0xdead),
-                fmp_literal_binding(11, 0x00),
+                literal_binding(10, 0xdead),
+                literal_binding(11, 0x00),
                 Statement::MStore {
                     offset: make_value(11),
                     value: make_value(10),
@@ -2453,8 +2392,8 @@ mod tests {
     fn static_mstore8_into_fmp_word_invalidates_fmp() {
         use crate::ir::MemoryRegion;
         let middle = vec![
-            fmp_literal_binding(10, 0xff),
-            fmp_literal_binding(11, 0x45),
+            literal_binding(10, 0xff),
+            literal_binding(11, 0x45),
             Statement::MStore8 {
                 offset: make_value(11),
                 value: make_value(10),
@@ -2465,6 +2404,202 @@ mod tests {
             fmp_loads_eliminated_across(middle, vec![]),
             0,
             "a byte store into [0x40, 0x60) must invalidate the tracked FMP constant"
+        );
+    }
+
+    /// Runs `MemoryOptimizer` over `mstore(first_offset, v2)`, `mstore(second_offset, v4)`,
+    /// `offset_statements` binding value 10, and `mload(v10)`; returns the stored value the load
+    /// was forwarded, if any.
+    fn forwarded_store_value(
+        first_offset: u64,
+        second_offset: u64,
+        offset_statements: Vec<Statement>,
+    ) -> Option<ValueId> {
+        use crate::ir::{MemoryRegion, Object};
+        let mut statements = Vec::new();
+        for (offset_id, value_id, offset) in [(1, 2, first_offset), (3, 4, second_offset)] {
+            statements.extend([
+                literal_binding(offset_id, offset),
+                literal_binding(value_id, 0xff),
+                Statement::MStore {
+                    offset: make_value(offset_id),
+                    value: make_value(value_id),
+                    region: MemoryRegion::Unknown,
+                },
+            ]);
+        }
+        statements.extend(offset_statements);
+        statements.push(Statement::Let {
+            bindings: vec![ValueId(11)],
+            value: Expression::MLoad {
+                offset: make_value(10),
+                region: MemoryRegion::Unknown,
+            },
+        });
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements },
+            functions: BTreeMap::new(),
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        };
+        MemoryOptimizer::new().optimize_object(&mut object);
+        match object.code.statements.last() {
+            Some(Statement::Let {
+                value: Expression::Var(id),
+                ..
+            }) => Some(*id),
+            _ => None,
+        }
+    }
+
+    /// The IR keeps the shift amount in `lhs`, as Yul writes `shl(shift, value)`: `shl(6, 1)` is
+    /// 0x40. Reading the operands the other way round gave `6 << 1 = 12` and forwarded the value
+    /// stored at 12 to a load from 0x40.
+    #[test]
+    fn shl_offset_takes_shift_from_lhs() {
+        let offset = vec![
+            literal_binding(5, 6),
+            literal_binding(6, 1),
+            binary_binding(10, BinaryOperation::Shl, 5, 6),
+        ];
+        assert_eq!(
+            forwarded_store_value(12, 0x40, offset),
+            Some(ValueId(4)),
+            "shl(6, 1) is 0x40, so the load must be forwarded the value stored at 0x40"
+        );
+    }
+
+    /// The IR keeps the shift amount in `lhs`: `shr(1, 0x80)` is 0x40, while `1 >> 0x80 = 0`
+    /// forwarded the value stored at 0 to a load from 0x40.
+    #[test]
+    fn shr_offset_takes_shift_from_lhs() {
+        let offset = vec![
+            literal_binding(5, 1),
+            literal_binding(6, 0x80),
+            binary_binding(10, BinaryOperation::Shr, 5, 6),
+        ];
+        assert_eq!(
+            forwarded_store_value(0, 0x40, offset),
+            Some(ValueId(4)),
+            "shr(1, 0x80) is 0x40, so the load must be forwarded the value stored at 0x40"
+        );
+    }
+
+    /// `mul` wraps at 2^256: `mul(2^128, 2^128)` is 0, and 0 divided by 2^250 is 0. The unreduced
+    /// product 2^256 divided by 2^250 gave 0x40, so the value stored at 0x40 was forwarded to a
+    /// load from 0.
+    #[test]
+    fn mul_offset_wraps_before_div() {
+        let modulus = BigUint::from(1u32) << revive_common::BIT_LENGTH_WORD;
+        let half_word = BigUint::from(1u32) << (revive_common::BIT_LENGTH_WORD / 2);
+        let offset = vec![
+            big_literal_binding(5, half_word),
+            binary_binding(6, BinaryOperation::Mul, 5, 5),
+            big_literal_binding(7, modulus / BigUint::from(0x40u32)),
+            binary_binding(10, BinaryOperation::Div, 6, 7),
+        ];
+        assert_eq!(
+            forwarded_store_value(0x40, 0, offset),
+            Some(ValueId(4)),
+            "the product wraps to 0, so the load from 0 must be forwarded the value stored at 0"
+        );
+    }
+
+    /// `add` wraps at 2^256: `add(0x80, not(0x7f))`, the free memory pointer moved down by inline
+    /// assembly, is 0, and 0 divided by 2^250 is 0. The unreduced sum 2^256 divided by 2^250 gave
+    /// 0x40, so the value stored at 0x40 was forwarded to a load from 0.
+    #[test]
+    fn add_offset_wraps_before_div() {
+        let modulus = BigUint::from(1u32) << revive_common::BIT_LENGTH_WORD;
+        let not_0x7f = &modulus - BigUint::from(0x80u32);
+        let offset = vec![
+            literal_binding(5, 0x80),
+            big_literal_binding(6, not_0x7f),
+            binary_binding(7, BinaryOperation::Add, 5, 6),
+            big_literal_binding(8, modulus / BigUint::from(0x40u32)),
+            binary_binding(10, BinaryOperation::Div, 7, 8),
+        ];
+        assert_eq!(
+            forwarded_store_value(0x40, 0, offset),
+            Some(ValueId(4)),
+            "the sum wraps to 0, so the load from 0 must be forwarded the value stored at 0"
+        );
+    }
+
+    /// `sub` wraps at 2^256: `sub(0x20, 0x40)` is 2^256 - 0x20, so adding 0x60 gives 0x40
+    /// and the load from 0x40 is forwarded the value stored there. Treating a `sub` below zero as
+    /// unknown would lose this forward.
+    #[test]
+    fn sub_offset_wraps_below_zero() {
+        let offset = vec![
+            literal_binding(5, 0x20),
+            literal_binding(6, 0x40),
+            binary_binding(7, BinaryOperation::Sub, 5, 6),
+            literal_binding(8, 0x60),
+            binary_binding(10, BinaryOperation::Add, 7, 8),
+        ];
+        assert_eq!(
+            forwarded_store_value(0, 0x40, offset),
+            Some(ValueId(4)),
+            "the sum wraps to 0x40, so the load must be forwarded the value stored at 0x40"
+        );
+    }
+
+    /// EVM division by zero gives 0, so `div(0x40, 0)` is the offset 0 and the load from 0 is
+    /// forwarded the value stored there. Treating a division by zero as unknown would lose this forward.
+    #[test]
+    fn div_offset_by_zero_is_zero() {
+        let offset = vec![
+            literal_binding(5, 0x40),
+            literal_binding(6, 0),
+            binary_binding(10, BinaryOperation::Div, 5, 6),
+        ];
+        assert_eq!(
+            forwarded_store_value(0x40, 0, offset),
+            Some(ValueId(4)),
+            "div(0x40, 0) is 0, so the load must be forwarded the value stored at 0"
+        );
+    }
+
+    /// `add` wraps at 2^256, so `add(0x80, not(0x5f))` moves the free memory pointer down to 0x20.
+    /// The unreduced sum 2^256 + 0x20 replaced the later `mload(0x40)` as a literal, and the
+    /// simplifier then folded comparisons on it wrongly and panicked on subtractions from it.
+    #[test]
+    fn fmp_add_wraps_at_word_size() {
+        use crate::ir::{MemoryRegion, Object};
+        let not_0x5f =
+            (BigUint::from(1u32) << revive_common::BIT_LENGTH_WORD) - BigUint::from(0x60u32);
+        let mut statements = fmp_establish_statements();
+        statements.extend([
+            big_literal_binding(10, not_0x5f),
+            binary_binding(11, BinaryOperation::Add, 1, 10),
+            Statement::MStore {
+                offset: make_value(2),
+                value: make_value(11),
+                region: MemoryRegion::FreePointerSlot,
+            },
+            fmp_observing_load(30),
+        ]);
+        let mut object = Object {
+            name: "test".to_string(),
+            code: Block { statements },
+            functions: BTreeMap::new(),
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        };
+        FmpPropagation::new().propagate_object(&mut object);
+        let forwarded = match object.code.statements.last() {
+            Some(Statement::Let {
+                value: Expression::Literal { value, .. },
+                ..
+            }) => Some(value.clone()),
+            _ => None,
+        };
+        assert_eq!(
+            forwarded,
+            Some(BigUint::from(0x20u32)),
+            "the load must be replaced by the wrapped free memory pointer 0x20"
         );
     }
 }

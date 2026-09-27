@@ -1447,7 +1447,9 @@ fn unary_result_type(operation: UnaryOperation) -> Type {
 
 /// Folds a binary operation on two constant values.
 /// Returns None if the operation cannot be folded.
-fn fold_binary(operation: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<BigUint> {
+///
+/// `mem_opt` relies on this for memory offsets and the free memory pointer.
+pub(crate) fn fold_binary(operation: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<BigUint> {
     let modulus = modulus_u256();
     let max = max_u256();
 

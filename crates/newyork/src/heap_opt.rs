@@ -137,7 +137,8 @@ pub struct HeapAnalysis {
     ///
     /// **Known gap (deliberate).** A dynamic-offset full-word `MStore` sets this flag when its
     /// offset is computed from literals and literal-seeded loop counters and can drop below `0x60`
-    /// ([`OffsetInfo::iteration_range`]). Any other dynamic offset does not set it, even though it
+    /// ([`OffsetInfo::iteration_range`]), or when its region is `Scratch`, which bounds only its
+    /// first byte. Any other dynamic offset does not set it, even though it
     /// could land on the FMP word `[0x40, 0x5f]` directly or by wrapping (mod 2^256) and overwrite
     /// the pointer with an arbitrary value. There is no cheap sound discriminator: the wrapped
     /// offset is in-bounds (`safe_truncate` only traps offsets `>= heap_size`), and 256-bit wrap
@@ -463,7 +464,10 @@ impl HeapAnalysis {
                 if is_fmp_store && !self.is_trusted_fmp_source(value.id.0) {
                     self.fmp_could_be_unbounded = true;
                 }
-                if static_offset.is_none() && self.loop_offset_may_reach_fmp_word(offset) {
+                if static_offset.is_none()
+                    && (*region == MemoryRegion::Scratch
+                        || self.loop_offset_may_reach_fmp_word(offset))
+                {
                     self.fmp_could_be_unbounded = true;
                 }
             }
@@ -3088,6 +3092,31 @@ mod tests {
         assert!(
             results.has_dynamic_accesses,
             "later iterations write words the analysis does not see"
+        );
+    }
+
+    /// Fuzzy dedup turns the literal offsets of `mstore(0x30, v)` and `mstore(0x10, v)` helpers
+    /// into a parameter and keeps the `Scratch` tag, which bounds only the first byte, so the merged
+    /// store may still overwrite the FMP word and a later `mload(0x40)` must not be truncated.
+    #[test]
+    fn scratch_word_store_through_parameter_is_unbounded() {
+        use crate::ir::{BitWidth, Block, Function, FunctionId, Type, ValueId};
+        let mut function = Function::new(FunctionId(0), "store_scratch".to_string());
+        function.parameters = vec![
+            (ValueId(10), Type::Int(BitWidth::I256)),
+            (ValueId(11), Type::Int(BitWidth::I256)),
+        ];
+        function.body = Block {
+            statements: vec![Statement::MStore {
+                offset: Value::int(ValueId(10)),
+                value: Value::int(ValueId(11)),
+                region: MemoryRegion::Scratch,
+            }],
+        };
+        let results = object_with_code(vec![], vec![function]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "a Scratch-tagged word store through a parameter may reach the FMP word"
         );
     }
 

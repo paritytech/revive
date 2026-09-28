@@ -97,11 +97,28 @@ impl TryFrom<&[String]> for Libraries {
             let address = path_and_address
                 .next()
                 .ok_or_else(|| anyhow::anyhow!("Library `{path}` address is missing."))?;
+            if path_and_address.next().is_some() {
+                anyhow::bail!("Library `{library}` contains more than one `=`.");
+            }
             libraries
                 .entry(file.to_owned())
                 .or_insert_with(BTreeMap::new)
                 .insert(contract.to_owned(), address.to_owned());
         }
         Ok(Self { inner: libraries })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Libraries;
+
+    #[test]
+    fn rejects_multiple_equal_signs_in_library_argument() {
+        let address = "0x1111111111111111111111111111111111111111";
+        let argument = format!("u.sol:L={address}={address}");
+
+        let error = Libraries::try_from(&[argument]).unwrap_err();
+        assert!(error.to_string().contains("more than one `=`"));
     }
 }

@@ -1912,9 +1912,22 @@ mod tests {
     #[test]
     fn condition_observes_overlap_store_flags_unbounded() {
         use crate::ir::ValueId;
+
         let mut statements = establish_fmp_statements();
         statements.extend(overlap_store_statements(2));
         statements.push(literal_binding(4, 0x40));
+        statements.push(loop_with_condition(Expression::MLoad {
+            offset: Value::int(ValueId(4)),
+            region: MemoryRegion::Unknown,
+        }));
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "a loop condition loading from static offset 0x40 after an overlap store observes the corruption"
+        );
+
+        let mut statements = establish_fmp_statements();
+        statements.extend(overlap_store_statements(2));
         statements.push(loop_with_condition(Expression::MLoad {
             offset: Value::int(ValueId(4)),
             region: MemoryRegion::FreePointerSlot,
@@ -1922,7 +1935,7 @@ mod tests {
         let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
         assert!(
             results.fmp_could_be_unbounded(),
-            "a loop condition reading mload(0x40) after an overlap store observes the corruption"
+            "a loop condition loading from the free pointer slot after an overlap store observes the corruption"
         );
     }
 

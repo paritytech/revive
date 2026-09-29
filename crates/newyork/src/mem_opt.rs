@@ -1718,10 +1718,18 @@ mod tests {
         let offset_id = ValueId(2);
         let value_id = ValueId(3);
         let result_id = ValueId(4);
+        let addend_id = ValueId(5);
 
         let statements = vec![
             Statement::Let {
                 bindings: vec![base_id],
+                value: Expression::Literal {
+                    value: BigUint::from(32u32),
+                    value_type: Type::Int(BitWidth::I256),
+                },
+            },
+            Statement::Let {
+                bindings: vec![addend_id],
                 value: Expression::Literal {
                     value: BigUint::from(32u32),
                     value_type: Type::Int(BitWidth::I256),
@@ -1736,7 +1744,7 @@ mod tests {
                         value_type: Type::Int(BitWidth::I256),
                     },
                     rhs: Value {
-                        id: ValueId(100),
+                        id: addend_id,
                         value_type: Type::Int(BitWidth::I256),
                     },
                 },
@@ -1779,7 +1787,17 @@ mod tests {
             data: BTreeMap::new(),
         };
 
-        let _statistics = optimizer.optimize_object(&mut object);
+        let statistics = optimizer.optimize_object(&mut object);
+
+        assert_eq!(statistics.loads_eliminated, 1);
+        assert!(
+            matches!(
+                object.code.statements.last(),
+                Some(Statement::Let { bindings, value: Expression::Var(forwarded) })
+                    if bindings == &vec![result_id] && *forwarded == value_id
+            ),
+            "the load at the folded offset must be replaced by the stored value"
+        );
     }
 
     #[test]

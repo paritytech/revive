@@ -23,7 +23,7 @@ use num::BigUint;
 
 use crate::ir::{
     for_each_statement, word_align, Block, Expression, FunctionId, MemoryRegion, Object, Statement,
-    Value,
+    Value, ValueId,
 };
 use revive_common::BYTE_LENGTH_WORD;
 
@@ -193,6 +193,16 @@ pub struct HeapAnalysis {
     /// call sites by [`Self::scan_fmp_corruption`], so corruption escaping a callee is visible
     /// to the caller's observation scan.
     fmp_corrupting_functions: BTreeSet<FunctionId>,
+    /// Dynamic destinations of writes that may cover the FMP word unless they are free pointer
+    /// relative. They are checked once the whole object is analyzed, because a destination
+    /// derived from a function parameter or a call result depends on every call site.
+    deferred_write_destinations: Vec<u32>,
+    /// Parameters for which every call site passes a free pointer relative argument.
+    free_pointer_relative_parameters: BTreeSet<u32>,
+    /// Single-return functions whose every return value is free pointer relative.
+    free_pointer_relative_returns: BTreeSet<FunctionId>,
+    /// Branch, switch and loop outputs whose every incoming value is free pointer relative.
+    free_pointer_relative_merges: BTreeSet<u32>,
 }
 
 /// Information about a value used as a memory offset.
@@ -401,6 +411,10 @@ impl HeapAnalysis {
             fmp_could_be_unbounded: false,
             value_expressions: BTreeMap::new(),
             fmp_corrupting_functions: BTreeSet::new(),
+            deferred_write_destinations: Vec::new(),
+            free_pointer_relative_parameters: BTreeSet::new(),
+            free_pointer_relative_returns: BTreeSet::new(),
+            free_pointer_relative_merges: BTreeSet::new(),
         }
     }
 
@@ -423,6 +437,7 @@ impl HeapAnalysis {
             self.analyze_block(&function.body, true, is_root);
         }
 
+        self.check_deferred_write_destinations(object);
         self.detect_observed_fmp_corruption(object);
 
         for subobject in &object.subobjects {
@@ -513,6 +528,7 @@ impl HeapAnalysis {
                 let destination_start = self.extract_static_offset(destination);
                 let source_start = self.extract_static_offset(source);
                 let len = self.extract_static_offset(length);
+                self.flag_write_covering_fmp(destination, length, true);
                 self.taint_range(destination_start, len);
                 self.taint_range(source_start, len);
             }
@@ -526,6 +542,7 @@ impl HeapAnalysis {
             } => {
                 self.mark_escaping_range(args_offset, args_length);
                 self.note_fmp_coverage(args_offset, args_length);
+                self.flag_write_covering_fmp(ret_offset, ret_length, true);
                 self.mark_escaping_and_tainted_range(ret_offset, ret_length);
                 self.note_fmp_coverage(ret_offset, ret_length);
             }
@@ -795,6 +812,160 @@ impl HeapAnalysis {
         }
     }
 
+    /// Flags the free memory pointer as possibly unbounded when a raw write of `length`
+    /// bytes to `destination` can cover `[0x40, 0x60)`. A zero length never covers it,
+    /// and neither does a dynamic destination that is free pointer relative, or a
+    /// loop-varying destination that never drops below `0x60`. A static destination below
+    /// `0x60` with a dynamic length is flagged when `any_dynamic_length` is set or the length
+    /// is loop-varying. Copy opcodes leave it unset, so `calldatacopy(0, 0, calldatasize())`
+    /// is not flagged although a length above `0x40` overwrites the pointer (a known gap).
+    fn flag_write_covering_fmp(
+        &mut self,
+        destination: &Value,
+        length: &Value,
+        any_dynamic_length: bool,
+    ) {
+        let destination_start = self.extract_static_offset(destination);
+        let len = self.extract_static_offset(length);
+        let dynamic_length_covers = any_dynamic_length || self.loop_varying(length);
+
+        let covers_fmp = match (destination_start, len) {
+            (_, Some(0)) => false,
+            (Some(address), Some(size)) => address < 0x60 && address.saturating_add(size) > 0x40,
+            (Some(address), None) => {
+                (0x40..0x60).contains(&address) || (dynamic_length_covers && address < 0x60)
+            }
+            (None, _) if self.loop_varying(destination) => {
+                self.loop_offset_may_reach_fmp_word(destination)
+            }
+            (None, _) => {
+                if !self.is_free_pointer_relative(destination.id.0) {
+                    self.deferred_write_destinations.push(destination.id.0);
+                }
+                false
+            }
+        };
+        if covers_fmp {
+            self.fmp_could_be_unbounded = true;
+        }
+    }
+
+    /// Flags the free memory pointer as possibly unbounded when a deferred write destination is
+    /// not free pointer relative, even when trusting the parameters, call results and control
+    /// flow merges for which every incoming value is. The trusted sets start full and shrink to
+    /// a fixed point, so a pointer carried around a loop or passed along by a recursive call
+    /// stays trusted when every value entering it from outside is.
+    fn check_deferred_write_destinations(&mut self, object: &Object) {
+        if self.deferred_write_destinations.is_empty() {
+            return;
+        }
+
+        let mut call_sites = Vec::new();
+        let mut collect = |statement: &Statement| {
+            let expression = match statement {
+                Statement::Let { value, .. } | Statement::Expression(value) => value,
+                Statement::For { condition, .. } => condition,
+                _ => return,
+            };
+            if let Expression::Call {
+                function,
+                arguments,
+            } = expression
+            {
+                call_sites.push((*function, arguments.clone()));
+            }
+        };
+        for_each_statement(&object.code.statements, &mut collect);
+        for function in object.functions.values() {
+            for_each_statement(&function.body.statements, &mut collect);
+        }
+
+        let mut merge_inputs = BTreeMap::new();
+        collect_merge_inputs(
+            &object.code.statements,
+            None,
+            &mut merge_inputs,
+            &mut Vec::new(),
+        );
+        let mut returned_values = BTreeMap::new();
+        for function in object.functions.values() {
+            let mut leave_values = Vec::new();
+            collect_merge_inputs(
+                &function.body.statements,
+                None,
+                &mut merge_inputs,
+                &mut leave_values,
+            );
+            if let [return_value] = function.return_values.as_slice() {
+                leave_values.push(return_value.0);
+                returned_values.insert(function.id, leave_values);
+            }
+        }
+
+        let called: BTreeSet<FunctionId> = call_sites.iter().map(|(id, _)| *id).collect();
+        for function in object.functions.values() {
+            if called.contains(&function.id) {
+                self.free_pointer_relative_parameters
+                    .extend(function.parameters.iter().map(|(id, _)| id.0));
+            }
+        }
+        self.free_pointer_relative_returns
+            .extend(returned_values.keys().copied());
+        self.free_pointer_relative_merges
+            .extend(merge_inputs.keys().copied());
+
+        loop {
+            let mut changed = false;
+            for (function_id, arguments) in &call_sites {
+                let Some(function) = object.functions.get(function_id) else {
+                    continue;
+                };
+                for ((parameter, _), argument) in function.parameters.iter().zip(arguments) {
+                    if self.free_pointer_relative_parameters.contains(&parameter.0)
+                        && !self.is_free_pointer_relative(argument.id.0)
+                    {
+                        self.free_pointer_relative_parameters.remove(&parameter.0);
+                        changed = true;
+                    }
+                }
+            }
+            for (function_id, values) in &returned_values {
+                if self.free_pointer_relative_returns.contains(function_id)
+                    && !values
+                        .iter()
+                        .all(|value| self.is_free_pointer_relative(*value))
+                {
+                    self.free_pointer_relative_returns.remove(function_id);
+                    changed = true;
+                }
+            }
+            for (merge, inputs) in &merge_inputs {
+                if self.free_pointer_relative_merges.contains(merge)
+                    && !inputs
+                        .iter()
+                        .all(|input| self.is_free_pointer_relative(*input))
+                {
+                    self.free_pointer_relative_merges.remove(merge);
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+
+        let deferred = std::mem::take(&mut self.deferred_write_destinations);
+        if deferred
+            .iter()
+            .any(|destination| !self.is_free_pointer_relative(*destination))
+        {
+            self.fmp_could_be_unbounded = true;
+        }
+        self.free_pointer_relative_parameters.clear();
+        self.free_pointer_relative_returns.clear();
+        self.free_pointer_relative_merges.clear();
+    }
+
     /// Taints the destination of a copy opcode (`calldatacopy`, `codecopy`,
     /// `returndatacopy`, …), which writes big-endian bytes that a later native
     /// (little-endian) `mload` must not byte-reverse.
@@ -805,47 +976,12 @@ impl HeapAnalysis {
     /// length also sets `has_dynamic_accesses`, because later iterations copy past it;
     /// any other dynamic length does not, which keeps native mode for every ABI-decode
     /// `calldatacopy` but leaves a later literal word native (a known gap).
-    /// Records the memory tainted by a copy (`calldatacopy`/`codecopy`/`mcopy`/…) with
-    /// destination `destination` and length `length`, and flags the free-memory-pointer slot as
-    /// possibly unbounded when the copy can clobber it.
-    ///
-    /// A copy that can overwrite the FMP slot `[0x40, 0x60)` replaces the free-memory
-    /// pointer with arbitrary, possibly out-of-range bytes. Downstream codegen that assumes
-    /// `FMP < heap_size` (the narrow `mload(0x40)` read and its range proof) would then
-    /// mis-read the corrupted value, so such a copy sets `fmp_could_be_unbounded` — exactly
-    /// as an untrusted `mstore(0x40, ...)` does. Tainting word 0x40 alone only disables the
-    /// *native-mode* FMP read; the FMP *range proof* in `to_llvm` is gated on
-    /// `fmp_could_be_unbounded`, so that flag must be set too or the proof silently
-    /// truncates the clobbered value.
-    ///
-    /// `covers_fmp` is kept deliberately narrow to avoid a code-size regression. It flags a
-    /// static destination+length that provably overlap the slot, a static destination *inside*
-    /// the FMP word with a dynamic length, a static destination below `0x60` with a loop-varying
-    /// length, a loop-varying destination unless it never drops below `0x60`, and any other
-    /// dynamic destination unless it is free-pointer-relative (OZ's ABI-decode copies to
-    /// `mload(0x40) >= 0x80`). A static destination below `0x40` with any other dynamic length
-    /// (proxy `calldatacopy(0, 0, size)`) does not set it, although a length above `0x40`
-    /// overwrites the pointer (a known gap).
     fn taint_copy_destination(&mut self, destination: &Value, length: &Value) {
         let destination_start = self.extract_static_offset(destination);
         let len = self.extract_static_offset(length);
 
         let loop_length = self.loop_varying(length);
-        let covers_fmp = match (destination_start, len) {
-            (Some(address), Some(size)) => {
-                size > 0 && address < 0x60 && address.saturating_add(size) > 0x40
-            }
-            (Some(address), None) => {
-                (0x40..0x60).contains(&address) || (loop_length && address < 0x60)
-            }
-            (None, _) if self.loop_varying(destination) => {
-                self.loop_offset_may_reach_fmp_word(destination)
-            }
-            (None, _) => !self.is_free_pointer_relative(destination.id.0),
-        };
-        if covers_fmp {
-            self.fmp_could_be_unbounded = true;
-        }
+        self.flag_write_covering_fmp(destination, length, false);
 
         match (destination_start, len) {
             (Some(address), Some(size)) => {
@@ -932,7 +1068,8 @@ impl HeapAnalysis {
     /// `fmp_could_be_unbounded` so the corrupted `mload(0x40)` skips the `FMP < heap_size` range
     /// proof. Recognized as at-or-above the free pointer: `mload(0x40)`, a literal base `>= 0x60`
     /// that fits in 64 bits (`mem_opt` constant-forwards `mload(0x40)` to its `0x80` literal), an
-    /// `add` with such an operand, and `Var` forwarding chains. (The adversarial `add(mload(0x40),
+    /// `add` with such an operand, `Var` forwarding chains, and the parameters and call results
+    /// trusted by [`Self::check_deferred_write_destinations`]. (The adversarial `add(mload(0x40),
     /// k)` / `add(0x80, k)` that wraps mod 2^256 back to `0x40` is the same solc-unreachable residual
     /// as the dynamic full-word `MStore` gap; see the `fmp_could_be_unbounded` field docs.)
     fn is_free_pointer_relative(&self, value_id: u32) -> bool {
@@ -940,6 +1077,13 @@ impl HeapAnalysis {
         let mut current = value_id;
         for _ in 0..MAX_DEPTH {
             match self.value_expressions.get(&current) {
+                None => {
+                    return self.free_pointer_relative_parameters.contains(&current)
+                        || self.free_pointer_relative_merges.contains(&current);
+                }
+                Some(Expression::Call { function, .. }) => {
+                    return self.free_pointer_relative_returns.contains(function);
+                }
                 Some(Expression::MLoad { offset, .. }) => {
                     return self.extract_static_offset(offset) == Some(0x40);
                 }
@@ -1943,6 +2087,115 @@ fn gcd(a: u32, b: u32) -> u32 {
     }
 }
 
+/// Records, for every output of an `if`, `switch` or `for` in `statements`, the values that can
+/// flow into it, and pushes the first value of every `leave` to `leave_values`.
+/// `innermost_loop` holds the post inputs and outputs of the loop that a `continue` or `break`
+/// in `statements` belongs to.
+fn collect_merge_inputs(
+    statements: &[Statement],
+    innermost_loop: Option<(&[ValueId], &[ValueId])>,
+    merge_inputs: &mut BTreeMap<u32, Vec<u32>>,
+    leave_values: &mut Vec<u32>,
+) {
+    let mut record = |merges: &[ValueId], values: &mut dyn Iterator<Item = u32>| {
+        for (merge, value) in merges.iter().zip(values) {
+            merge_inputs.entry(merge.0).or_default().push(value);
+        }
+    };
+    let mut nested = Vec::new();
+    for statement in statements {
+        match statement {
+            Statement::If {
+                inputs,
+                then_region,
+                else_region,
+                outputs,
+                ..
+            } => {
+                record(
+                    outputs,
+                    &mut then_region.yields.iter().map(|value| value.id.0),
+                );
+                let else_values = else_region.as_ref().map_or(inputs, |region| &region.yields);
+                record(outputs, &mut else_values.iter().map(|value| value.id.0));
+                nested.push((&then_region.statements, innermost_loop));
+                if let Some(region) = else_region {
+                    nested.push((&region.statements, innermost_loop));
+                }
+            }
+            Statement::Switch {
+                inputs,
+                cases,
+                default,
+                outputs,
+                ..
+            } => {
+                for case in cases {
+                    record(
+                        outputs,
+                        &mut case.body.yields.iter().map(|value| value.id.0),
+                    );
+                    nested.push((&case.body.statements, innermost_loop));
+                }
+                let default_values = default.as_ref().map_or(inputs, |region| &region.yields);
+                record(outputs, &mut default_values.iter().map(|value| value.id.0));
+                if let Some(region) = default {
+                    nested.push((&region.statements, innermost_loop));
+                }
+            }
+            Statement::For {
+                initial_values,
+                loop_variables,
+                condition_statements,
+                body,
+                post_input_variables,
+                post,
+                outputs,
+                ..
+            } => {
+                record(
+                    loop_variables,
+                    &mut initial_values.iter().map(|value| value.id.0),
+                );
+                record(
+                    loop_variables,
+                    &mut post.yields.iter().map(|value| value.id.0),
+                );
+                record(
+                    post_input_variables,
+                    &mut body.yields.iter().map(|value| value.id.0),
+                );
+                record(
+                    outputs,
+                    &mut loop_variables.iter().map(|variable| variable.0),
+                );
+                let this_loop = Some((post_input_variables.as_slice(), outputs.as_slice()));
+                nested.push((condition_statements, this_loop));
+                nested.push((&body.statements, this_loop));
+                nested.push((&post.statements, this_loop));
+            }
+            Statement::Block(region) => nested.push((&region.statements, innermost_loop)),
+            Statement::Continue { values } => {
+                if let Some((post_inputs, _)) = innermost_loop {
+                    record(post_inputs, &mut values.iter().map(|value| value.id.0));
+                }
+            }
+            Statement::Break { values } => {
+                if let Some((_, loop_outputs)) = innermost_loop {
+                    record(loop_outputs, &mut values.iter().map(|value| value.id.0));
+                }
+            }
+            Statement::Leave { return_values } => {
+                leave_values.extend(return_values.first().map(|value| value.id.0));
+            }
+            _ => {}
+        }
+    }
+    for (statements, loop_scope) in nested {
+        collect_merge_inputs(statements, loop_scope, merge_inputs, leave_values);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2364,6 +2617,304 @@ mod tests {
             !results.fmp_could_be_unbounded(),
             "an add(mload(0x40), k) destination is >= 0x80 and cannot hit the FMP word"
         );
+    }
+
+    fn object_with_mcopy(setup: Vec<Statement>, length: u64) -> Object {
+        use crate::ir::ValueId;
+        let mut statements = setup;
+        statements.push(literal(11, 0x80));
+        statements.push(literal(12, length));
+        statements.push(Statement::MCopy {
+            destination: Value::int(ValueId(10)),
+            source: Value::int(ValueId(11)),
+            length: Value::int(ValueId(12)),
+        });
+        object_with_code(statements, vec![])
+    }
+
+    fn object_with_external_call(setup: Vec<Statement>, return_length: u64) -> Object {
+        use crate::ir::{CallKind, ValueId};
+        let mut statements = setup;
+        statements.push(literal(11, return_length));
+        statements.push(literal(12, 0));
+        statements.push(Statement::ExternalCall {
+            kind: CallKind::StaticCall,
+            gas: Value::int(ValueId(12)),
+            address: Value::int(ValueId(12)),
+            value: None,
+            args_offset: Value::int(ValueId(12)),
+            args_length: Value::int(ValueId(12)),
+            ret_offset: Value::int(ValueId(10)),
+            ret_length: Value::int(ValueId(11)),
+            result: ValueId(13),
+        });
+        object_with_code(statements, vec![])
+    }
+
+    #[test]
+    fn mcopy_onto_fmp_word_flags_unbounded() {
+        let results = object_with_mcopy(vec![literal(10, 0x40)], 0x20).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn mcopy_dynamic_destination_flags_unbounded() {
+        use crate::ir::ValueId;
+        let setup = vec![Statement::Let {
+            bindings: vec![ValueId(10)],
+            value: Expression::CallDataLoad {
+                offset: Value::int(ValueId(0)),
+            },
+        }];
+        let results = object_with_mcopy(setup, 0x20).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn external_call_return_onto_fmp_word_flags_unbounded() {
+        let results =
+            object_with_external_call(vec![literal(10, 0x40)], 0x20).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn external_call_zero_length_return_stays_bounded() {
+        use crate::ir::ValueId;
+        let setup = vec![Statement::Let {
+            bindings: vec![ValueId(10)],
+            value: Expression::CallDataLoad {
+                offset: Value::int(ValueId(0)),
+            },
+        }];
+        let results = object_with_external_call(setup, 0).analyze_heap(TEST_HEAP_SIZE);
+        assert!(!results.fmp_could_be_unbounded());
+    }
+
+    /// Binds `id` to `calldataload(0)`, a value the analysis cannot bound.
+    fn calldata_binding(id: u32) -> Statement {
+        use crate::ir::ValueId;
+        Statement::Let {
+            bindings: vec![ValueId(id)],
+            value: Expression::CallDataLoad {
+                offset: Value::int(ValueId(0)),
+            },
+        }
+    }
+
+    /// Binds `id` to `mload(0x40)`, using `id + 1` for the offset.
+    fn free_pointer_binding(id: u32) -> Vec<Statement> {
+        use crate::ir::ValueId;
+        vec![
+            literal(id + 1, 0x40),
+            Statement::Let {
+                bindings: vec![ValueId(id)],
+                value: Expression::MLoad {
+                    offset: Value::int(ValueId(id + 1)),
+                    region: MemoryRegion::FreePointerSlot,
+                },
+            },
+        ]
+    }
+
+    /// Builds `mcopy(destination, 0x80, 0x20)` using value IDs `first_id` and `first_id + 1`.
+    fn mcopy_word_to(destination: u32, first_id: u32) -> Vec<Statement> {
+        use crate::ir::ValueId;
+        vec![
+            literal(first_id, 0x80),
+            literal(first_id + 1, 0x20),
+            Statement::MCopy {
+                destination: Value::int(ValueId(destination)),
+                source: Value::int(ValueId(first_id)),
+                length: Value::int(ValueId(first_id + 1)),
+            },
+        ]
+    }
+
+    /// Builds an object with a function `copy_word(p)` that copies a word to `add(p, 0x20)`,
+    /// called once per value ID in `arguments` after `setup`.
+    fn object_with_copying_function(setup: Vec<Statement>, arguments: &[u32]) -> Object {
+        use crate::ir::{BinaryOperation, Function, FunctionId, Type, ValueId};
+        let mut function = Function::new(FunctionId(0), "copy_word".to_string());
+        function.parameters = vec![(ValueId(30), Type::default())];
+        let mut body = vec![
+            literal(31, 0x20),
+            Statement::Let {
+                bindings: vec![ValueId(32)],
+                value: Expression::Binary {
+                    operation: BinaryOperation::Add,
+                    lhs: Value::int(ValueId(30)),
+                    rhs: Value::int(ValueId(31)),
+                },
+            },
+        ];
+        body.extend(mcopy_word_to(32, 33));
+        function.body = Block { statements: body };
+        let mut statements = setup;
+        for argument in arguments {
+            statements.push(Statement::Expression(Expression::Call {
+                function: FunctionId(0),
+                arguments: vec![Value::int(ValueId(*argument))],
+            }));
+        }
+        object_with_code(statements, vec![function])
+    }
+
+    #[test]
+    fn mcopy_static_start_dynamic_length_below_fmp_word_flags_unbounded() {
+        use crate::ir::ValueId;
+        let statements = vec![
+            literal(10, 0),
+            literal(11, 0x80),
+            calldata_binding(12),
+            Statement::MCopy {
+                destination: Value::int(ValueId(10)),
+                source: Value::int(ValueId(11)),
+                length: Value::int(ValueId(12)),
+            },
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn external_call_static_return_start_dynamic_length_flags_unbounded() {
+        use crate::ir::{CallKind, ValueId};
+        let statements = vec![
+            literal(10, 0),
+            calldata_binding(11),
+            Statement::ExternalCall {
+                kind: CallKind::StaticCall,
+                gas: Value::int(ValueId(10)),
+                address: Value::int(ValueId(10)),
+                value: None,
+                args_offset: Value::int(ValueId(10)),
+                args_length: Value::int(ValueId(10)),
+                ret_offset: Value::int(ValueId(10)),
+                ret_length: Value::int(ValueId(11)),
+                result: ValueId(12),
+            },
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn mcopy_through_free_pointer_parameter_stays_bounded() {
+        let results = object_with_copying_function(free_pointer_binding(1), &[1])
+            .analyze_heap(TEST_HEAP_SIZE);
+        assert!(!results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn mcopy_through_parameter_with_untrusted_call_site_flags_unbounded() {
+        let mut setup = free_pointer_binding(1);
+        setup.push(calldata_binding(3));
+        let results = object_with_copying_function(setup, &[1, 3]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    /// Builds an object that copies a word to the result of `pick(mload(0x40))`, which returns
+    /// its parameter, or `calldataload(0)` through `leave` when `leave_untrusted` is set.
+    fn object_with_returned_destination(leave_untrusted: bool) -> Object {
+        use crate::ir::{Function, FunctionId, Region, Type, ValueId};
+        let mut function = Function::new(FunctionId(0), "pick".to_string());
+        function.parameters = vec![(ValueId(40), Type::default())];
+        function.returns = vec![Type::default()];
+        let mut body = Vec::new();
+        if leave_untrusted {
+            body.push(calldata_binding(41));
+            body.push(Statement::If {
+                condition: Value::int(ValueId(41)),
+                inputs: vec![],
+                then_region: Region {
+                    statements: vec![Statement::Leave {
+                        return_values: vec![Value::int(ValueId(41))],
+                    }],
+                    yields: vec![],
+                },
+                else_region: None,
+                outputs: vec![],
+            });
+        }
+        body.push(Statement::Let {
+            bindings: vec![ValueId(42)],
+            value: Expression::Var(ValueId(40)),
+        });
+        function.body = Block { statements: body };
+        function.return_values = vec![ValueId(42)];
+
+        let mut statements = free_pointer_binding(1);
+        statements.push(Statement::Let {
+            bindings: vec![ValueId(10)],
+            value: Expression::Call {
+                function: FunctionId(0),
+                arguments: vec![Value::int(ValueId(1))],
+            },
+        });
+        statements.extend(mcopy_word_to(10, 11));
+        object_with_code(statements, vec![function])
+    }
+
+    #[test]
+    fn mcopy_to_returned_free_pointer_stays_bounded() {
+        let results = object_with_returned_destination(false).analyze_heap(TEST_HEAP_SIZE);
+        assert!(!results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn mcopy_to_untrusted_leave_value_flags_unbounded() {
+        let results = object_with_returned_destination(true).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    /// Builds an object whose loop copies a word to a pointer that starts at `mload(0x40)` and
+    /// advances by `0x20`, or is replaced by `calldataload(0)` when `post_untrusted` is set.
+    fn object_with_loop_carried_destination(post_untrusted: bool) -> Object {
+        use crate::ir::{BinaryOperation, Region, ValueId};
+        let post_statement = if post_untrusted {
+            calldata_binding(64)
+        } else {
+            Statement::Let {
+                bindings: vec![ValueId(64)],
+                value: Expression::Binary {
+                    operation: BinaryOperation::Add,
+                    lhs: Value::int(ValueId(63)),
+                    rhs: Value::int(ValueId(62)),
+                },
+            }
+        };
+        let mut statements = free_pointer_binding(1);
+        statements.push(Statement::For {
+            initial_values: vec![Value::int(ValueId(1))],
+            loop_variables: vec![ValueId(60)],
+            condition_statements: vec![],
+            condition: Expression::CallDataLoad {
+                offset: Value::int(ValueId(0)),
+            },
+            body: Region {
+                statements: mcopy_word_to(60, 61),
+                yields: vec![Value::int(ValueId(60))],
+            },
+            post_input_variables: vec![ValueId(63)],
+            post: Region {
+                statements: vec![post_statement],
+                yields: vec![Value::int(ValueId(64))],
+            },
+            outputs: vec![ValueId(65)],
+        });
+        object_with_code(statements, vec![])
+    }
+
+    #[test]
+    fn mcopy_to_loop_carried_free_pointer_stays_bounded() {
+        let results = object_with_loop_carried_destination(false).analyze_heap(TEST_HEAP_SIZE);
+        assert!(!results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn mcopy_to_loop_carried_untrusted_pointer_flags_unbounded() {
+        let results = object_with_loop_carried_destination(true).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded());
     }
 
     /// Builds an object that stores the literal `pointer` to the FMP slot and reads it back.

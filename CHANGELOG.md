@@ -18,6 +18,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 - `--newyork`: Object code that fell off the end was not terminated with the implicit EVM return, so LLVM folded away the runtime dispatch and a call would have run the constructor. [#598](https://github.com/paritytech/revive/pull/598)
 - Yul objects carrying deploy code only, without a `_deployed` runtime sub-object, failed to compile with an LLVM IR verification error. [#597](https://github.com/paritytech/revive/pull/597)
 - `--newyork`: a memory offset carried by a loop counter resolved to its first iteration address on every iteration, leaving words written by later iterations eligible for native byte order, and a stale free memory pointer survived an unresolvable `mstore8`, or an unresolvable `mstore` inside a branch, loop, or called function. [#612](https://github.com/paritytech/revive/pull/612)
+- `--newyork`: `mcopy` and call returns overwriting the free memory pointer. [#613](https://github.com/paritytech/revive/pull/613)
 - `--newyork`: Fixed a constant folding bug (reproduced only with hand-crafted Yul input). [#618](https://github.com/paritytech/revive/pull/618)
 
 ## v1.4.0

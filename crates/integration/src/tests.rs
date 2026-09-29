@@ -5207,6 +5207,42 @@ fn fmp_staticcall_return_and_mcopy_straddle() {
     }
 }
 
+/// A copy or a call return from a static start below `0x60` with a dynamic length, or to a
+/// parameter or call result that one caller sets to `0x40`, overwrites the free memory pointer.
+#[test]
+fn copy_onto_fmp_word_through_dynamic_length_or_call() {
+    for name in [
+        "CopyFmpDynamicLength",
+        "CallReturnFmpDynamicLength",
+        "CopyFmpUntrustedParameter",
+        "CopyFmpUntrustedReturn",
+    ] {
+        run_fmp_word_fixture(name);
+    }
+}
+
+/// A copy whose length is a loop counter starting at `0` is not a zero-length copy.
+#[test]
+fn copy_onto_fmp_word_with_loop_counter_length() {
+    let mut data = vec![0xff; 32];
+    data.extend(U256::from(0x40).to_be_bytes::<32>());
+    for name in [
+        "CopyFmpLoopLengthDynamicDestination",
+        "CopyFmpLoopLengthStaticDestination",
+    ] {
+        let mut actions = instantiate_yul(&format!("contracts/{name}.yul"), name);
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: data.clone(),
+        });
+        run_differential(actions);
+    }
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so

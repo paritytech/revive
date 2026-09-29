@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-57ec751f.js";
+            window.path_to_searchindex_js = "../searchindex-42581ec6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-f74aae8e.js"></script>
@@ -927,7 +927,7 @@ let v4: i8 := and(v0, v3: i8)
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td><code>i256</code> — conservative; bits may shift into any width</td><td>Pure</td></tr>
+<tr><td>If <code>shift</code> is a known constant <code>k</code>: tier holding <code>min(width(value) + k, 256)</code> bits. Otherwise: <code>i256</code> — conservative; bits may shift into any width.</td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
@@ -962,7 +962,7 @@ let v4: i8 := and(v0, v3: i8)
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td>If <code>shift</code> is a known constant <code>k</code>: tier holding <code>256 - k</code> bits (or <code>i1</code> for <code>k ≥ 256</code>). Otherwise: <code>width(value)</code>.</td><td>Pure</td></tr>
+<tr><td>If <code>shift</code> is a known constant <code>k</code>: tier holding <code>width(value) - k</code> bits (or <code>i1</code> for <code>k ≥ width(value)</code>). Otherwise: <code>width(value)</code>.</td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
@@ -3299,12 +3299,13 @@ default {
 <p>(<code>Statement::For</code>)</p>
 <h4 id="description-84"><a class="header" href="#description-84">Description</a></h4>
 <p>Structured loop with explicit loop-carried variables. Each iteration evaluates <code>condition_statements</code> followed by <code>condition</code>; if the condition is non-zero, the <code>body</code> region runs, then the <code>post</code> region runs, and the loop iterates. Loop-carried variables are passed as SSA values through each region. <code>break</code> exits the loop and <code>continue</code> jumps to the post region.</p>
+<p>Type inference widens each loop-carried variable from every edge that reaches it: a loop variable from its initial value and the post yield, a post input from the body yield and every <code>continue</code>, an output from the loop variable and every <code>break</code>. It repeats this until nothing changes, so a counter incremented with <code>add</code> saturates at <code>i256</code>, while a variable that starts narrow and is masked back to that width every iteration stays narrow.</p>
 <h4 id="syntax-84"><a class="header" href="#syntax-84">Syntax</a></h4>
-<pre><code class="language-text">for { $variable_0 := $initial_0[, …] }
+<pre><code class="language-text">for { $variable_0[: &lt;type&gt;] := $initial_0[: &lt;type&gt;][, …] }
     [// condition statements:
         …]
     condition: $condition
-    post [($post_input_variable_0[, …])] {
+    post [($post_input_variable_0[: &lt;type&gt;][, …])] {
         …
     }
     body {
@@ -3353,7 +3354,7 @@ let v6 := for { v1 := v0: i1 }
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td>None for the statement form; one value per <code>outputs</code> binding for the value-yielding form</td><td>Effectful (control flow)</td></tr>
+<tr><td>None for the statement form; for the value-yielding form, one value per <code>outputs</code> binding, typed as the widest of the loop variable and every <code>break</code> value</td><td>Effectful (control flow)</td></tr>
 </tbody>
 </table>
 </div>

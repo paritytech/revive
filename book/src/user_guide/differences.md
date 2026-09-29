@@ -94,6 +94,10 @@ Only valid to use in EVM (they also have no use case in PVM) and produce a compi
 
 Related to the Ethereum rollup model and produce a compile time error. Polkadot offers a superior rollup model, removing the use case for blob data related opcodes.
 
+### `slotnum`
+
+Exposes the Ethereum beacon chain slot number ([EIP-7843](https://eips.ethereum.org/EIPS/eip-7843), `block.slotnum` in Solidity since `solc` v0.8.37 with the Amsterdam EVM version). There is no equivalent concept in `pallet-revive`, so it produces a compile time error.
+
 ## Difference regarding the `solc` `via-ir` mode
 
 There are two different compilation pipelines available in `solc` and [there are small differences between them](https://docs.soliditylang.org/en/latest/ir-breaking-changes.html).

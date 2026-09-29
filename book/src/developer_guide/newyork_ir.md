@@ -782,7 +782,7 @@ let v2 := shl(v0, v1)
 
 | Result | Purity |
 |---|---|
-| `i256` — conservative; bits may shift into any width | Pure |
+| If `shift` is a known constant `k`: tier holding `min(width(value) + k, 256)` bits. Otherwise: `i256` — conservative; bits may shift into any width. | Pure |
 
 #### Annotations
 
@@ -819,7 +819,7 @@ let v2 := shr(v0, v1)
 
 | Result | Purity |
 |---|---|
-| If `shift` is a known constant `k`: tier holding `256 - k` bits (or `i1` for `k ≥ 256`). Otherwise: `width(value)`. | Pure |
+| If `shift` is a known constant `k`: tier holding `width(value) - k` bits (or `i1` for `k ≥ width(value)`). Otherwise: `width(value)`. | Pure |
 
 #### Annotations
 
@@ -3395,14 +3395,16 @@ None.
 
 Structured loop with explicit loop-carried variables. Each iteration evaluates `condition_statements` followed by `condition`; if the condition is non-zero, the `body` region runs, then the `post` region runs, and the loop iterates. Loop-carried variables are passed as SSA values through each region. `break` exits the loop and `continue` jumps to the post region.
 
+Type inference widens each loop-carried variable from every edge that reaches it: a loop variable from its initial value and the post yield, a post input from the body yield and every `continue`, an output from the loop variable and every `break`. It repeats this until nothing changes, so a counter incremented with `add` saturates at `i256`, while a variable that starts narrow and is masked back to that width every iteration stays narrow.
+
 #### Syntax
 
 ```text
-for { $variable_0 := $initial_0[, …] }
+for { $variable_0[: <type>] := $initial_0[: <type>][, …] }
     [// condition statements:
         …]
     condition: $condition
-    post [($post_input_variable_0[, …])] {
+    post [($post_input_variable_0[: <type>][, …])] {
         …
     }
     body {
@@ -3447,7 +3449,7 @@ let v6 := for { v1 := v0: i1 }
 
 | Result | Purity |
 |---|---|
-| None for the statement form; one value per `outputs` binding for the value-yielding form | Effectful (control flow) |
+| None for the statement form; for the value-yielding form, one value per `outputs` binding, typed as the widest of the loop variable and every `break` value | Effectful (control flow) |
 
 #### Annotations
 

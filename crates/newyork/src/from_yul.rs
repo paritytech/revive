@@ -646,6 +646,7 @@ impl YulTranslator {
             FunctionName::Difficulty | FunctionName::Prevrandao => Ok(Expression::Difficulty),
             FunctionName::BaseFee => Ok(Expression::BaseFee),
             FunctionName::BlobBaseFee => Ok(Expression::BlobBaseFee),
+            FunctionName::SlotNum => Err(TranslationError::Unsupported("slotnum".to_string())),
             FunctionName::BlobHash => Ok(Expression::BlobHash {
                 index: arguments[0],
             }),
@@ -1629,6 +1630,28 @@ mod tests {
     #[test]
     fn test_parse_decimal_literal() {
         let _translator = YulTranslator::new();
+    }
+
+    /// `slotnum()` (EIP-7843, solc >= 0.8.37 with the Amsterdam EVM version) has no
+    /// counterpart in `pallet-revive`, so translation must reject it up front instead of
+    /// silently lowering it to some placeholder value.
+    #[test]
+    fn slotnum_is_rejected() {
+        let source = r#"
+object "Test" {
+    code {
+        sstore(0, slotnum())
+    }
+}
+"#;
+        let mut lexer = Lexer::new(source.to_owned());
+        let yul_object = YulObject::parse(&mut lexer, None).expect("the Yul object should parse");
+
+        match YulTranslator::new().translate_object(&yul_object) {
+            Err(TranslationError::Unsupported(name)) => assert_eq!(name, "slotnum"),
+            Err(other) => panic!("unexpected error: {other}"),
+            Ok(_) => panic!("slotnum must be rejected"),
+        }
     }
 
     /// Two functions named `f` in disjoint sibling blocks are distinct functions in Yul. They

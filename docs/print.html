@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-57ec751f.js";
+            window.path_to_searchindex_js = "searchindex-42581ec6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f74aae8e.js"></script>
@@ -493,6 +493,8 @@ Thus, <code>revive</code> is able to supply the expected code hash and construct
 <p>Only valid to use in EVM (they also have no use case in PVM) and produce a compile time error.</p>
 <h3 id="blobhash-blobbasefee"><a class="header" href="#blobhash-blobbasefee"><code>blobhash</code>, <code>blobbasefee</code></a></h3>
 <p>Related to the Ethereum rollup model and produce a compile time error. Polkadot offers a superior rollup model, removing the use case for blob data related opcodes.</p>
+<h3 id="slotnum"><a class="header" href="#slotnum"><code>slotnum</code></a></h3>
+<p>Exposes the Ethereum beacon chain slot number (<a href="https://eips.ethereum.org/EIPS/eip-7843">EIP-7843</a>, <code>block.slotnum</code> in Solidity since <code>solc</code> v0.8.37 with the Amsterdam EVM version). There is no equivalent concept in <code>pallet-revive</code>, so it produces a compile time error.</p>
 <h2 id="difference-regarding-the-solc-via-ir-mode"><a class="header" href="#difference-regarding-the-solc-via-ir-mode">Difference regarding the <code>solc</code> <code>via-ir</code> mode</a></h2>
 <p>There are two different compilation pipelines available in <code>solc</code> and <a href="https://docs.soliditylang.org/en/latest/ir-breaking-changes.html">there are small differences between them</a>.</p>
 <p>Since <code>resolc</code> processes the YUL IR, always assume the <code>solc</code> IR based codegen behavior for contracts compiled with the <code>revive</code> compiler.</p>
@@ -727,6 +729,7 @@ Yul AST ──────────► │                  newyork IR       
 <li><strong>Forward</strong>: computes minimum width from literal values and operation semantics (e.g., <code>add(I64, I8)</code> produces <code>I65</code>, rounded up to <code>I128</code>).</li>
 <li><strong>Backward use tracking</strong>: classifies each value’s uses into 9 context categories (<code>MemoryOffset</code>, <code>MemoryValue</code>, <code>StorageAccess</code>, <code>Comparison</code>, <code>Arithmetic</code>, <code>FunctionArg</code>, <code>FunctionReturn</code>, <code>ExternalCall</code>, <code>General</code>). All categories conservatively demand the full <code>I256</code> width by default; the categorization is what enables the interprocedural phase to selectively relax the demand for narrowed function arguments. Earlier versions narrowed directly from the use category, but that was unsound for memory offsets — <code>mload(2^128)</code> aliased to <code>mload(0)</code> because the bounds check ran on an already-truncated value (commit <code>ccca38df</code>).</li>
 <li><strong>Transparent demand propagation</strong>: for modular-arithmetic operations (<code>Add</code>, <code>Sub</code>, <code>Mul</code>, <code>And</code>, <code>Or</code>, <code>Xor</code>), propagates narrow demands backward through operands, exploiting the property that <code>trunc(op(a,b), N) == op(trunc(a,N), trunc(b,N))</code>.</li>
+<li><strong>Loop-carried join</strong>: a <code>for</code> loop joins the forward widths of every control edge reaching its phis — initializers and post yields for the loop variables, body yields and <code>continue</code> values for the post-region inputs, loop variables and <code>break</code> values for the outputs. Codegen builds the matching phi at that width, so a hash round written with <code>uint32</code> locals keeps its working variables 32-bit through the loop instead of being forced to <code>I256</code>.</li>
 <li><strong>Interprocedural</strong>: iteratively narrows function parameter and return types in up to four rounds, combining four narrowing strategies — body-driven parameter narrowing, caller-driven parameter narrowing, forward-based return narrowing, and demand-based return narrowing — and re-running full inference between rounds. Parameters are clamped to at least <code>I32</code> (XLEN on PolkaVM).</li>
 </ul>
 <p>This allows LLVM to emit native 32/64-bit instructions instead of software-emulated 256-bit arithmetic, and eliminates expensive multi-instruction comparison sequences (16-20 RISC-V instructions for i256 comparisons reduced to 1-2 for i64).</p>
@@ -920,7 +923,7 @@ can observe it.</p>
 <li><strong>Adaptive inlining thresholds</strong>: Current thresholds are static constants. Profile-guided or contract-size-aware heuristics could improve decisions for diverse contract sizes.</li>
 <li><strong>Extended fuzzy deduplication</strong>: The current pass only parameterizes literals in <code>Let</code> bindings and <code>SStore</code> slots. Extending it to consider literals inside <code>MStore</code>, <code>Return</code>, <code>Revert</code>, and <code>Log</code> statements would find more deduplication opportunities.</li>
 <li><strong>Type checking in validation</strong>: The validator checks SSA well-formedness and structure, but not operation type consistency. Type discipline is maintained by construction (type inference and codegen), with LLVM’s IR verifier as the backstop.</li>
-<li><strong>Loop variable narrowing</strong>: Loop-carried variables are conservatively widened to <code>I256</code>. Reaching a fixed-point across loop iterations could allow narrower types for simple counters.</li>
+<li><strong>Loop counter range narrowing</strong>: Loop-carried variables take the join of every control edge reaching them, so masked working variables narrow, but a self-incrementing counter still saturates at <code>I256</code> because <code>add</code> widens by one level per round. Narrowing a bounded counter needs a range argument that the width lattice cannot express.</li>
 <li><strong>Functions with <code>leave</code> inside a <code>for</code> loop are not inlined</strong>: the IR-level inliner defers such functions to LLVM’s inliner, so they miss the interprocedural constant propagation and width narrowing the IR-level pass provides.</li>
 </ul>
 <h2 id="debug-output"><a class="header" href="#debug-output">Debug output</a></h2>
@@ -1716,7 +1719,7 @@ let v4: i8 := and(v0, v3: i8)
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td><code>i256</code> — conservative; bits may shift into any width</td><td>Pure</td></tr>
+<tr><td>If <code>shift</code> is a known constant <code>k</code>: tier holding <code>min(width(value) + k, 256)</code> bits. Otherwise: <code>i256</code> — conservative; bits may shift into any width.</td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
@@ -1751,7 +1754,7 @@ let v4: i8 := and(v0, v3: i8)
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td>If <code>shift</code> is a known constant <code>k</code>: tier holding <code>256 - k</code> bits (or <code>i1</code> for <code>k ≥ 256</code>). Otherwise: <code>width(value)</code>.</td><td>Pure</td></tr>
+<tr><td>If <code>shift</code> is a known constant <code>k</code>: tier holding <code>width(value) - k</code> bits (or <code>i1</code> for <code>k ≥ width(value)</code>). Otherwise: <code>width(value)</code>.</td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
@@ -4088,12 +4091,13 @@ default {
 <p>(<code>Statement::For</code>)</p>
 <h4 id="description-84"><a class="header" href="#description-84">Description</a></h4>
 <p>Structured loop with explicit loop-carried variables. Each iteration evaluates <code>condition_statements</code> followed by <code>condition</code>; if the condition is non-zero, the <code>body</code> region runs, then the <code>post</code> region runs, and the loop iterates. Loop-carried variables are passed as SSA values through each region. <code>break</code> exits the loop and <code>continue</code> jumps to the post region.</p>
+<p>Type inference widens each loop-carried variable from every edge that reaches it: a loop variable from its initial value and the post yield, a post input from the body yield and every <code>continue</code>, an output from the loop variable and every <code>break</code>. It repeats this until nothing changes, so a counter incremented with <code>add</code> saturates at <code>i256</code>, while a variable that starts narrow and is masked back to that width every iteration stays narrow.</p>
 <h4 id="syntax-84"><a class="header" href="#syntax-84">Syntax</a></h4>
-<pre><code class="language-text">for { $variable_0 := $initial_0[, …] }
+<pre><code class="language-text">for { $variable_0[: &lt;type&gt;] := $initial_0[: &lt;type&gt;][, …] }
     [// condition statements:
         …]
     condition: $condition
-    post [($post_input_variable_0[, …])] {
+    post [($post_input_variable_0[: &lt;type&gt;][, …])] {
         …
     }
     body {
@@ -4142,7 +4146,7 @@ let v6 := for { v1 := v0: i1 }
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td>None for the statement form; one value per <code>outputs</code> binding for the value-yielding form</td><td>Effectful (control flow)</td></tr>
+<tr><td>None for the statement form; for the value-yielding form, one value per <code>outputs</code> binding, typed as the widest of the loop variable and every <code>break</code> value</td><td>Effectful (control flow)</td></tr>
 </tbody>
 </table>
 </div>

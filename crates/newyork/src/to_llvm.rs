@@ -15,8 +15,9 @@ use revive_llvm_context::{
 
 use crate::heap_opt::HeapOptResults;
 use crate::ir::{
-    BinaryOperation, BitWidth, Block, CallKind, CreateKind, Expression, Function, FunctionId,
-    MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value, ValueId,
+    for_each_statement, BinaryOperation, BitWidth, Block, CallKind, CreateKind, Expression,
+    Function, FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type,
+    UnaryOperation, Value, ValueId,
 };
 use crate::type_inference::TypeInference;
 
@@ -774,22 +775,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         value: IntValue<'ctx>,
         name: &str,
     ) -> Result<IntValue<'ctx>> {
-        let value_width = value.get_type().get_bit_width();
-        let word_width = context.word_type().get_bit_width();
-
-        if value_width == word_width {
-            Ok(value)
-        } else if value_width < word_width {
-            context
-                .builder()
-                .build_int_z_extend(value, context.word_type(), name)
-                .map_err(|error| CodegenError::Llvm(error.to_string()))
-        } else {
-            context
-                .builder()
-                .build_int_truncate(value, context.word_type(), name)
-                .map_err(|error| CodegenError::Llvm(error.to_string()))
-        }
+        self.ensure_exact_width(context, value, context.word_type().get_bit_width(), name)
     }
 
     /// Ensures two values have the same type by extending the narrower one.
@@ -801,24 +787,14 @@ impl<'ctx> LlvmCodegen<'ctx> {
         second: IntValue<'ctx>,
         name: &str,
     ) -> Result<(IntValue<'ctx>, IntValue<'ctx>)> {
-        let first_width = first.get_type().get_bit_width();
-        let second_width = second.get_type().get_bit_width();
-
-        if first_width == second_width {
-            Ok((first, second))
-        } else if first_width > second_width {
-            let second_extended = context
-                .builder()
-                .build_int_z_extend(second, first.get_type(), &format!("{}_ext_b", name))
-                .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-            Ok((first, second_extended))
-        } else {
-            let first_extended = context
-                .builder()
-                .build_int_z_extend(first, second.get_type(), &format!("{}_ext_a", name))
-                .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-            Ok((first_extended, second))
-        }
+        let target_bits = first
+            .get_type()
+            .get_bit_width()
+            .max(second.get_type().get_bit_width());
+        Ok((
+            self.ensure_exact_width(context, first, target_bits, &format!("{}_ext_a", name))?,
+            self.ensure_exact_width(context, second, target_bits, &format!("{}_ext_b", name))?,
+        ))
     }
 
     /// Ensures both operands are extended to at least the given minimum width.
@@ -3177,284 +3153,85 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(())
     }
 
-    /// Find callvalue ValueIds that are ONLY used as conditions in
-    /// `if callvalue() { revert(0,0) }` or If condition patterns.
-    /// These can be skipped during codegen because __revive_callvalue_check()
-    /// and __revive_callvalue_nonzero() handle reading callvalue internally.
+    /// Find callvalue [`ValueId`]s whose every use is a [`Statement::If`] condition.
+    /// Their `let vN = callvalue()` bindings can be skipped during codegen
+    /// because `__revive_callvalue_check()` and `__revive_callvalue_nonzero()`
+    /// read callvalue internally when emitting those conditions.
+    ///
+    /// Uses are counted with [`Statement::for_each_value_id`] — the canonical
+    /// walker, which visits every operand position including region yields —
+    /// and compared against the count of [`Statement::If`]-condition uses gathered over the
+    /// same statements. The two walks cover the identical statement set, so a
+    /// binding is skippable exactly when the counts match. Any other use — a
+    /// region yield, a call argument, a store operand — reads the materialized
+    /// value, so the binding must stay (see paritytech/revive#588, where a
+    /// switch case yielding a bare callvalue binding was skipped and codegen
+    /// hit an undefined value).
+    ///
+    /// [`Function::return_values`] is counted on top of the statement walk: a return
+    /// variable is recorded on the function itself rather than in its body, yet
+    /// [`Self::generate_function`] reads it back when writing the return slot. A binding
+    /// reaching the slot on the fall-through path has no statement use at all, so without
+    /// this the counts match trivially and the binding is skipped, leaving the function to
+    /// hand back the zero its return slot was seeded with. Explicit `leave`s need no such
+    /// handling because [`Statement::Leave`] carries its values as operands.
     fn find_dead_callvalue_ids(object: &Object) -> BTreeSet<u32> {
         let mut callvalue_ids = BTreeSet::new();
-        let mut used_ids = BTreeSet::new();
-
         Self::find_callvalue_bindings(&object.code.statements, &mut callvalue_ids);
         for function in object.functions.values() {
             Self::find_callvalue_bindings(&function.body.statements, &mut callvalue_ids);
         }
 
-        Self::find_value_uses(&object.code.statements, &callvalue_ids, &mut used_ids);
+        let mut use_counts: BTreeMap<u32, usize> = BTreeMap::new();
+        let mut condition_counts: BTreeMap<u32, usize> = BTreeMap::new();
+        let mut count_uses = |statements: &[Statement]| {
+            for statement in statements {
+                statement.for_each_value_id(&mut |id| {
+                    if callvalue_ids.contains(&id.0) {
+                        *use_counts.entry(id.0).or_default() += 1;
+                    }
+                });
+            }
+            for_each_statement(statements, &mut |statement| {
+                if let Statement::If { condition, .. } = statement {
+                    if callvalue_ids.contains(&condition.id.0) {
+                        *condition_counts.entry(condition.id.0).or_default() += 1;
+                    }
+                }
+            });
+        };
+        count_uses(&object.code.statements);
         for function in object.functions.values() {
-            Self::find_value_uses(&function.body.statements, &callvalue_ids, &mut used_ids);
+            count_uses(&function.body.statements);
         }
 
-        callvalue_ids.difference(&used_ids).copied().collect()
+        for function in object.functions.values() {
+            for return_value_id in &function.return_values {
+                if callvalue_ids.contains(&return_value_id.0) {
+                    *use_counts.entry(return_value_id.0).or_default() += 1;
+                }
+            }
+        }
+
+        callvalue_ids
+            .iter()
+            .filter(|id| {
+                use_counts.get(id).copied().unwrap_or(0)
+                    == condition_counts.get(id).copied().unwrap_or(0)
+            })
+            .copied()
+            .collect()
     }
 
+    /// Collects the ValueIds bound by `let vN = callvalue()` statements.
     fn find_callvalue_bindings(statements: &[Statement], ids: &mut BTreeSet<u32>) {
-        for statement in statements {
+        for_each_statement(statements, &mut |statement| {
             if let Statement::Let { bindings, value } = statement {
                 if bindings.len() == 1 && matches!(value, Expression::CallValue) {
                     ids.insert(bindings[0].0);
                 }
             }
-            Self::for_each_nested_region(statement, |region_statements| {
-                Self::find_callvalue_bindings(region_statements, ids);
-            });
-        }
-    }
-
-    /// Find uses of callvalue IDs in non-condition positions.
-    /// If conditions are OK (handled by callvalue_nonzero); everything else is "used".
-    fn find_value_uses(
-        statements: &[Statement],
-        callvalue_ids: &BTreeSet<u32>,
-        used: &mut BTreeSet<u32>,
-    ) {
-        for statement in statements {
-            match statement {
-                Statement::Let { value, .. } | Statement::Expression(value) => {
-                    Self::collect_expr_value_refs(value, callvalue_ids, used);
-                }
-                Statement::MStore { offset, value, .. }
-                | Statement::MStore8 { offset, value, .. } => {
-                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
-                }
-                Statement::SStore { key, value, .. } | Statement::TStore { key, value } => {
-                    Self::mark_if_callvalue(key.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
-                }
-                Statement::If { inputs, .. } => {
-                    for operand in inputs {
-                        Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::Switch {
-                    scrutinee, inputs, ..
-                } => {
-                    Self::mark_if_callvalue(scrutinee.id.0, callvalue_ids, used);
-                    for operand in inputs {
-                        Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::Revert { offset, length } | Statement::Return { offset, length } => {
-                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-                }
-                Statement::Log {
-                    offset,
-                    length,
-                    topics,
-                } => {
-                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-                    for topic in topics {
-                        Self::mark_if_callvalue(topic.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::ExternalCall {
-                    gas,
-                    address,
-                    value,
-                    args_offset,
-                    args_length,
-                    ret_offset,
-                    ret_length,
-                    ..
-                } => {
-                    Self::mark_if_callvalue(gas.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(address.id.0, callvalue_ids, used);
-                    if let Some(operand) = value {
-                        Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-                    }
-                    Self::mark_if_callvalue(args_offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(args_length.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(ret_offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(ret_length.id.0, callvalue_ids, used);
-                }
-                Statement::Create {
-                    value,
-                    offset,
-                    length,
-                    salt,
-                    ..
-                } => {
-                    Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-                    if let Some(salt_value) = salt {
-                        Self::mark_if_callvalue(salt_value.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::CustomErrorRevert { arguments, .. } => {
-                    for argument in arguments {
-                        Self::mark_if_callvalue(argument.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::Leave { return_values } => {
-                    for operand in return_values {
-                        Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::Break { values } | Statement::Continue { values } => {
-                    for operand in values {
-                        Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-                    }
-                }
-                Statement::For {
-                    initial_values,
-                    condition,
-                    ..
-                } => {
-                    for operand in initial_values {
-                        Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-                    }
-                    Self::collect_expr_value_refs(condition, callvalue_ids, used);
-                }
-                Statement::MCopy {
-                    destination,
-                    source,
-                    length,
-                } => {
-                    Self::mark_if_callvalue(destination.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(source.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-                }
-                Statement::SelfDestruct { address } => {
-                    Self::mark_if_callvalue(address.id.0, callvalue_ids, used);
-                }
-                Statement::CodeCopy {
-                    destination,
-                    offset,
-                    length,
-                } => {
-                    Self::mark_if_callvalue(destination.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-                }
-                Statement::ExtCodeCopy {
-                    address,
-                    destination,
-                    offset,
-                    length,
-                } => {
-                    Self::mark_if_callvalue(address.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(destination.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-                }
-                Statement::MappingSStore { key, slot, value } => {
-                    Self::mark_if_callvalue(key.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(slot.id.0, callvalue_ids, used);
-                    Self::mark_if_callvalue(value.id.0, callvalue_ids, used);
-                }
-                _ => {}
-            }
-            Self::for_each_nested_region(statement, |region_statements| {
-                Self::find_value_uses(region_statements, callvalue_ids, used);
-            });
-        }
-    }
-
-    fn mark_if_callvalue(id: u32, callvalue_ids: &BTreeSet<u32>, used: &mut BTreeSet<u32>) {
-        if callvalue_ids.contains(&id) {
-            used.insert(id);
-        }
-    }
-
-    fn collect_expr_value_refs(
-        expression: &Expression,
-        callvalue_ids: &BTreeSet<u32>,
-        used: &mut BTreeSet<u32>,
-    ) {
-        match expression {
-            Expression::Var(variable_id) => {
-                Self::mark_if_callvalue(variable_id.0, callvalue_ids, used)
-            }
-            Expression::Binary { lhs, rhs, .. } => {
-                Self::mark_if_callvalue(lhs.id.0, callvalue_ids, used);
-                Self::mark_if_callvalue(rhs.id.0, callvalue_ids, used);
-            }
-            Expression::Unary { operand, .. }
-            | Expression::Truncate { value: operand, .. }
-            | Expression::ZeroExtend { value: operand, .. }
-            | Expression::SignExtendTo { value: operand, .. } => {
-                Self::mark_if_callvalue(operand.id.0, callvalue_ids, used);
-            }
-            Expression::Call { arguments, .. } => {
-                for argument in arguments {
-                    Self::mark_if_callvalue(argument.id.0, callvalue_ids, used);
-                }
-            }
-            Expression::Keccak256 { offset, length }
-            | Expression::Keccak256Pair {
-                word0: offset,
-                word1: length,
-            }
-            | Expression::MappingSLoad {
-                key: offset,
-                slot: length,
-            } => {
-                Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-                Self::mark_if_callvalue(length.id.0, callvalue_ids, used);
-            }
-            Expression::Keccak256Single { word0 } => {
-                Self::mark_if_callvalue(word0.id.0, callvalue_ids, used);
-            }
-            Expression::CallDataLoad { offset } => {
-                Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-            }
-            Expression::MLoad { offset, .. } => {
-                Self::mark_if_callvalue(offset.id.0, callvalue_ids, used);
-            }
-            _ => {}
-        }
-    }
-
-    /// Call a closure for each nested region's statements in a statement.
-    fn for_each_nested_region<F: FnMut(&[Statement])>(statement: &Statement, mut callback: F) {
-        match statement {
-            Statement::If {
-                then_region,
-                else_region,
-                ..
-            } => {
-                callback(&then_region.statements);
-                if let Some(region) = else_region {
-                    callback(&region.statements);
-                }
-            }
-            Statement::Switch { cases, default, .. } => {
-                for case in cases {
-                    callback(&case.body.statements);
-                }
-                if let Some(default_region) = default {
-                    callback(&default_region.statements);
-                }
-            }
-            Statement::For {
-                condition_statements,
-                body,
-                post,
-                ..
-            } => {
-                callback(condition_statements);
-                callback(&body.statements);
-                callback(&post.statements);
-            }
-            Statement::Block(region) => {
-                callback(&region.statements);
-            }
-            _ => {}
-        }
+        });
     }
 
     /// Counts MappingSLoad and MappingSStore operations separately in an object.
@@ -3547,7 +3324,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// bytes in body overhead, so we only emit it when there are enough
     /// call sites to amortise that cost (per-site savings are ~3 inst).
     fn count_constant_mstore_patterns(object: &Object) -> (usize, usize) {
-        use crate::ir::for_each_statement;
         use num::Zero;
 
         let mut literals: BTreeMap<u32, num::BigUint> = BTreeMap::new();
@@ -3694,6 +3470,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         self.generate_block(&object.code, context)?;
+
+        // The EVM lets the code return implicitly.
+        revive_llvm_context::polkavm_evm_return::stop(context)
+            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
 
         context
             .set_debug_location(0, 0, None)
@@ -4269,10 +4049,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(())
     }
 
-    /// Binds each loop variable to its phi node at full width.
+    /// Binds each loop variable to its phi node.
     ///
-    /// Loop variables are deliberately NOT narrowed. Narrowing the counter (e.g. on
-    /// `non_comparison_demand`, which excludes the loop condition) would let a wide-stride counter
+    /// The phi carries the variable's forward-inferred width, which joins every control edge
+    /// reaching it. A backward demand must never be used here since narrowing the counter on
+    /// `non_comparison_demand` (which excludes the loop condition) would let a wide-stride counter
     /// wrap at the narrow width while the EVM comparison and increment stay 256-bit. Body sites still
     /// narrow at their own use points.
     fn bind_loop_variables(
@@ -4984,9 +4765,13 @@ impl<'ctx> LlvmCodegen<'ctx> {
             } => {
                 let mut initial_llvm_values: Vec<BasicValueEnum<'ctx>> = Vec::new();
                 for (index, initial_value) in initial_values.iter().enumerate() {
-                    initial_llvm_values.push(self.translate_value_as_word(
+                    let target_bits = self
+                        .loop_phi_type(context, loop_variables.get(index))
+                        .get_bit_width();
+                    initial_llvm_values.push(self.translate_value_at_width(
                         initial_value,
                         context,
+                        target_bits,
                         &format!("for_init_{}", index),
                     )?);
                 }
@@ -5003,10 +4788,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 let mut loop_phis: Vec<inkwell::values::PhiValue<'ctx>> = Vec::new();
                 let mut loop_phi_values: Vec<BasicValueEnum<'ctx>> = Vec::new();
-                for (index, _loop_variable) in loop_variables.iter().enumerate() {
+                for (index, loop_variable) in loop_variables.iter().enumerate() {
+                    let phi_type = self.loop_phi_type(context, Some(loop_variable));
                     let phi = context
                         .builder()
-                        .build_phi(context.word_type(), &format!("loop_var_{}", index))
+                        .build_phi(phi_type, &format!("loop_var_{}", index))
                         .map_err(|error| CodegenError::Llvm(error.to_string()))?;
 
                     if index < initial_llvm_values.len() {
@@ -5044,20 +4830,31 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let has_loop_variables = !loop_variables.is_empty();
                 if has_loop_variables {
                     for index in 0..loop_variables.len() {
+                        let phi_type = self.loop_phi_type(context, outputs.get(index));
                         let phi = context
                             .builder()
-                            .build_phi(context.word_type(), &format!("join_phi_{}", index))
+                            .build_phi(phi_type, &format!("join_phi_{}", index))
                             .map_err(|error| CodegenError::Llvm(error.to_string()))?;
                         join_phis.push(phi);
                     }
                 }
 
                 context.set_basic_block(condition_eval_block);
+                let mut loop_exit_values: Vec<BasicValueEnum<'ctx>> = Vec::new();
+                for (index, phi) in join_phis.iter().enumerate() {
+                    loop_exit_values.push(
+                        self.ensure_exact_width(
+                            context,
+                            loop_phi_values[index].into_int_value(),
+                            Self::phi_bit_width(phi),
+                            &format!("for_exit_{}", index),
+                        )?
+                        .as_basic_value_enum(),
+                    );
+                }
                 context.build_conditional_branch(condition_bool, body_block, join_block)?;
-                if has_loop_variables {
-                    for (index, phi) in join_phis.iter().enumerate() {
-                        phi.add_incoming(&[(&loop_phi_values[index], condition_eval_block)]);
-                    }
+                for (phi, exit_value) in join_phis.iter().zip(loop_exit_values.iter()) {
+                    phi.add_incoming(&[(exit_value, condition_eval_block)]);
                 }
 
                 context.set_basic_block(continue_landing);
@@ -5065,9 +4862,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let has_body_yields = !body.yields.is_empty();
                 if has_body_yields {
                     for index in 0..body.yields.len() {
+                        let phi_type = self.loop_phi_type(context, post_input_variables.get(index));
                         let phi = context
                             .builder()
-                            .build_phi(context.word_type(), &format!("continue_landing_{}", index))
+                            .build_phi(phi_type, &format!("continue_landing_{}", index))
                             .map_err(|error| CodegenError::Llvm(error.to_string()))?;
                         landing_phis.push(phi);
                     }
@@ -5093,9 +4891,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let mut body_yield_values: Vec<inkwell::values::BasicValueEnum<'ctx>> = Vec::new();
                 if has_body_yields {
                     for (index, yield_ref) in body.yields.iter().enumerate() {
-                        let yield_value = self.translate_value_as_word(
+                        let yield_value = self.translate_value_for_phi(
                             yield_ref,
                             context,
+                            &landing_phis[index],
                             &format!("body_yield_{}", index),
                         )?;
                         body_yield_values.push(yield_value.as_basic_value_enum());
@@ -5126,9 +4925,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 let post_end_block = context.basic_block();
                 for (index, phi) in loop_phis.iter().enumerate() {
                     if index < post.yields.len() {
-                        let yield_value = self.translate_value_as_word(
+                        let yield_value = self.translate_value_for_phi(
                             &post.yields[index],
                             context,
+                            phi,
                             &format!("for_post_yield_{}", index),
                         )?;
                         phi.add_incoming(&[(&yield_value, post_end_block)]);
@@ -5160,14 +4960,20 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     let current_block = context.basic_block();
                     for (index, phi) in break_phis.phis.iter().enumerate() {
                         let value = if index < values.len() {
-                            self.translate_value_as_word(
+                            self.translate_value_for_phi(
                                 &values[index],
                                 context,
+                                phi,
                                 &format!("break_val_{}", index),
                             )?
-                            .as_basic_value_enum()
                         } else {
-                            break_phis.loop_variable_phi_values[index]
+                            self.ensure_exact_width(
+                                context,
+                                break_phis.loop_variable_phi_values[index].into_int_value(),
+                                Self::phi_bit_width(phi),
+                                &format!("break_var_{}", index),
+                            )?
+                            .as_basic_value_enum()
                         };
                         phi.add_incoming(&[(&value, current_block)]);
                     }
@@ -5184,14 +4990,20 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     let current_block = context.basic_block();
                     for (index, phi) in post_phis.phis.iter().enumerate() {
                         let value = if index < values.len() {
-                            self.translate_value_as_word(
+                            self.translate_value_for_phi(
                                 &values[index],
                                 context,
+                                phi,
                                 &format!("continue_val_{}", index),
                             )?
-                            .as_basic_value_enum()
                         } else {
-                            post_phis.loop_variable_phi_values[index]
+                            self.ensure_exact_width(
+                                context,
+                                post_phis.loop_variable_phi_values[index].into_int_value(),
+                                Self::phi_bit_width(phi),
+                                &format!("continue_var_{}", index),
+                            )?
+                            .as_basic_value_enum()
                         };
                         phi.add_incoming(&[(&value, current_block)]);
                     }
@@ -6225,31 +6037,29 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     }
 
                     BinaryOperation::Shl => {
-                        if let Some(db) = demand_bits {
-                            if db <= 64 {
-                                if let Some(shift) = Self::try_get_small_constant(lhs_value) {
-                                    if shift >= 64 {
-                                        let i64_type = context.llvm().i64_type();
-                                        return Ok(i64_type.const_zero().as_basic_value_enum());
-                                    }
-                                    let rhs_narrow = self.ensure_exact_width(
-                                        context,
-                                        rhs_value,
-                                        64,
-                                        "dnshl_val",
-                                    )?;
-                                    let lhs_narrow = self.ensure_exact_width(
-                                        context,
-                                        lhs_value,
-                                        64,
-                                        "dnshl_amt",
-                                    )?;
-                                    let result = context
-                                        .builder()
-                                        .build_left_shift(rhs_narrow, lhs_narrow, "shl_dn")
-                                        .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-                                    return Ok(result.as_basic_value_enum());
+                        if let Some(shift) = Self::try_get_small_constant(lhs_value) {
+                            // The result is below 2^(operand width + shift), so a 64-bit shift is
+                            // exact whenever that bound fits in 64 bits. When it does not, a demand
+                            // of at most 64 bits still makes the low 64 bits exact, and those are
+                            // the only bits the consumer reads.
+                            let result_fits_i64 = u64::from(self.inferred_width(rhs.id).bits())
+                                .saturating_add(shift)
+                                <= 64;
+                            let low_bits_demanded = demand_bits.is_some_and(|bits| bits <= 64);
+                            if result_fits_i64 || low_bits_demanded {
+                                if shift >= 64 {
+                                    let i64_type = context.llvm().i64_type();
+                                    return Ok(i64_type.const_zero().as_basic_value_enum());
                                 }
+                                let rhs_narrow =
+                                    self.ensure_exact_width(context, rhs_value, 64, "dnshl_val")?;
+                                let lhs_narrow =
+                                    self.ensure_exact_width(context, lhs_value, 64, "dnshl_amt")?;
+                                let result = context
+                                    .builder()
+                                    .build_left_shift(rhs_narrow, lhs_narrow, "shl_dn")
+                                    .map_err(|error| CodegenError::Llvm(error.to_string()))?;
+                                return Ok(result.as_basic_value_enum());
                             }
                         }
                         let lhs_value = self.ensure_word_type(context, lhs_value, "binop_lhs")?;
@@ -7013,7 +6823,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// Generates a signed comparison (`slt`/`sgt`) at full word width.
     ///
     /// Signed comparisons must run at full width. A narrowed operand is
-    /// provably non-negative (newyork never narrows signed values), so a set
+    /// provably non-negative (its inferred width bounds its magnitude), so a set
     /// top bit at the narrow width is not a sign bit — comparing at that width
     /// misreads it as negative (e.g. 1 in i1 is -1, 0xC8 in i8 is -56), which
     /// diverges from EVM's 256-bit signed comparison. Both operands are
@@ -7139,6 +6949,44 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
     }
 
+    /// Returns the type of a loop phi: the inferred width of the variable it binds.
+    ///
+    /// Building the phi at the inferred width instead of the 256-bit word is what lets the
+    /// loop-carried join reach the emitted code. Positions with no variable (a loop carrying more
+    /// phis than variables) keep the word type, since nothing reads them.
+    fn loop_phi_type(
+        &self,
+        context: &PolkaVMContext<'ctx>,
+        variable: Option<&ValueId>,
+    ) -> inkwell::types::IntType<'ctx> {
+        match variable {
+            Some(variable) => context.integer_type(self.inferred_width(*variable).bits() as usize),
+            None => context.word_type(),
+        }
+    }
+
+    /// Returns the bit width of a phi, the width every incoming edge is adjusted to.
+    ///
+    /// Truncating an incoming value to it is sound when the phi is built at the
+    /// forward-inferred magnitude bound of the variable it carries, as the loop phis are.
+    fn phi_bit_width(phi: &inkwell::values::PhiValue<'ctx>) -> u32 {
+        phi.as_basic_value()
+            .get_type()
+            .into_int_type()
+            .get_bit_width()
+    }
+
+    /// Translates a value and adjusts it to the exact type of the phi it feeds.
+    fn translate_value_for_phi(
+        &self,
+        value: &Value,
+        context: &PolkaVMContext<'ctx>,
+        phi: &inkwell::values::PhiValue<'ctx>,
+        name: &str,
+    ) -> Result<BasicValueEnum<'ctx>> {
+        self.translate_value_at_width(value, context, Self::phi_bit_width(phi), name)
+    }
+
     /// Translates a value and ensures it's word type.
     /// Used for phi nodes and other operations requiring consistent types.
     fn translate_value_as_word(
@@ -7147,11 +6995,22 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context: &PolkaVMContext<'ctx>,
         name: &str,
     ) -> Result<BasicValueEnum<'ctx>> {
+        self.translate_value_at_width(value, context, context.word_type().get_bit_width(), name)
+    }
+
+    /// Translates a value and adjusts it to an exact bit width.
+    fn translate_value_at_width(
+        &self,
+        value: &Value,
+        context: &PolkaVMContext<'ctx>,
+        target_bits: u32,
+        name: &str,
+    ) -> Result<BasicValueEnum<'ctx>> {
         let llvm_value = self.translate_value(value)?;
         if llvm_value.is_int_value() {
             let integer_value = llvm_value.into_int_value();
             Ok(self
-                .ensure_word_type(context, integer_value, name)?
+                .ensure_exact_width(context, integer_value, target_bits, name)?
                 .as_basic_value_enum())
         } else {
             Ok(llvm_value)

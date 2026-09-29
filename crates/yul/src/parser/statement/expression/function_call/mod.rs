@@ -959,6 +959,12 @@ impl FunctionCall {
                     location
                 );
             }
+            Name::SlotNum => {
+                anyhow::bail!(
+                    "{} The `SLOTNUM` instruction is not supported in revive",
+                    location
+                );
+            }
             Name::MSize => revive_llvm_context::polkavm_evm_memory::msize(context).map(Some),
 
             Name::Verbatim {

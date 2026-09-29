@@ -88,13 +88,16 @@ pub struct TranslationResult {
 /// use revive_yul::parser::statement::object::Object;
 ///
 /// let yul_object: Object = /* parse yul */;
-/// let result = translate_yul_object(&yul_object, false)?;
+/// let result = translate_yul_object(&yul_object, false, 131072)?;
 /// let ir_object = result.object;
 /// let heap_opt = result.heap_opt;
 /// ```
+///
+/// `heap_size` is the configured EVM heap size in bytes.
 pub fn translate_yul_object(
     yul_object: &revive_yul::parser::statement::object::Object,
     capture_ir_snapshot: bool,
+    heap_size: u64,
 ) -> Result<TranslationResult, TranslationError> {
     let mut translator = YulTranslator::new();
     let mut ir_object = translator.translate_object(yul_object)?;
@@ -110,8 +113,9 @@ pub fn translate_yul_object(
 
     let type_info = run_late_inline_loop(&mut ir_object, &mut inline_results, type_info);
 
-    let heap_opt = ir_object.analyze_heap();
-    let (type_info, heap_opt) = reinfer_for_unbounded_fmp(&mut ir_object, type_info, heap_opt);
+    let heap_opt = ir_object.analyze_heap(heap_size);
+    let (type_info, heap_opt) =
+        reinfer_for_unbounded_fmp(&mut ir_object, type_info, heap_opt, heap_size);
 
     if let Err(errors) = validate::validate_object(&ir_object) {
         let details = errors
@@ -209,6 +213,7 @@ fn reinfer_for_unbounded_fmp(
     ir_object: &mut ir::Object,
     type_info: TypeInference,
     heap_opt: HeapOptResults,
+    heap_size: u64,
 ) -> (TypeInference, HeapOptResults) {
     if !heap_opt.fmp_could_be_unbounded() {
         return (type_info, heap_opt);
@@ -217,7 +222,7 @@ fn reinfer_for_unbounded_fmp(
     reinferred.set_fmp_could_be_unbounded(true);
     reinferred.infer_object_tree(ir_object);
     let reinferred = type_inference::narrow_signatures_to_fixed_point(ir_object, reinferred);
-    let heap_opt = ir_object.analyze_heap();
+    let heap_opt = ir_object.analyze_heap(heap_size);
     (reinferred, heap_opt)
 }
 

@@ -694,6 +694,8 @@ mod tests {
                 as _,
             (|| Contract::build_size_opt(vec![], "SHA1", include_str!("../contracts/SHA1.sol")))
                 as _,
+            (|| Contract::build_size_opt(vec![], "Sha256", include_str!("../contracts/Sha256.sol")))
+                as _,
             (|| {
                 Contract::build_size_opt(
                     vec![],

@@ -20,7 +20,12 @@ use crate::lexer::token::location::Location;
 use crate::lexer::token::Token;
 use crate::lexer::Lexer;
 use crate::parser::error::Error as ParserError;
+use crate::parser::statement::block::Block;
 use crate::parser::statement::code::Code;
+use crate::parser::statement::expression::function_call::name::Name;
+use crate::parser::statement::expression::function_call::FunctionCall;
+use crate::parser::statement::expression::Expression;
+use crate::parser::statement::Statement;
 use crate::visitor::AstNode;
 use crate::visitor::AstVisitor;
 
@@ -117,7 +122,7 @@ impl Object {
                     factory_dependencies.extend(object.factory_dependencies.drain());
                     Some(Box::new(object))
                 }
-                _ => None,
+                _ => Some(Box::new(Self::implicit_runtime_code(&identifier, location))),
             };
 
             if let Token {
@@ -171,6 +176,29 @@ impl Object {
             inner_object,
             factory_dependencies,
         })
+    }
+
+    /// A short-hand constructor returning an object with a call to `stop`.
+    fn implicit_runtime_code(identifier: &str, location: Location) -> Self {
+        let stop = Statement::Expression(Expression::FunctionCall(FunctionCall {
+            location,
+            name: Name::Stop,
+            arguments: vec![],
+        }));
+
+        Self {
+            location,
+            identifier: format!("{identifier}_deployed"),
+            code: Code {
+                location,
+                block: Block {
+                    location,
+                    statements: vec![stop],
+                },
+            },
+            inner_object: None,
+            factory_dependencies: HashSet::new(),
+        }
     }
 
     /// Get the list of missing deployable libraries.
@@ -327,7 +355,10 @@ mod tests {
     use crate::lexer::token::location::Location;
     use crate::lexer::Lexer;
     use crate::parser::error::Error;
+    use crate::parser::statement::expression::function_call::name::Name;
+    use crate::parser::statement::expression::Expression;
     use crate::parser::statement::object::Object;
+    use crate::parser::statement::Statement;
 
     #[test]
     fn error_invalid_token_object() {
@@ -487,5 +518,75 @@ object "Test" {
             }
             .into())
         );
+    }
+    #[test]
+    fn deploy_only_object_gets_an_implicit_runtime_object() {
+        let input = r#"
+object "Test" {
+    code {
+        { mstore(0, 42) return(0, 32) }
+    }
+}
+    "#;
+
+        let mut lexer = Lexer::new(input.to_owned());
+        let object = Object::parse(&mut lexer, None).expect("the object should parse");
+
+        let inner = object
+            .inner_object
+            .expect("a deploy-only object should get an implicit runtime object");
+        assert_eq!(inner.identifier, "Test_deployed");
+        assert_eq!(inner.inner_object, None);
+
+        assert_eq!(
+            inner.code.block.statements.len(),
+            1,
+            "expected one statement"
+        );
+        match &inner.code.block.statements[0] {
+            Statement::Expression(Expression::FunctionCall(call)) => {
+                assert_eq!(call.name, Name::Stop);
+                assert!(call.arguments.is_empty());
+            }
+            statement => panic!("expected a `stop()` call, found {statement:?}"),
+        }
+    }
+
+    #[test]
+    fn explicit_runtime_object_is_preserved() {
+        let input = r#"
+object "Test" {
+    code {
+        { mstore(0, 42) return(0, 32) }
+    }
+    object "Test_deployed" {
+        code {
+            { invalid() }
+        }
+    }
+}
+    "#;
+
+        let mut lexer = Lexer::new(input.to_owned());
+        let object = Object::parse(&mut lexer, None).expect("the object should parse");
+
+        let inner = object
+            .inner_object
+            .expect("the runtime object is present in the source");
+        assert_eq!(inner.identifier, "Test_deployed");
+
+        // The source body must survive rather than be replaced by the implicit one. Yul wraps a
+        // code body in its own block, hence the extra level.
+        assert_eq!(inner.code.block.statements.len(), 1);
+        let body = match &inner.code.block.statements[0] {
+            Statement::Block(block) => block,
+            statement => panic!("expected the code body block, found {statement:?}"),
+        };
+        match &body.statements[0] {
+            Statement::Expression(Expression::FunctionCall(call)) => {
+                assert_eq!(call.name, Name::Invalid);
+            }
+            statement => panic!("expected an `invalid()` call, found {statement:?}"),
+        }
     }
 }

@@ -1466,13 +1466,13 @@ mod tests {
     use super::*;
     use crate::ir::{BinaryOperation, BitWidth, Type};
 
-    /// Builds a `Let` binding `id` to the literal `value`.
+    /// Builds a `Statement::Let` binding `id` to the literal `value`.
     /// Values wider than 64 bits need `big_literal_binding`.
     fn literal_binding(id: u32, value: u64) -> Statement {
         big_literal_binding(id, BigUint::from(value))
     }
 
-    /// Builds a `Let` binding `id` to the literal `value`, which may be wider than
+    /// Builds a `Statement::Let` binding `id` to the literal `value`, which may be wider than
     /// 64 bits, such as 2^128 or `not(0x7f)`.
     fn big_literal_binding(id: u32, value: BigUint) -> Statement {
         Statement::Let {
@@ -2349,7 +2349,7 @@ mod tests {
         let middle = vec![conditional(
             1,
             vec![
-                fmp_literal_binding(10, 0xa0),
+                literal_binding(10, 0xa0),
                 Statement::MStore {
                     offset: make_value(11),
                     value: make_value(10),
@@ -2370,7 +2370,7 @@ mod tests {
         let middle = vec![conditional(
             1,
             vec![
-                fmp_literal_binding(10, 0xa0),
+                literal_binding(10, 0xa0),
                 Statement::MStore {
                     offset: make_value(11),
                     value: make_value(10),
@@ -2392,7 +2392,7 @@ mod tests {
     fn branch_scratch_store_bound_outside_invalidates_fmp() {
         use crate::ir::{MemoryRegion, Object};
         let mut statements = fmp_establish_statements();
-        statements.push(fmp_literal_binding(10, 0x30));
+        statements.push(literal_binding(10, 0x30));
         statements.push(conditional(
             3,
             vec![
@@ -2447,7 +2447,7 @@ mod tests {
             unreachable!()
         };
         body.statements = vec![
-            fmp_literal_binding(10, 0xff),
+            literal_binding(10, 0xff),
             Statement::MStore8 {
                 offset: make_value(11),
                 value: make_value(10),

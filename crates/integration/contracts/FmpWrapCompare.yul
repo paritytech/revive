@@ -1,6 +1,6 @@
 /// `add(p, not(0x7f))` moves the free memory pointer from 0x80 down to 0, so `lt(mload(0x40), 1)` is 1.
 /// The call `g(4)` after the store makes the memory optimizer forget it, so only `FmpPropagation` forwards
-// the pointer to the load; `g(1)` to `g(3)` give `g` enough call sites that it is not inlined.
+/// the pointer to the load; `g(1)` to `g(3)` give `g` enough call sites that it is not inlined.
 object "FmpWrapCompare" {
   code { datacopy(0, dataoffset("FmpWrapCompare_deployed"), datasize("FmpWrapCompare_deployed")) return(0, datasize("FmpWrapCompare_deployed")) }
   object "FmpWrapCompare_deployed" {

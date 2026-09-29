@@ -4312,6 +4312,31 @@ fn fmp_wrap_subtract() {
     run_memory_constant_folding_fixture("FmpWrapSubtract");
 }
 
+/// Moving the free memory pointer down to 0x20 lets a copy to `mload(0x40)` overwrite it with a
+/// calldata word of at least 2^17, so the pointer's load must not be truncated to the heap size.
+#[test]
+fn fmp_wrap_copy() {
+    let mut actions = instantiate_yul("contracts/FmpWrapCopy.yul", "FmpWrapCopy");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0x11; 64]);
+    run_differential(actions);
+}
+
+/// Adding `not(0xff)` to an untracked free memory pointer moves it out of the heap, so the
+/// pointer's load must not be truncated to the heap size.
+#[test]
+fn fmp_wrap_untracked() {
+    let mut actions = instantiate_yul("contracts/FmpWrapUntracked.yul", "FmpWrapUntracked");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![]);
+    run_differential(actions);
+}
+
+/// A called function's store to an offset it computes can overwrite the free memory pointer, so
+/// the pointer computed at compile time must not be forwarded past the call.
+#[test]
+fn fmp_computed_call_store() {
+    run_memory_constant_folding_fixture("FmpComputedCallStore");
+}
+
 /// Generative differential fuzzer over memory ops with DYNAMIC (computed, non-constant)
 /// offsets — `and(<expr>, mask)` keeps them bounded but non-literal, exercising the
 /// offset-narrowing + bounds-check codegen path (distinct from the static-offset mem

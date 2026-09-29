@@ -5018,6 +5018,150 @@ fn calldatacopy_dynamic_dest_fmp_corruption() {
     run_differential(actions);
 }
 
+/// A word written by later loop iterations must not be read native.
+#[test]
+fn loop_carried_offset_is_dynamic() {
+    let mut actions = instantiate_yul("contracts/LoopOffsetNative.yul", "LoopOffsetNative");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: (1u8..=32).collect(),
+    });
+    run_differential(actions);
+}
+
+/// An unresolvable store inside a branch must drop the forwarded free memory pointer.
+#[test]
+fn fmp_dynamic_store_in_branch_invalidates() {
+    let mut actions = instantiate_yul("contracts/FmpDynStoreBranchBug.yul", "FmpDynStoreBranchBug");
+    let mut corrupting = U256::from(1).to_be_bytes::<32>().to_vec();
+    corrupting.extend_from_slice(&U256::from(0x40).to_be_bytes::<32>());
+    for data in [vec![0u8; 32], corrupting] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+    }
+    run_differential(actions);
+}
+
+/// Reproducer from paritytech/bugbounty_reports#215.
+#[test]
+fn fmp_loop_mstore8() {
+    let mut actions = instantiate("contracts/FmpLoopMstore8.sol", "FmpLoopMstore8");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"probe()")[..4].to_vec(),
+    });
+    run_differential(actions);
+}
+
+/// Deploys the Yul fixture `name` and calls it with the calldata words `v`, `0x11…11` and `c`,
+/// where `v` and `c` have all bits set. The fixture reverts when the free memory pointer it reads
+/// back differs from what its own stores wrote, so a stale or truncated pointer fails the test.
+fn run_fmp_word_fixture(name: &str) {
+    let mut actions = instantiate_yul(&format!("contracts/{name}.yul"), name);
+    let mut data = vec![0xff; 32];
+    data.extend([0x11; 32]);
+    data.extend([0xff; 32]);
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// A loop store from `0x40` overwrites a free memory pointer that was never set, so no stale
+/// value can be forwarded and only the heap analysis keeps the read after the loop from being
+/// truncated by the range proof.
+#[test]
+fn loop_store_on_fmp_word() {
+    run_fmp_word_fixture("LoopStoreFmpWord");
+}
+
+/// A loop store from `0x30` overwrites the upper half of the free memory pointer.
+#[test]
+fn loop_store_overlapping_fmp_word() {
+    run_fmp_word_fixture("LoopStoreFmpOverlap");
+}
+
+/// A loop counter descending from `0x80` by `sub` stores on the free memory pointer
+/// in its third iteration.
+#[test]
+fn loop_store_descending_onto_fmp_word() {
+    run_fmp_word_fixture("LoopStoreFmpDescending");
+}
+
+/// solc's optimizer rewrites `sub(pointer, 0x20)` into `add(pointer, not(0x1f))`,
+/// which descends onto the free memory pointer like `sub` does.
+#[test]
+fn loop_store_descending_by_addition_onto_fmp_word() {
+    run_fmp_word_fixture("LoopStoreFmpDescendingByAddition");
+}
+
+/// The same descending counter as a copy destination overwrites the free memory pointer,
+/// so its seed of `0x80` must not exempt the copy.
+#[test]
+fn loop_copy_descending_by_addition_onto_fmp_word() {
+    run_fmp_word_fixture("LoopCopyFmpDescendingByAddition");
+}
+
+/// newyork rewrites `mul(index, 0x20)` into `shl(5, index)`, which stores on the free memory
+/// pointer from `index = 2`.
+#[test]
+fn loop_store_shifted_counter_on_fmp_word() {
+    run_fmp_word_fixture("LoopStoreFmpShiftedCounter");
+}
+
+/// A copy whose length is a loop counter from `0x40` overwrites the first byte of the
+/// free memory pointer in its second iteration.
+#[test]
+fn loop_copy_length_over_fmp_word() {
+    run_fmp_word_fixture("LoopCopyLengthFmp");
+}
+
+/// A store at `0x30`, bound before a branch, overwrites the upper half of the free memory
+/// pointer inside it.
+#[test]
+fn scratch_store_in_branch_overlapping_fmp_word() {
+    run_fmp_word_fixture("ScratchStoreBranchFmp");
+}
+
+/// A copy whose length is a loop counter from `0x40` also writes word `0x20`, so the literal
+/// store and load of that word must not use native byte order. The calldata bytes `0x01` to
+/// `0x40` make word `0x20` differ from its byte reversal.
+#[test]
+fn loop_copy_length_over_scratch_word() {
+    let mut actions = instantiate_yul(
+        "contracts/LoopCopyLengthScratch.yul",
+        "LoopCopyLengthScratch",
+    );
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: (1u8..=64).collect(),
+    });
+    run_differential(actions);
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so

@@ -4988,11 +4988,7 @@ fn msize_observes_dead_store_expansion() {
     run_differential(actions);
 }
 
-/// ICE regression (newyork heap analysis): a static memory access at the top of the address space
-/// must not overflow the word walk. `add(mul(MAX_U256, 1), 0x41)` folds to `0x40`, corrupting the
-/// free-memory-pointer word with `u64::MAX`; `mem_opt` then forwards a store to that literal and
-/// the walk panicked with "attempt to add with overflow". Compiling is the regression; the call
-/// pins runtime behaviour against solc-EVM.
+/// Regression: a static store at `u64::MAX` must not overflow the newyork heap analysis.
 #[test]
 fn heap_range_walk_at_top_of_memory() {
     let mut actions = instantiate_yul("contracts/HeapRangeOverflowBug.yul", "HeapRangeOverflowBug");

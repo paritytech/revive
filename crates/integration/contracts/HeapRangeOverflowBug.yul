@@ -1,11 +1,4 @@
-/// ICE regression (newyork heap analysis): the word walk over a static memory range must not
-/// overflow `u64` for an access at the top of the address space.
-///
-/// `add(mul(MAX_U256, 1), 0x41)` folds to `0x40`, so the second `mstore` writes `u64::MAX` over
-/// the free-memory-pointer word. `mem_opt` forwards `mload(0x40)` to that literal, turning
-/// `mstore(f2, _)` into a static store at `u64::MAX`, where the walk panicked with "attempt to
-/// add with overflow" on valid Yul. Compiling this at all is the regression; the run also pins
-/// the behaviour against EVM.
+/// Regression: a static store at `u64::MAX` through a corrupted free memory pointer crashed newyork.
 object "HeapRangeOverflowBug" {
   code { datacopy(0, dataoffset("HeapRangeOverflowBug_deployed"), datasize("HeapRangeOverflowBug_deployed")) return(0, datasize("HeapRangeOverflowBug_deployed")) }
   object "HeapRangeOverflowBug_deployed" {

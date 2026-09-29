@@ -33,15 +33,8 @@ use revive_common::BYTE_LENGTH_WORD;
 /// this is treated as a dynamic escape instead.
 const MAX_RANGE_WORDS: u64 = 4096;
 
-/// The word-aligned words that `[address, address + size)` covers, start rounded down so a
-/// partial leading word is included: 32 bytes at `0x30` yields `0x20` and `0x40`.
-///
-/// [`None`] when the range exceeds [`MAX_RANGE_WORDS`]; callers then record only its first word
-/// and set their dynamic flag.
-///
-/// Stepping a bounded count saturatingly, rather than walking to a static end, is what keeps an
-/// access at the top of memory from overflowing `u64` — reachable from valid Yul via a corrupted
-/// free-memory pointer.
+/// The word-aligned words covered by `[address, address + size)`.
+/// [`None`] if the range spans more than [`MAX_RANGE_WORDS`].
 fn range_words(address: u64, size: u64) -> Option<impl Iterator<Item = u64>> {
     let first_word = word_align(address);
     let num_words = address
@@ -984,11 +977,8 @@ impl HeapAnalysis {
         self.taint_range(Some(address), Some(BYTE_LENGTH_WORD as u64));
     }
 
-    /// Taints the words a range covers, per [`range_words`].
-    ///
-    /// An over-wide range, a dynamic length, an unknown start, or an empty range all take the
-    /// dynamic path: the start word is tainted where known and `has_dynamic_accesses` is set. Note
-    /// `size == 0` taints the start word rather than nothing.
+    /// Taints all word-aligned memory regions in a range.
+    /// If the range is too large, treats it as a dynamic access instead.
     fn taint_range(&mut self, start: Option<u64>, len: Option<u64>) {
         match (start, len) {
             (Some(address), Some(size)) if size > 0 => match range_words(address, size) {
@@ -3240,53 +3230,51 @@ mod tests {
         );
     }
 
-    /// `taint_range` taints exactly the word-aligned words a static range covers,
-    /// including the partial leading word when the start is unaligned.
+    /// `range_words` covers every touched word, respects the cap, and does not overflow at the top.
     #[test]
-    fn taint_range_covers_spanned_words() {
-        // Aligned two-word range [0, 64).
-        let mut analysis = HeapAnalysis::new();
-        analysis.taint_range(Some(0), Some(2 * BYTE_LENGTH_WORD as u64));
-        assert_eq!(
-            analysis.tainted_regions,
-            BTreeSet::from([0, BYTE_LENGTH_WORD as u64])
-        );
-        assert!(!analysis.has_dynamic_accesses);
+    fn range_words_walks_every_covered_word() {
+        let words = |address, size| range_words(address, size).map(Iterator::collect::<Vec<_>>);
+        let top = word_align(u64::MAX);
 
-        // A 32-byte access at the unaligned 0x30 spans words 0x20 and 0x40.
-        let mut analysis = HeapAnalysis::new();
+        assert_eq!(words(0x30, BYTE_LENGTH_WORD as u64), Some(vec![0x20, 0x40]));
+        assert_eq!(words(0, 2 * BYTE_LENGTH_WORD as u64), Some(vec![0, 0x20]));
+        assert_eq!(words(0x21, 1), Some(vec![0x20]));
+        assert_eq!(words(0x20, 0), Some(vec![]));
+
+        assert_eq!(
+            range_words(0, MAX_RANGE_WORDS * BYTE_LENGTH_WORD as u64).map(Iterator::count),
+            Some(MAX_RANGE_WORDS as usize)
+        );
+        assert!(range_words(0, (MAX_RANGE_WORDS + 1) * BYTE_LENGTH_WORD as u64).is_none());
+
+        assert_eq!(words(u64::MAX, BYTE_LENGTH_WORD as u64), Some(vec![top]));
+        assert_eq!(words(u64::MAX - 1, u64::MAX), Some(vec![top]));
+    }
+
+    /// `taint_range` taints the covered words, collapses wide or empty ranges to the start word.
+    #[test]
+    fn taint_range_taints_covered_words() {
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
         analysis.taint_range(Some(0x30), Some(BYTE_LENGTH_WORD as u64));
         assert_eq!(analysis.tainted_regions, BTreeSet::from([0x20, 0x40]));
-    }
+        assert!(!analysis.has_dynamic_accesses);
 
-    /// A range wider than `MAX_RANGE_WORDS` collapses to the first word plus a
-    /// dynamic-access flag rather than iterating every word.
-    #[test]
-    fn taint_range_huge_range_is_treated_as_dynamic() {
-        let mut analysis = HeapAnalysis::new();
-        let huge = (MAX_RANGE_WORDS + 1) * BYTE_LENGTH_WORD as u64;
-        analysis.taint_range(Some(0), Some(huge));
-        assert_eq!(analysis.tainted_regions, BTreeSet::from([0]));
-        assert!(analysis.has_dynamic_accesses);
-    }
-
-    /// An access at the top of the address space must not overflow the word walk.
-    #[test]
-    fn taint_range_top_of_memory_does_not_overflow() {
-        let mut analysis = HeapAnalysis::new();
-        // The shape mem_opt forwards from a corrupted free-memory pointer.
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
         analysis.taint_range(Some(u64::MAX), Some(BYTE_LENGTH_WORD as u64));
         assert_eq!(
             analysis.tainted_regions,
-            BTreeSet::from([word_align(u64::MAX)]),
-            "only the single covered leading word is tainted"
+            BTreeSet::from([word_align(u64::MAX)])
         );
-    }
 
-    /// A zero-length access still taints its start word, via the dynamic path.
-    #[test]
-    fn taint_range_empty_range_taints_the_start_word() {
-        let mut analysis = HeapAnalysis::new();
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
+        analysis.taint_range(
+            Some(0),
+            Some((MAX_RANGE_WORDS + 1) * BYTE_LENGTH_WORD as u64),
+        );
+        assert_eq!(analysis.tainted_regions, BTreeSet::from([0]));
+        assert!(analysis.has_dynamic_accesses);
+
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
         analysis.taint_range(Some(0x30), Some(0));
         assert_eq!(analysis.tainted_regions, BTreeSet::from([0x20]));
         assert!(analysis.has_dynamic_accesses);
@@ -3305,10 +3293,10 @@ mod tests {
         Value::new(ValueId(id), Type::default())
     }
 
-    /// Same words as `taint_range`, recorded as escaping; an over-wide range collapses.
+    /// `mark_escaping_range` marks the covered words escaping and collapses wide ranges.
     #[test]
-    fn mark_escaping_range_covers_spanned_words() {
-        let mut analysis = HeapAnalysis::new();
+    fn mark_escaping_range_marks_covered_words() {
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
         let offset = offset_value(&mut analysis, 1, 0x30);
         let length = offset_value(&mut analysis, 2, BYTE_LENGTH_WORD as u64);
         analysis.mark_escaping_range(&offset, &length);
@@ -3316,7 +3304,16 @@ mod tests {
         assert!(analysis.tainted_regions.is_empty());
         assert!(!analysis.has_dynamic_escapes);
 
-        let mut analysis = HeapAnalysis::new();
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
+        let offset = offset_value(&mut analysis, 1, u64::MAX);
+        let length = offset_value(&mut analysis, 2, BYTE_LENGTH_WORD as u64);
+        analysis.mark_escaping_range(&offset, &length);
+        assert_eq!(
+            analysis.escaping_regions,
+            BTreeSet::from([word_align(u64::MAX)])
+        );
+
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
         let offset = offset_value(&mut analysis, 1, 0);
         let length = offset_value(
             &mut analysis,
@@ -3328,70 +3325,23 @@ mod tests {
         assert!(analysis.has_dynamic_escapes);
     }
 
-    /// The overflowing range reaches this caller through the same helper.
+    /// `mark_escaping_and_tainted_range` puts every covered word in both sets.
     #[test]
-    fn mark_escaping_range_top_of_memory_does_not_overflow() {
-        let mut analysis = HeapAnalysis::new();
-        let offset = offset_value(&mut analysis, 1, u64::MAX);
-        let length = offset_value(&mut analysis, 2, BYTE_LENGTH_WORD as u64);
-        analysis.mark_escaping_range(&offset, &length);
-        assert_eq!(
-            analysis.escaping_regions,
-            BTreeSet::from([word_align(u64::MAX)])
-        );
-    }
-
-    /// Every covered word lands in both sets.
-    #[test]
-    fn mark_escaping_and_tainted_range_covers_both_sets() {
-        let mut analysis = HeapAnalysis::new();
+    fn mark_escaping_and_tainted_range_marks_both_sets() {
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
         let offset = offset_value(&mut analysis, 1, 0x30);
         let length = offset_value(&mut analysis, 2, BYTE_LENGTH_WORD as u64);
         analysis.mark_escaping_and_tainted_range(&offset, &length);
         assert_eq!(analysis.escaping_regions, BTreeSet::from([0x20, 0x40]));
         assert_eq!(analysis.tainted_regions, BTreeSet::from([0x20, 0x40]));
         assert!(!analysis.has_dynamic_escapes);
-    }
 
-    /// The overflowing range through the both-sets walk.
-    #[test]
-    fn mark_escaping_and_tainted_range_top_of_memory_does_not_overflow() {
-        let mut analysis = HeapAnalysis::new();
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
         let offset = offset_value(&mut analysis, 1, u64::MAX);
         let length = offset_value(&mut analysis, 2, BYTE_LENGTH_WORD as u64);
         analysis.mark_escaping_and_tainted_range(&offset, &length);
         let top = BTreeSet::from([word_align(u64::MAX)]);
         assert_eq!(analysis.escaping_regions, top);
         assert_eq!(analysis.tainted_regions, top);
-    }
-
-    /// The shared walk: coverage, the width cap, and the saturating step.
-    #[test]
-    fn range_words_walks_every_covered_word() {
-        let words = |address, size| range_words(address, size).map(Iterator::collect::<Vec<_>>);
-
-        // Mid-word start includes the partial leading word; a single byte touches its word.
-        assert_eq!(words(0x30, BYTE_LENGTH_WORD as u64), Some(vec![0x20, 0x40]));
-        assert_eq!(words(0, 2 * BYTE_LENGTH_WORD as u64), Some(vec![0, 0x20]));
-        assert_eq!(words(0x21, 1), Some(vec![0x20]));
-        // An empty range covers nothing; callers decide what that means.
-        assert_eq!(words(0x20, 0), Some(vec![]));
-
-        // At the cap is walked; one word beyond is not.
-        assert_eq!(
-            range_words(0, MAX_RANGE_WORDS * BYTE_LENGTH_WORD as u64).map(Iterator::count),
-            Some(MAX_RANGE_WORDS as usize)
-        );
-        assert!(range_words(0, (MAX_RANGE_WORDS + 1) * BYTE_LENGTH_WORD as u64).is_none());
-
-        // The regression: the step past the final word must saturate, not overflow.
-        assert_eq!(
-            words(u64::MAX, BYTE_LENGTH_WORD as u64),
-            Some(vec![word_align(u64::MAX)])
-        );
-        assert_eq!(
-            words(u64::MAX - 1, u64::MAX),
-            Some(vec![word_align(u64::MAX)])
-        );
     }
 }

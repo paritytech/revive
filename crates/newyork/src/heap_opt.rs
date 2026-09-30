@@ -3808,6 +3808,7 @@ mod tests {
         let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
         analysis.taint_range(Some(0x30), Some(BYTE_LENGTH_WORD as u64));
         assert_eq!(analysis.tainted_regions, BTreeSet::from([0x20, 0x40]));
+        assert!(analysis.escaping_regions.is_empty());
         assert!(!analysis.has_dynamic_accesses);
 
         let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
@@ -3816,6 +3817,8 @@ mod tests {
             analysis.tainted_regions,
             BTreeSet::from([word_align(u64::MAX)])
         );
+        assert!(analysis.escaping_regions.is_empty());
+        assert!(!analysis.has_dynamic_accesses);
 
         let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
         analysis.taint_range(
@@ -3823,11 +3826,13 @@ mod tests {
             Some((MAX_RANGE_WORDS + 1) * BYTE_LENGTH_WORD as u64),
         );
         assert_eq!(analysis.tainted_regions, BTreeSet::from([0]));
+        assert!(analysis.escaping_regions.is_empty());
         assert!(analysis.has_dynamic_accesses);
 
         let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
         analysis.taint_range(Some(0x30), Some(0));
         assert_eq!(analysis.tainted_regions, BTreeSet::from([0x20]));
+        assert!(analysis.escaping_regions.is_empty());
         assert!(analysis.has_dynamic_accesses);
     }
 

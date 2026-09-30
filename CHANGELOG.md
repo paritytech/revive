@@ -21,6 +21,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 - `--newyork`: `mcopy` and call returns overwriting the free memory pointer. [#613](https://github.com/paritytech/revive/pull/613)
 - `--newyork`: a static memory access at the top of the address space, such as a store through a free memory pointer corrupted to `u64::MAX`, crashed the compiler with "attempt to add with overflow". [#582](https://github.com/paritytech/revive/pull/582)
 - `--newyork`: Fixed a constant folding bug (reproduced only with hand-crafted Yul input). [#618](https://github.com/paritytech/revive/pull/618)
+- resolc: A bug that arbitrarily picks an input mode when multiple are specified. [#635](https://github.com/paritytech/revive/pull/635)
 
 ## v1.4.0
 

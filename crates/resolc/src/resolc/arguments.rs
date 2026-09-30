@@ -259,8 +259,7 @@ impl Arguments {
         .iter()
         .filter(|&&x| x)
         .count();
-        let acceptable_count = 1 + self.standard_json.is_some() as usize;
-        if modes > acceptable_count {
+        if modes > 1 {
             messages.push(SolcStandardJsonOutputError::new_error(
                 "Only one mode is allowed at the same time: Yul, combined JSON, standard JSON, link.",
                 None,

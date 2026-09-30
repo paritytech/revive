@@ -82,21 +82,20 @@ pub fn link(
         Ok(ObjectFormat::ELF) => {
             let symbols = build_symbols(linker_symbols, factory_dependencies)?;
             let bytecode_linked = ElfLinker::setup()?.link(bytecode, &symbols)?;
-            polkavm_linker(&bytecode_linked, strip_binary)
-                .map(|pvm| (pvm, ObjectFormat::PVM))
-                .unwrap_or_else(|error| {
-                    if !error
+            match polkavm_linker(&bytecode_linked, strip_binary) {
+                Ok(pvm) => (pvm, ObjectFormat::PVM),
+                Err(error)
+                    if error
                         .to_string()
                         .lines()
                         .map(|line| line.trim())
                         .filter(|line| !line.is_empty())
-                        .all(|line| line.contains("found undefined symbol"))
-                    {
-                        panic!("ICE: linker: {error}");
-                    }
-
+                        .all(|line| line.contains("found undefined symbol")) =>
+                {
                     (bytecode.to_vec(), ObjectFormat::ELF)
-                })
+                }
+                Err(error) => return Err(error),
+            }
         }
         Err(error) => panic!("ICE: linker: {error}"),
     })

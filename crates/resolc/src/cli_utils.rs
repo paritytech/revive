@@ -19,6 +19,8 @@ pub const SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH: &str = "src/tests/data/solidity/
 /// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
 pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
     "src/tests/data/solidity/folded_guard_inlined_loop.sol";
+/// The empty contract from paritytech/revive#623.
+pub const SOLIDITY_EMPTY_CONTRACT_PATH: &str = "src/tests/data/solidity/empty_contract.sol";
 
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
@@ -107,6 +109,12 @@ pub const STANDARD_JSON_YUL_PVM_CODEGEN_PATH: &str =
 /// PVM bytecode generation and only validate the Yul.
 pub const STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/yul_no_pvm_codegen.json";
+/// The standard JSON input from paritytech/revive#623 with a heap size outside the PVM memory map.
+pub const STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH: &str =
+    "src/tests/data/standard_json/heap_size_out_of_range.json";
+/// A standard JSON input with a heap size the polkavm linker fails to link.
+pub const STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH: &str =
+    "src/tests/data/standard_json/heap_size_linker_failure.json";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";

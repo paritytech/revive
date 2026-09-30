@@ -160,9 +160,10 @@ pub struct TypeInference {
     /// Values that must keep full (I256) width because they feed an operand position
     /// where EVM tolerates out-of-range magnitudes that a narrowing truncation/​boundary
     /// trap would mis-handle: the SOURCE offset of `calldatacopy`/`codecopy` (zero-fill
-    /// beyond source) and the shift amount / `byte` index / `signextend` byte position
-    /// of `shl`/`shr`/`sar`/`byte`/`signextend` (out-of-range -> 0 / sign-fill /
-    /// unchanged). Their `max_width` is forced back to I256 after backward constraints,
+    /// beyond source), the offset of `return`/`revert` (ignored for a zero length) and
+    /// the shift amount / `byte` index / `signextend` byte position of
+    /// `shl`/`shr`/`sar`/`byte`/`signextend` (out-of-range -> 0 / sign-fill / unchanged).
+    /// Their `max_width` is forced back to I256 after backward constraints,
     /// overriding any narrowing demanded by other uses (e.g. a co-occurring memory
     /// offset). `effective = min(min_width, I256)`, so provably-small operands still
     /// narrow — only genuinely-wide ones stay full, keeping the OZ cost negligible.
@@ -1148,7 +1149,7 @@ impl TypeInference {
 
             Statement::Revert { offset, length } | Statement::Return { offset, length } => {
                 self.record_use(offset.id, UseContext::MemoryOffset);
-                self.narrow_from_use(offset.id, BitWidth::I64);
+                self.full_width_operands.insert(offset.id.0);
                 self.record_use(length.id, UseContext::MemoryOffset);
                 self.narrow_from_use(length.id, BitWidth::I64);
             }

@@ -35,6 +35,7 @@ test_spec!(erc20, "ERC20", "ERC20.sol");
 test_spec!(computation, "Computation", "Computation.sol");
 test_spec!(msize, "MSize", "MSize.sol");
 test_spec!(sha1, "SHA1", "SHA1.sol");
+test_spec!(sha256, "Sha256", "Sha256.sol");
 test_spec!(block, "Block", "Block.sol");
 test_spec!(mcopy, "MCopy", "MCopy.sol");
 test_spec!(mcopy_overlap, "MCopyOverlap", "MCopyOverlap.sol");
@@ -96,6 +97,7 @@ test_spec!(
     "SubUnderflowZext",
     "SubUnderflowZext.sol"
 );
+test_spec!(constant_shifts, "ConstantShifts", "ConstantShifts.sol");
 
 fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     vec![Instantiate {
@@ -4235,6 +4237,106 @@ fn fmp_big_value_load() {
     }
 }
 
+/// A literal free memory pointer at or above the heap size was trusted and range proved.
+#[test]
+fn fmp_big_literal_store() {
+    for op in 0u64..=3 {
+        let mut actions = instantiate_yul("contracts/FmpBigLiteral.yul", "FmpBigLiteral");
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: U256::from(op).to_be_bytes::<32>().to_vec(),
+        });
+        run_differential(actions);
+    }
+}
+
+/// Reproducer from paritytech/bugbounty_reports#214.
+#[test]
+fn fmp_literal_not_zero() {
+    let mut actions = instantiate("contracts/FmpLiteralNotZero.sol", "FmpLiteralNotZero");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"probe()")[..4].to_vec(),
+    });
+    run_differential(actions);
+}
+
+/// Calls a fixture whose memory offsets or free memory pointer values newyork computes at compile
+/// time. The calldata word, which the memory fixtures store, has no zero byte, so forwarding the
+/// wrong word to a load or removing a live store changes the result.
+fn run_memory_constant_folding_fixture(contract: &str) {
+    let mut actions = instantiate_yul(&format!("contracts/{contract}.yul"), contract);
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0x11; 32]);
+    run_differential(actions);
+}
+
+/// `shl` takes the shift first, so a load must not be forwarded the word stored at another offset.
+#[test]
+fn shl_offset_load() {
+    run_memory_constant_folding_fixture("ShlOffsetLoad");
+}
+
+/// `shl` takes the shift first, so the store at `shl(shift, 1)` must survive a later store to
+/// another offset.
+#[test]
+fn shl_offset_dead_store() {
+    run_memory_constant_folding_fixture("ShlOffsetDeadStore");
+}
+
+/// `mul` wraps at 2^256 before an offset is divided from the product, so a load must not be
+/// forwarded the word stored at another offset.
+#[test]
+fn mul_div_offset_load() {
+    run_memory_constant_folding_fixture("MulDivOffsetLoad");
+}
+
+/// Moving the free memory pointer down with `add(p, not(k))` wraps at 2^256, so a comparison on
+/// the forwarded pointer must fold to the EVM result.
+#[test]
+fn fmp_wrap_compare() {
+    run_memory_constant_folding_fixture("FmpWrapCompare");
+}
+
+/// Moving the free memory pointer down with `add(p, not(k))` wraps at 2^256, so a subtraction from
+/// the forwarded pointer must fold instead of crashing the compiler.
+#[test]
+fn fmp_wrap_subtract() {
+    run_memory_constant_folding_fixture("FmpWrapSubtract");
+}
+
+/// Moving the free memory pointer down to 0x20 lets a copy to `mload(0x40)` overwrite it with a
+/// calldata word of at least 2^17, so the pointer's load must not be truncated to the heap size.
+#[test]
+fn fmp_wrap_copy() {
+    let mut actions = instantiate_yul("contracts/FmpWrapCopy.yul", "FmpWrapCopy");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0x11; 64]);
+    run_differential(actions);
+}
+
+/// Adding `not(0xff)` to an untracked free memory pointer moves it out of the heap, so the
+/// pointer's load must not be truncated to the heap size.
+#[test]
+fn fmp_wrap_untracked() {
+    let mut actions = instantiate_yul("contracts/FmpWrapUntracked.yul", "FmpWrapUntracked");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![]);
+    run_differential(actions);
+}
+
+/// A called function's store to an offset it computes can overwrite the free memory pointer, so
+/// the pointer computed at compile time must not be forwarded past the call.
+#[test]
+fn fmp_computed_call_store() {
+    run_memory_constant_folding_fixture("FmpComputedCallStore");
+}
+
 /// Generative differential fuzzer over memory ops with DYNAMIC (computed, non-constant)
 /// offsets — `and(<expr>, mask)` keeps them bounded but non-literal, exercising the
 /// offset-narrowing + bounds-check codegen path (distinct from the static-offset mem
@@ -4954,6 +5056,21 @@ fn msize_observes_dead_store_expansion() {
     run_differential(actions);
 }
 
+/// Regression: a static store at `u64::MAX` must not overflow the newyork heap analysis.
+#[test]
+fn heap_range_walk_at_top_of_memory() {
+    let mut actions = instantiate_yul("contracts/HeapRangeOverflowBug.yul", "HeapRangeOverflowBug");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: vec![],
+    });
+    run_differential(actions);
+}
+
 /// Regression (newyork FMP range proof): a `calldatacopy` whose *dynamic*
 /// destination can land on the free-memory-pointer word `[0x40, 0x60)` corrupts
 /// the FMP, but only *static* copy destinations flagged `fmp_could_be_unbounded`.
@@ -4982,6 +5099,365 @@ fn calldatacopy_dynamic_dest_fmp_corruption() {
         data,
     });
     run_differential(actions);
+}
+
+/// A word written by later loop iterations must not be read native.
+#[test]
+fn loop_carried_offset_is_dynamic() {
+    let mut actions = instantiate_yul("contracts/LoopOffsetNative.yul", "LoopOffsetNative");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: (1u8..=32).collect(),
+    });
+    run_differential(actions);
+}
+
+/// An unresolvable store inside a branch must drop the forwarded free memory pointer.
+#[test]
+fn fmp_dynamic_store_in_branch_invalidates() {
+    let mut actions = instantiate_yul("contracts/FmpDynStoreBranchBug.yul", "FmpDynStoreBranchBug");
+    let mut corrupting = U256::from(1).to_be_bytes::<32>().to_vec();
+    corrupting.extend_from_slice(&U256::from(0x40).to_be_bytes::<32>());
+    for data in [vec![0u8; 32], corrupting] {
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+    }
+    run_differential(actions);
+}
+
+/// Reproducer from paritytech/bugbounty_reports#215.
+#[test]
+fn fmp_loop_mstore8() {
+    let mut actions = instantiate("contracts/FmpLoopMstore8.sol", "FmpLoopMstore8");
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"probe()")[..4].to_vec(),
+    });
+    run_differential(actions);
+}
+
+/// Deploys the Yul fixture `name` and calls it with the calldata words `v`, `0x11…11` and `c`,
+/// where `v` and `c` have all bits set. The fixture reverts when the free memory pointer it reads
+/// back differs from what its own stores wrote, so a stale or truncated pointer fails the test.
+fn run_fmp_word_fixture(name: &str) {
+    let mut actions = instantiate_yul(&format!("contracts/{name}.yul"), name);
+    let mut data = vec![0xff; 32];
+    data.extend([0x11; 32]);
+    data.extend([0xff; 32]);
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// A loop store from `0x40` overwrites a free memory pointer that was never set, so no stale
+/// value can be forwarded and only the heap analysis keeps the read after the loop from being
+/// truncated by the range proof.
+#[test]
+fn loop_store_on_fmp_word() {
+    run_fmp_word_fixture("LoopStoreFmpWord");
+}
+
+/// A loop store from `0x30` overwrites the upper half of the free memory pointer.
+#[test]
+fn loop_store_overlapping_fmp_word() {
+    run_fmp_word_fixture("LoopStoreFmpOverlap");
+}
+
+/// A loop counter descending from `0x80` by `sub` stores on the free memory pointer
+/// in its third iteration.
+#[test]
+fn loop_store_descending_onto_fmp_word() {
+    run_fmp_word_fixture("LoopStoreFmpDescending");
+}
+
+/// solc's optimizer rewrites `sub(pointer, 0x20)` into `add(pointer, not(0x1f))`,
+/// which descends onto the free memory pointer like `sub` does.
+#[test]
+fn loop_store_descending_by_addition_onto_fmp_word() {
+    run_fmp_word_fixture("LoopStoreFmpDescendingByAddition");
+}
+
+/// The same descending counter as a copy destination overwrites the free memory pointer,
+/// so its seed of `0x80` must not exempt the copy.
+#[test]
+fn loop_copy_descending_by_addition_onto_fmp_word() {
+    run_fmp_word_fixture("LoopCopyFmpDescendingByAddition");
+}
+
+/// newyork rewrites `mul(index, 0x20)` into `shl(5, index)`, which stores on the free memory
+/// pointer from `index = 2`.
+#[test]
+fn loop_store_shifted_counter_on_fmp_word() {
+    run_fmp_word_fixture("LoopStoreFmpShiftedCounter");
+}
+
+/// A copy whose length is a loop counter from `0x40` overwrites the first byte of the
+/// free memory pointer in its second iteration.
+#[test]
+fn loop_copy_length_over_fmp_word() {
+    run_fmp_word_fixture("LoopCopyLengthFmp");
+}
+
+/// A store at `0x30`, bound before a branch, overwrites the upper half of the free memory
+/// pointer inside it.
+#[test]
+fn scratch_store_in_branch_overlapping_fmp_word() {
+    run_fmp_word_fixture("ScratchStoreBranchFmp");
+}
+
+/// A copy whose length is a loop counter from `0x40` also writes word `0x20`, so the literal
+/// store and load of that word must not use native byte order. The calldata bytes `0x01` to
+/// `0x40` make word `0x20` differ from its byte reversal.
+#[test]
+fn loop_copy_length_over_scratch_word() {
+    let mut actions = instantiate_yul(
+        "contracts/LoopCopyLengthScratch.yul",
+        "LoopCopyLengthScratch",
+    );
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: (1u8..=64).collect(),
+    });
+    run_differential(actions);
+}
+
+/// An `mcopy` or a call return range over the free memory pointer word must disable the range proof.
+#[test]
+fn copy_onto_fmp_word_disables_range_proof() {
+    let copied_word: U256 = (U256::from(1u64) << 200) | U256::from(0xabcdefu64);
+    let mut mcopy_case = U256::from(1).to_be_bytes::<32>().to_vec();
+    mcopy_case.extend_from_slice(&copied_word.to_be_bytes::<32>());
+    mcopy_case.extend_from_slice(&U256::from(0x40).to_be_bytes::<32>());
+    let staticcall_case = U256::from(2).to_be_bytes::<32>().to_vec();
+    for data in [mcopy_case, staticcall_case] {
+        let mut actions = instantiate_yul("contracts/CopyFmpBug.yul", "CopyFmpBug");
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+        run_differential(actions);
+    }
+}
+
+/// Reproducers from paritytech/bugbounty_reports#216.
+#[test]
+fn fmp_staticcall_return_and_mcopy_straddle() {
+    let selector = keccak256(b"probe()")[..4].to_vec();
+    let mut mcopy_calldata = selector.clone();
+    mcopy_calldata.extend_from_slice(&[0xff; 32]);
+    for (contract, data) in [
+        ("FmpStaticcallReturn", selector),
+        ("FmpMcopyStraddle", mcopy_calldata),
+    ] {
+        let mut actions = instantiate(&format!("contracts/{contract}.sol"), contract);
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+        run_differential(actions);
+    }
+}
+
+/// A copy or a call return from a static start below `0x60` with a dynamic length, or to a
+/// parameter or call result that one caller sets to `0x40`, overwrites the free memory pointer.
+#[test]
+fn copy_onto_fmp_word_through_dynamic_length_or_call() {
+    for name in [
+        "CopyFmpDynamicLength",
+        "CallReturnFmpDynamicLength",
+        "CopyFmpUntrustedParameter",
+        "CopyFmpUntrustedReturn",
+    ] {
+        run_fmp_word_fixture(name);
+    }
+}
+
+/// A copy whose length is a loop counter starting at `0` is not a zero-length copy.
+#[test]
+fn copy_onto_fmp_word_with_loop_counter_length() {
+    let mut data = vec![0xff; 32];
+    data.extend(U256::from(0x40).to_be_bytes::<32>());
+    for name in [
+        "CopyFmpLoopLengthDynamicDestination",
+        "CopyFmpLoopLengthStaticDestination",
+    ] {
+        let mut actions = instantiate_yul(&format!("contracts/{name}.yul"), name);
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data: data.clone(),
+        });
+        run_differential(actions);
+    }
+}
+
+/// A zero-length exit succeeds for any offset, inline and across function calls.
+#[test]
+fn zero_length_exit_ignores_offset() {
+    for selector in 0..=3 {
+        for offset in exit_offsets() {
+            let data = words(&[U256::from(selector), offset, U256::ZERO]);
+            assert_exited(&run_exit_call("ZeroLengthExit", data));
+        }
+    }
+    for selector in 4..=7 {
+        let data = words(&[U256::from(selector)]);
+        assert_exited(&run_exit_call("ZeroLengthExit", data));
+    }
+}
+
+/// An exit with a runtime zero length succeeds for any offset.
+#[test]
+fn runtime_zero_length_exit_ignores_offset() {
+    for selector in 0..=3 {
+        for offset in exit_offsets() {
+            let data = words(&[U256::from(selector), offset, U256::ZERO, U256::ZERO]);
+            assert_exited(&run_exit_call("RuntimeLengthExit", data));
+        }
+    }
+}
+
+/// An exit with a runtime non-zero length still traps on an offset past the word range.
+#[test]
+fn runtime_length_exit_traps_on_huge_offset() {
+    for selector in 0..=3 {
+        for offset in [U256::from(1) << 64, U256::from(1) << 200, U256::MAX] {
+            let data = words(&[U256::from(selector), offset, U256::from(1), U256::ZERO]);
+            assert_trapped(&run_exit_call("RuntimeLengthExit", data));
+        }
+    }
+}
+
+/// An exit with a runtime non-zero length from an in-bounds offset returns the memory.
+#[test]
+fn runtime_length_exit_in_bounds() {
+    for selector in 0..=3 {
+        let data = words(&[U256::from(selector), U256::ZERO, U256::from(32), U256::ZERO]);
+        assert_exited(&run_exit_call("RuntimeLengthExit", data));
+    }
+}
+
+/// The reported fallback returning `calldatasize()` bytes from `not(0)`.
+#[test]
+fn zero_length_return_fallback() {
+    for (data, is_empty) in [(vec![], true), (vec![1; 32], false)] {
+        let mut actions = instantiate(
+            "contracts/ZeroLengthExitFallback.sol",
+            "ZeroLengthExitFallback",
+        );
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+        let result = run_differential_results(actions);
+        if is_empty {
+            assert_exited(&result);
+        } else {
+            assert_trapped(&result);
+        }
+    }
+}
+
+/// Offsets from the heap size to past the word range.
+fn exit_offsets() -> Vec<U256> {
+    vec![
+        U256::from(revive_solc_json_interface::PolkaVMDefaultHeapMemorySize),
+        U256::from(u32::MAX),
+        U256::from(1) << 32,
+        U256::from(1) << 64,
+        U256::from(1) << 200,
+        U256::MAX,
+    ]
+}
+
+/// Concatenates the big endian encoding of `values`.
+fn words(values: &[U256]) -> Vec<u8> {
+    values
+        .iter()
+        .flat_map(|value| value.to_be_bytes::<32>())
+        .collect()
+}
+
+/// Runs `data` against the exit fixture `contract` differentially.
+fn run_exit_call(contract: &str, data: Vec<u8>) -> CallResult {
+    let mut actions = instantiate_yul(&format!("contracts/{contract}.yul"), contract);
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential_results(actions)
+}
+
+/// Runs `actions` differentially and returns the result of the last call.
+fn run_differential_results(actions: Vec<SpecsAction>) -> CallResult {
+    Specs {
+        differential: true,
+        actions,
+        ..Default::default()
+    }
+    .run()
+    .pop()
+    .expect("the actions contain a call")
+}
+
+/// Asserts that the call returned or reverted without consuming all gas.
+fn assert_exited(result: &CallResult) {
+    let CallResult::Exec { result, .. } = result else {
+        unreachable!()
+    };
+    assert!(result.result.is_ok(), "{result:?}");
+    assert_ne!(result.weight_consumed, GAS_LIMIT);
+}
+
+/// Asserts that the call trapped and consumed all gas.
+fn assert_trapped(result: &CallResult) {
+    let CallResult::Exec { result, .. } = result else {
+        unreachable!()
+    };
+    assert_eq!(result.weight_consumed, GAS_LIMIT);
 }
 
 /// Scratch `[0, 0x40)` must hold the key and slot after a fused mapping store.

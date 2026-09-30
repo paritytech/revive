@@ -1447,7 +1447,9 @@ fn unary_result_type(operation: UnaryOperation) -> Type {
 
 /// Folds a binary operation on two constant values.
 /// Returns None if the operation cannot be folded.
-fn fold_binary(operation: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<BigUint> {
+///
+/// `mem_opt` relies on this for memory offsets and the free memory pointer.
+pub(crate) fn fold_binary(operation: BinaryOperation, a: &BigUint, b: &BigUint) -> Option<BigUint> {
     let modulus = modulus_u256();
     let max = max_u256();
 
@@ -4128,12 +4130,14 @@ mod tests {
         let block = &mut Block { statements };
         simplifier.simplify_block(block);
 
-        if let Statement::Return { offset, .. } = &block.statements[block.statements.len() - 1] {
-            assert!(
-                offset.id.0 == 1
-                    || matches!(block.statements.last(), Some(Statement::Return { .. }))
-            );
-        }
+        let Some(Statement::Return { offset, length }) = block.statements.last() else {
+            panic!("the block must still end in a return");
+        };
+        assert_eq!(
+            (offset.id, length.id),
+            (ValueId(1), ValueId(1)),
+            "uses of the copy `v2 := v1` must be rewritten to its source"
+        );
     }
 
     #[test]

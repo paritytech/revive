@@ -19,6 +19,10 @@ pub const SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH: &str = "src/tests/data/solidity/
 /// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
 pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
     "src/tests/data/solidity/folded_guard_inlined_loop.sol";
+/// The paritytech/revive#622 reproducer contract at `a/c.sol`.
+pub const SOLIDITY_COLLISION_NESTED_PATH: &str = "src/tests/data/solidity/collision/a/c.sol";
+/// The paritytech/revive#622 reproducer contract at `a_c.sol`.
+pub const SOLIDITY_COLLISION_UNDERSCORE_PATH: &str = "src/tests/data/solidity/collision/a_c.sol";
 
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
@@ -34,6 +38,10 @@ pub const YUL_DUPLICATE_FUNCTIONS_SWITCH_PATH: &str =
 /// Yul contract with duplicate function names in deeply nested switch cases.
 pub const YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH: &str =
     "src/tests/data/yul/duplicate_functions_deep_nesting.yul";
+/// Yul contract whose `_deployed` runtime object has an empty code block.
+pub const YUL_EMPTY_RUNTIME_OBJECT_PATH: &str = "src/tests/data/yul/empty_runtime_object.yul";
+/// Yul contract carrying deploy code only, without the `_deployed` runtime sub-object.
+pub const YUL_DEPLOY_ONLY_OBJECT_PATH: &str = "src/tests/data/yul/deploy_only_object.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =

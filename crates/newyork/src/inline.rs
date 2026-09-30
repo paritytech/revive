@@ -2087,6 +2087,9 @@ pub(crate) fn trim_indices<T: Clone>(values: &mut Vec<T>, indices_ascending: &[u
 mod tests {
     use super::*;
     use crate::ir::{CallKind, CreateKind};
+
+    /// The default `--heap-size`.
+    const TEST_HEAP_SIZE: u64 = 131_072;
     use num::BigUint;
 
     /// [`collect_top_scope_definitions`] and [`region_defines_value`] must recognize the result values of
@@ -2182,7 +2185,7 @@ object "T" {
             let mut lexer = Lexer::new(source.to_owned());
             let yul_object =
                 YulObject::parse(&mut lexer, None).expect("the Yul object should parse");
-            crate::translate_yul_object(&yul_object, false)
+            crate::translate_yul_object(&yul_object, false, TEST_HEAP_SIZE)
                 .expect("translation should succeed without a validator ICE");
         }
     }

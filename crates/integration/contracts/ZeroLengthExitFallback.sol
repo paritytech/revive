@@ -2,7 +2,7 @@
 
 pragma solidity ^0.8;
 
-/// Reproducer from paritytech/bugbounty_reports#219.
+/// Returns `calldatasize()` bytes from `not(0)`.
 contract ZeroLengthExitFallback {
     fallback() external payable {
         assembly {

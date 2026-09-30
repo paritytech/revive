@@ -8,12 +8,14 @@ use revive_solc_json_interface::{
 use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
-    STANDARD_JSON_NEWYORK_DISABLED_PATH, STANDARD_JSON_NEWYORK_ENABLED_PATH,
-    STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
-    STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
-    STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH,
-    STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH, STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH,
-    STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
+    STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
+    STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
+    STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH,
+    STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH,
+    STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH, STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH,
+    STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
 };
 use crate::{pipeline_name, ResolcVersion};
 
@@ -686,5 +688,27 @@ fn populates_output_metadata_fields() {
             output.long_version.is_some(),
             "Standard JSON output for `{path}` should populate `long_version`"
         );
+    }
+}
+
+/// Missing libraries of a created contract are reported for its creator too.
+#[test]
+fn missing_libraries_include_factory_dependencies() {
+    for path in [
+        STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH,
+        STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH,
+    ] {
+        let result = execute_resolc_with_stdin_input(&[JSON_OPTION], path);
+        assert_command_success(&result, "Compiling with standard JSON");
+        assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+        let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+        for name in ["K", "P"] {
+            assert_eq!(
+                output["contracts"]["Ch.sol"][name]["missingLibraries"],
+                serde_json::json!(["Ch.sol:L"]),
+                "`{name}` in `{path}` should miss the library `L`"
+            );
+        }
     }
 }

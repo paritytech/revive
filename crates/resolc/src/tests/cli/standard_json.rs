@@ -12,8 +12,9 @@ use crate::cli_utils::{
     STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
     STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
     STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH,
-    STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH, STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH,
-    STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
+    STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH, STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH,
+    STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH, STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH,
+    STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
 };
 use crate::{pipeline_name, ResolcVersion};
 
@@ -685,6 +686,29 @@ fn populates_output_metadata_fields() {
         assert!(
             output.long_version.is_some(),
             "Standard JSON output for `{path}` should populate `long_version`"
+        );
+    }
+}
+
+/// A library used only in a switch expression is reported as missing.
+#[test]
+fn switch_expression_missing_libraries() {
+    for arguments in [
+        vec![JSON_OPTION],
+        vec![JSON_OPTION, "--detect-missing-libraries"],
+    ] {
+        let result = execute_resolc_with_stdin_input(
+            &arguments,
+            STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH,
+        );
+        assert_command_success(&result, "the switch missing libraries input fixture");
+        assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+        let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+        assert_eq!(
+            output["contracts"]["sw.sol"]["C"]["missingLibraries"],
+            serde_json::json!(["sw.sol:L"]),
+            "the library `sw.sol:L` should be reported as missing with arguments {arguments:?}"
         );
     }
 }

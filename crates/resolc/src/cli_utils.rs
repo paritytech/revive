@@ -19,6 +19,12 @@ pub const SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH: &str = "src/tests/data/solidity/
 /// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
 pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
     "src/tests/data/solidity/folded_guard_inlined_loop.sol";
+/// The verbatim reproducer from paritytech/revive#625: a contract calling an external library.
+pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/library_call.sol";
+/// The paritytech/revive#622 reproducer contract at `a/c.sol`.
+pub const SOLIDITY_COLLISION_NESTED_PATH: &str = "src/tests/data/solidity/collision/a/c.sol";
+/// The paritytech/revive#622 reproducer contract at `a_c.sol`.
+pub const SOLIDITY_COLLISION_UNDERSCORE_PATH: &str = "src/tests/data/solidity/collision/a_c.sol";
 
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
@@ -55,6 +61,9 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_PATH: &str =
 /// infamous "Stack too deep" error in the EVM codegen.
 pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
     "src/tests/data/standard_json/no_evm_codegen_complex.json";
+/// The verbatim reproducer from paritytech/revive#627: a library address used only in a switch expression.
+pub const STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH: &str =
+    "src/tests/data/standard_json/switch_missing_libraries.json";
 /// The standard JSON PVM codegen all wildcard test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.

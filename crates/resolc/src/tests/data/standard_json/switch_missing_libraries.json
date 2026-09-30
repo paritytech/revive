@@ -1,0 +1,1 @@
+{"language":"Solidity","sources":{"sw.sol":{"content":"library L { function f() external pure returns (uint256) { return 1; } } contract C { function g() external view returns (uint256) { if (msg.sender == address(L)) { return 1; } else { return 2; } } }"}},"settings":{"optimizer":{"enabled":true},"outputSelection":{"*":{"*":["evm.bytecode"]}}}}

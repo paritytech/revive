@@ -1,4 +1,7 @@
-use crate::cli_utils::{assert_command_success, execute_resolc, SOLIDITY_DEPENDENCY_CONTRACT_PATH};
+use crate::cli_utils::{
+    assert_command_failure, assert_command_success, execute_resolc,
+    SOLIDITY_DEPENDENCY_CONTRACT_PATH, SOLIDITY_LIBRARY_CALL_CONTRACT_PATH,
+};
 
 /// Test deploy time linking a contract with unresolved factory dependencies.
 #[test]
@@ -61,4 +64,22 @@ fn emits_unlinked_binary_warning() {
     let output = execute_resolc(&[SOLIDITY_DEPENDENCY_CONTRACT_PATH, "--bin"]);
     assert_command_success(&output, "Missing libraries should compile fine");
     assert!(output.stderr.contains("is unlinked"));
+}
+
+/// Test that a library argument with more than one `=` is rejected.
+#[test]
+fn libraries_multiple_equal_signs_fails() {
+    let library = format!(
+        "{SOLIDITY_LIBRARY_CALL_CONTRACT_PATH}:L=0x1111111111111111111111111111111111111111=0x2222222222222222222222222222222222222222"
+    );
+    let output = execute_resolc(&[
+        "--bin",
+        "--libraries",
+        &library,
+        SOLIDITY_LIBRARY_CALL_CONTRACT_PATH,
+    ]);
+    assert_command_failure(&output, "Multiple equal signs in a library argument");
+    assert!(output
+        .stderr
+        .contains("Only one equal sign `=` is allowed in the library string"));
 }

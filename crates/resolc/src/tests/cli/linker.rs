@@ -1,4 +1,9 @@
-use crate::cli_utils::{assert_command_success, execute_resolc, SOLIDITY_DEPENDENCY_CONTRACT_PATH};
+use revive_common::ObjectFormat;
+
+use crate::cli_utils::{
+    assert_command_success, execute_resolc, SOLIDITY_DEPENDENCY_CONTRACT_PATH,
+    SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH,
+};
 
 /// Test deploy time linking a contract with unresolved factory dependencies.
 #[test]
@@ -61,4 +66,46 @@ fn emits_unlinked_binary_warning() {
     let output = execute_resolc(&[SOLIDITY_DEPENDENCY_CONTRACT_PATH, "--bin"]);
     assert_command_success(&output, "Missing libraries should compile fine");
     assert!(output.stderr.contains("is unlinked"));
+}
+
+/// Test that a linked library blob does not resolve its own library address symbol.
+#[test]
+fn library_address_is_not_resolved_from_library_blob() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let output_directory = temp_dir.path().to_path_buf();
+    let source_path = temp_dir.path().to_path_buf().join("Ch.sol");
+    std::fs::copy(SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH, &source_path).unwrap();
+
+    assert_command_success(
+        &execute_resolc(&[
+            source_path.to_str().unwrap(),
+            "--bin",
+            "-o",
+            &output_directory.to_string_lossy(),
+        ]),
+        "Missing libraries should compile fine",
+    );
+
+    let library_blob_path = format!("{}:L.pvm", source_path.to_str().unwrap());
+    let blob_path = format!("{}:K.pvm", source_path.to_str().unwrap());
+
+    let output = execute_resolc(&["--link", &blob_path, &library_blob_path]);
+    assert_command_success(&output, "The linker mode with missing library should work");
+    assert!(output.stdout.contains("still unresolved"));
+    assert_eq!(
+        ObjectFormat::try_from(std::fs::read(&blob_path).unwrap().as_slice()).unwrap(),
+        ObjectFormat::ELF
+    );
+
+    let library_path = format!(
+        "{}:L=0x1111111111111111111111111111111111111111",
+        source_path.to_str().unwrap()
+    );
+    let output = execute_resolc(&["--link", "--libraries", &library_path, &blob_path]);
+    assert_command_success(&output, "The linker mode with the library should work");
+    assert!(!output.stdout.contains("still unresolved"));
+    assert_eq!(
+        ObjectFormat::try_from(std::fs::read(&blob_path).unwrap().as_slice()).unwrap(),
+        ObjectFormat::PVM
+    );
 }

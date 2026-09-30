@@ -8,13 +8,13 @@ use revive_solc_json_interface::{
 use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
-    STANDARD_JSON_NEWYORK_DISABLED_PATH, STANDARD_JSON_NEWYORK_ENABLED_PATH,
-    STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
-    STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
-    STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH,
-    STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH, STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH,
-    STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH, STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH,
-    STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
+    STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
+    STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
+    STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
+    STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH,
+    STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH,
+    STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH, STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH,
+    STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
 };
 use crate::{pipeline_name, ResolcVersion};
 
@@ -584,6 +584,18 @@ fn invalid_extra_arguments() {
         let output = to_solc_standard_json_output(&result.stdout);
         assert_standard_json_errors_contain(&output, case.error_message);
     }
+}
+
+/// Immutable data above 4096 bytes is reported in the standard JSON `errors`.
+#[test]
+fn immutables_over_limit_error() {
+    let result =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH);
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_standard_json_errors_contain(
+        &output,
+        "immutable data size of 4128 bytes exceeds the limit of 4096 bytes",
+    );
 }
 
 /// Extracts the hex PVM bytecode object of `path`/`name` from a standard JSON output.

@@ -19,6 +19,12 @@ pub const SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH: &str = "src/tests/data/solidity/
 /// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
 pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
     "src/tests/data/solidity/folded_guard_inlined_loop.sol";
+/// The reproducer from paritytech/revive#624 with 129 immutables, one more than the limit allows.
+pub const SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH: &str =
+    "src/tests/data/solidity/immutables_over_limit.sol";
+/// The reproducer from paritytech/revive#624 with 128 immutables, exactly at the limit.
+pub const SOLIDITY_IMMUTABLES_AT_LIMIT_PATH: &str =
+    "src/tests/data/solidity/immutables_at_limit.sol";
 /// The verbatim reproducer from paritytech/revive#625: a contract calling an external library.
 pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/library_call.sol";
 /// The paritytech/revive#622 reproducer contract at `a/c.sol`.
@@ -48,6 +54,9 @@ pub const YUL_DEPLOY_ONLY_OBJECT_PATH: &str = "src/tests/data/yul/deploy_only_ob
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
     "src/tests/data/standard_json/solidity_contracts.json";
+/// The standard JSON fixture with the 129 immutables reproducer from paritytech/revive#624.
+pub const STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH: &str =
+    "src/tests/data/standard_json/immutables_over_limit.json";
 /// The standard JSON contracts test fixture path that requests every single output.
 pub const STANDARD_JSON_ALL_OUTPUTS_PATH: &str = "src/tests/data/standard_json/all_outputs.json";
 /// The standard JSON no EVM codegen test fixture path.

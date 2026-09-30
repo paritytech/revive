@@ -33,6 +33,25 @@ use revive_common::BYTE_LENGTH_WORD;
 /// this is treated as a dynamic escape instead.
 const MAX_RANGE_WORDS: u64 = 4096;
 
+/// The word-aligned words covered by `[address, address + size)`.
+/// [`None`] if the range spans more than [`MAX_RANGE_WORDS`].
+fn range_words(address: u64, size: u64) -> Option<impl Iterator<Item = u64>> {
+    let first_word = word_align(address);
+    let num_words = address
+        .saturating_add(size)
+        .saturating_sub(first_word)
+        .saturating_add(BYTE_LENGTH_WORD as u64 - 1)
+        / BYTE_LENGTH_WORD as u64;
+
+    (num_words <= MAX_RANGE_WORDS).then(|| {
+        (0..num_words).scan(first_word, |word, _| {
+            let current = *word;
+            *word = word.saturating_add(BYTE_LENGTH_WORD as u64);
+            Some(current)
+        })
+    })
+}
+
 /// Classification of a memory access pattern.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum AccessPattern {
@@ -776,23 +795,13 @@ impl HeapAnalysis {
         let len = self.extract_static_offset(length);
         match (start, len) {
             (Some(_), Some(0)) => {}
-            (Some(address), Some(size)) => {
-                let end = address.saturating_add(size);
-                let first_word = word_align(address);
-                let range = end.saturating_sub(first_word);
-                let num_words =
-                    range.saturating_add(BYTE_LENGTH_WORD as u64 - 1) / BYTE_LENGTH_WORD as u64;
-                if num_words > MAX_RANGE_WORDS {
-                    self.escaping_regions.insert(first_word);
+            (Some(address), Some(size)) => match range_words(address, size) {
+                Some(words) => self.escaping_regions.extend(words),
+                None => {
+                    self.escaping_regions.insert(word_align(address));
                     self.has_dynamic_escapes = true;
-                } else {
-                    let mut word = first_word;
-                    while word < end {
-                        self.escaping_regions.insert(word);
-                        word += BYTE_LENGTH_WORD as u64;
-                    }
                 }
-            }
+            },
             (Some(address), None) => {
                 self.escaping_regions.insert(word_align(address));
                 self.has_dynamic_escapes = true;
@@ -1116,24 +1125,13 @@ impl HeapAnalysis {
     /// If the range is too large, treats it as a dynamic access instead.
     fn taint_range(&mut self, start: Option<u64>, len: Option<u64>) {
         match (start, len) {
-            (Some(address), Some(size)) if size > 0 => {
-                let end = address.saturating_add(size);
-                let first_word = word_align(address);
-                let num_words = end
-                    .saturating_sub(first_word)
-                    .saturating_add(BYTE_LENGTH_WORD as u64 - 1)
-                    / BYTE_LENGTH_WORD as u64;
-                if num_words > MAX_RANGE_WORDS {
-                    self.tainted_regions.insert(first_word);
+            (Some(address), Some(size)) if size > 0 => match range_words(address, size) {
+                Some(words) => self.tainted_regions.extend(words),
+                None => {
+                    self.tainted_regions.insert(word_align(address));
                     self.has_dynamic_accesses = true;
-                } else {
-                    let mut word = first_word;
-                    while word < end {
-                        self.tainted_regions.insert(word);
-                        word += BYTE_LENGTH_WORD as u64;
-                    }
                 }
-            }
+            },
             (Some(address), _) => {
                 self.tainted_regions.insert(word_align(address));
                 self.has_dynamic_accesses = true;
@@ -1445,26 +1443,19 @@ impl HeapAnalysis {
         let start = self.extract_static_offset(offset);
         let len = self.extract_static_offset(length);
         match (start, len) {
-            (Some(address), Some(size)) if size > 0 => {
-                let end = address.saturating_add(size);
-                let first_word = word_align(address);
-                let num_words = end
-                    .saturating_sub(first_word)
-                    .saturating_add(BYTE_LENGTH_WORD as u64 - 1)
-                    / BYTE_LENGTH_WORD as u64;
-                if num_words > MAX_RANGE_WORDS {
-                    self.escaping_regions.insert(first_word);
-                    self.tainted_regions.insert(first_word);
-                    self.has_dynamic_escapes = true;
-                } else {
-                    let mut word = first_word;
-                    while word < end {
+            (Some(address), Some(size)) if size > 0 => match range_words(address, size) {
+                Some(words) => {
+                    for word in words {
                         self.escaping_regions.insert(word);
                         self.tainted_regions.insert(word);
-                        word += BYTE_LENGTH_WORD as u64;
                     }
                 }
-            }
+                None => {
+                    self.escaping_regions.insert(word_align(address));
+                    self.tainted_regions.insert(word_align(address));
+                    self.has_dynamic_escapes = true;
+                }
+            },
             (Some(address), None) => {
                 self.escaping_regions.insert(word_align(address));
                 self.tainted_regions.insert(word_align(address));
@@ -1745,11 +1736,21 @@ impl HeapAnalysis {
     /// returns true iff its source expression matches a Solidity-allocator
     /// pattern that keeps the FMP < heap_size at runtime. Recognized
     /// patterns:
-    ///   - Literal below `heap_size` (`memoryguard(0x80)` collapses to this).
+    ///   - Literal in `[0x80, heap_size)` (`memoryguard(0x80)` collapses to this).
+    ///     A lower pointer breaks [`Self::is_free_pointer_relative`], which
+    ///     assumes `FMP >= 0x80` so that copies to `mload(0x40) + k` miss
+    ///     the FMP slot. As an `add` or `and` operand, any literal below
+    ///     `heap_size` is trusted as a bounded size, such as the 31 that
+    ///     rounds up an allocation in a non-inlined `finalize_allocation`
+    ///     whose pointer is a parameter.
     ///   - `Var(x)` where `x` itself is trusted (forwarding chain).
     ///   - `Binary { Add, ... }` where at least one operand is trusted
     ///     (the canonical `add(mload(0x40), bounded_size)` pattern, or
-    ///     its variants with both operands derived from FMP arithmetic).
+    ///     its variants with both operands derived from FMP arithmetic)
+    ///     and no operand is a literal of at least `heap_size`, such as
+    ///     `not(0xff)` (solc's form of subtracting 0x100): that addend can
+    ///     only wrap the pointer below its base or move it out of the heap.
+    ///     A dynamic addend stays trusted (known gap: `add(mload(0x40), calldataload(0))`).
     ///   - `Binary { And, ... }` where at least one operand is trusted
     ///     (alignment masking such as `and(add(mload(0x40), size), not(31))`
     ///     keeps a bounded value bounded).
@@ -1767,6 +1768,17 @@ impl HeapAnalysis {
     ///
     /// Walks at most `MAX_FMP_TRUST_DEPTH` `Var` links to avoid loops.
     fn is_trusted_fmp_source(&self, value_id: u32) -> bool {
+        let is_trusted_or_bounded_size =
+            |operand_id: u32| match self.value_expressions.get(&operand_id) {
+                Some(Expression::Literal { value, .. }) => *value < BigUint::from(self.heap_size),
+                _ => self.is_trusted_fmp_source(operand_id),
+            };
+        let is_literal_outside_heap =
+            |operand_id: u32| match self.value_expressions.get(&operand_id) {
+                Some(Expression::Literal { value, .. }) => *value >= BigUint::from(self.heap_size),
+                _ => false,
+            };
+
         const MAX_FMP_TRUST_DEPTH: u32 = 32;
         let mut current = value_id;
         for _ in 0..MAX_FMP_TRUST_DEPTH {
@@ -1775,7 +1787,7 @@ impl HeapAnalysis {
             };
             match expression {
                 Expression::Literal { value, .. } => {
-                    return *value < BigUint::from(self.heap_size);
+                    return (BigUint::from(0x80u64)..BigUint::from(self.heap_size)).contains(value);
                 }
                 Expression::MLoad { offset, .. } => {
                     return self.extract_static_offset(offset) == Some(0x40);
@@ -1789,16 +1801,18 @@ impl HeapAnalysis {
                     lhs,
                     rhs,
                 } => {
-                    return self.is_trusted_fmp_source(lhs.id.0)
-                        || self.is_trusted_fmp_source(rhs.id.0);
+                    return !is_literal_outside_heap(lhs.id.0)
+                        && !is_literal_outside_heap(rhs.id.0)
+                        && (is_trusted_or_bounded_size(lhs.id.0)
+                            || is_trusted_or_bounded_size(rhs.id.0));
                 }
                 Expression::Binary {
                     operation: crate::ir::BinaryOperation::And,
                     lhs,
                     rhs,
                 } => {
-                    return self.is_trusted_fmp_source(lhs.id.0)
-                        || self.is_trusted_fmp_source(rhs.id.0);
+                    return is_trusted_or_bounded_size(lhs.id.0)
+                        || is_trusted_or_bounded_size(rhs.id.0);
                 }
                 _ => return false,
             }
@@ -2214,13 +2228,20 @@ mod tests {
     const TEST_HEAP_SIZE: u64 = 131_072;
 
     /// Builds a `Statement::Let` binding `id` to the literal `value`.
-    fn literal(id: u32, value: u64) -> Statement {
-        use crate::ir::{Type, ValueId};
+    /// Values wider than 64 bits need `big_literal_binding`.
+    fn literal_binding(id: u32, value: u64) -> Statement {
+        big_literal_binding(id, BigUint::from(value))
+    }
+
+    /// Builds a `Statement::Let` binding `id` to the literal `value`, which may be wider than
+    /// 64 bits, such as 2^128 or `not(0x7f)`.
+    fn big_literal_binding(id: u32, value: BigUint) -> Statement {
+        use crate::ir::{BitWidth, Type, ValueId};
         Statement::Let {
             bindings: vec![ValueId(id)],
             value: Expression::Literal {
-                value: BigUint::from(value),
-                value_type: Type::default(),
+                value,
+                value_type: Type::Int(BitWidth::I256),
             },
         }
     }
@@ -2256,18 +2277,6 @@ mod tests {
         assert_eq!(gcd(12, 18), 6);
         assert_eq!(gcd(17, 13), 1);
         assert_eq!(gcd(0, 5), 5);
-    }
-
-    /// Builds a `Let` binding `id` to the literal `value`.
-    fn literal_binding(id: u32, value: u64) -> Statement {
-        use crate::ir::{Type, ValueId};
-        Statement::Let {
-            bindings: vec![ValueId(id)],
-            value: Expression::Literal {
-                value: BigUint::from(value),
-                value_type: Type::default(),
-            },
-        }
     }
 
     /// Builds the statements that establish the FMP from a trusted literal (`mstore(0x40, 0x80)`,
@@ -2336,8 +2345,8 @@ mod tests {
     fn object_with_dynamic_copy(dest_setup: Vec<Statement>) -> Object {
         use crate::ir::{Block, ValueId};
         let mut statements = dest_setup;
-        statements.push(literal(20, 0));
-        statements.push(literal(21, 23));
+        statements.push(literal_binding(20, 0));
+        statements.push(literal_binding(21, 23));
         statements.push(Statement::CallDataCopy {
             destination: Value::int(ValueId(10)),
             offset: Value::int(ValueId(20)),
@@ -2579,7 +2588,7 @@ mod tests {
                     offset: Value::int(ValueId(0)),
                 },
             },
-            literal(2, 0xff),
+            literal_binding(2, 0xff),
             Statement::Let {
                 bindings: vec![ValueId(10)],
                 value: Expression::Binary {
@@ -2603,7 +2612,7 @@ mod tests {
     fn dynamic_copy_fmp_relative_dest_stays_bounded() {
         use crate::ir::{BinaryOperation, ValueId};
         let dest_setup = vec![
-            literal(0, 0x40),
+            literal_binding(0, 0x40),
             Statement::Let {
                 bindings: vec![ValueId(1)],
                 value: Expression::MLoad {
@@ -2611,7 +2620,7 @@ mod tests {
                     region: MemoryRegion::FreePointerSlot,
                 },
             },
-            literal(2, 0x20),
+            literal_binding(2, 0x20),
             Statement::Let {
                 bindings: vec![ValueId(10)],
                 value: Expression::Binary {
@@ -2631,8 +2640,8 @@ mod tests {
     fn object_with_mcopy(setup: Vec<Statement>, length: u64) -> Object {
         use crate::ir::ValueId;
         let mut statements = setup;
-        statements.push(literal(11, 0x80));
-        statements.push(literal(12, length));
+        statements.push(literal_binding(11, 0x80));
+        statements.push(literal_binding(12, length));
         statements.push(Statement::MCopy {
             destination: Value::int(ValueId(10)),
             source: Value::int(ValueId(11)),
@@ -2644,8 +2653,8 @@ mod tests {
     fn object_with_external_call(setup: Vec<Statement>, return_length: u64) -> Object {
         use crate::ir::{CallKind, ValueId};
         let mut statements = setup;
-        statements.push(literal(11, return_length));
-        statements.push(literal(12, 0));
+        statements.push(literal_binding(11, return_length));
+        statements.push(literal_binding(12, 0));
         statements.push(Statement::ExternalCall {
             kind: CallKind::StaticCall,
             gas: Value::int(ValueId(12)),
@@ -2662,7 +2671,8 @@ mod tests {
 
     #[test]
     fn mcopy_onto_fmp_word_flags_unbounded() {
-        let results = object_with_mcopy(vec![literal(10, 0x40)], 0x20).analyze_heap(TEST_HEAP_SIZE);
+        let results =
+            object_with_mcopy(vec![literal_binding(10, 0x40)], 0x20).analyze_heap(TEST_HEAP_SIZE);
         assert!(results.fmp_could_be_unbounded());
     }
 
@@ -2681,8 +2691,8 @@ mod tests {
 
     #[test]
     fn external_call_return_onto_fmp_word_flags_unbounded() {
-        let results =
-            object_with_external_call(vec![literal(10, 0x40)], 0x20).analyze_heap(TEST_HEAP_SIZE);
+        let results = object_with_external_call(vec![literal_binding(10, 0x40)], 0x20)
+            .analyze_heap(TEST_HEAP_SIZE);
         assert!(results.fmp_could_be_unbounded());
     }
 
@@ -2714,7 +2724,7 @@ mod tests {
     fn free_pointer_binding(id: u32) -> Vec<Statement> {
         use crate::ir::ValueId;
         vec![
-            literal(id + 1, 0x40),
+            literal_binding(id + 1, 0x40),
             Statement::Let {
                 bindings: vec![ValueId(id)],
                 value: Expression::MLoad {
@@ -2729,8 +2739,8 @@ mod tests {
     fn mcopy_word_to(destination: u32, first_id: u32) -> Vec<Statement> {
         use crate::ir::ValueId;
         vec![
-            literal(first_id, 0x80),
-            literal(first_id + 1, 0x20),
+            literal_binding(first_id, 0x80),
+            literal_binding(first_id + 1, 0x20),
             Statement::MCopy {
                 destination: Value::int(ValueId(destination)),
                 source: Value::int(ValueId(first_id)),
@@ -2746,7 +2756,7 @@ mod tests {
         let mut function = Function::new(FunctionId(0), "copy_word".to_string());
         function.parameters = vec![(ValueId(30), Type::default())];
         let mut body = vec![
-            literal(31, 0x20),
+            literal_binding(31, 0x20),
             Statement::Let {
                 bindings: vec![ValueId(32)],
                 value: Expression::Binary {
@@ -2772,8 +2782,8 @@ mod tests {
     fn mcopy_static_start_dynamic_length_below_fmp_word_flags_unbounded() {
         use crate::ir::ValueId;
         let statements = vec![
-            literal(10, 0),
-            literal(11, 0x80),
+            literal_binding(10, 0),
+            literal_binding(11, 0x80),
             calldata_binding(12),
             Statement::MCopy {
                 destination: Value::int(ValueId(10)),
@@ -2789,7 +2799,7 @@ mod tests {
     fn external_call_static_return_start_dynamic_length_flags_unbounded() {
         use crate::ir::{CallKind, ValueId};
         let statements = vec![
-            literal(10, 0),
+            literal_binding(10, 0),
             calldata_binding(11),
             Statement::ExternalCall {
                 kind: CallKind::StaticCall,
@@ -3684,6 +3694,91 @@ mod tests {
         );
     }
 
+    /// A literal FMP below 0x80 breaks the premise that copies to `mload(0x40) + k` miss the FMP
+    /// slot, so such a copy could corrupt the pointer unnoticed: the FMP must count as unbounded
+    /// so its load is not truncated by the range proof.
+    #[test]
+    fn fmp_literal_below_dynamic_heap_base_is_untrusted() {
+        for pointer in [0x20, 0x7f] {
+            let results = object_with_fmp_literal_store(pointer).analyze_heap(TEST_HEAP_SIZE);
+            assert!(
+                results.fmp_could_be_unbounded(),
+                "a literal FMP of {pointer:#x} is below the dynamic heap and must not be trusted"
+            );
+        }
+    }
+
+    /// Builds an object that stores `add(mload(0x40), addend)` to the FMP slot and reads it back.
+    fn object_with_fmp_add_store(addend: BigUint) -> Object {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = observe_fmp_statements(0);
+        statements.extend([
+            big_literal_binding(2, addend),
+            binary_binding(3, BinaryOperation::Add, 1, 2),
+            Statement::MStore {
+                offset: Value::int(ValueId(0)),
+                value: Value::int(ValueId(3)),
+                region: MemoryRegion::FreePointerSlot,
+            },
+        ]);
+        statements.extend(observe_fmp_statements(4));
+        object_with_code(statements, vec![])
+    }
+
+    /// Adding a literal of at least the heap size, such as `not(0xff)` (solc's form of subtracting
+    /// 0x100), wraps the FMP below its base or moves it out of the heap, so the FMP must count as
+    /// unbounded and its load must not be truncated by the range proof.
+    #[test]
+    fn fmp_add_of_literal_outside_heap_is_untrusted() {
+        let not_0xff =
+            (BigUint::from(1u32) << revive_common::BIT_LENGTH_WORD) - BigUint::from(0x100u32);
+        for addend in [BigUint::from(TEST_HEAP_SIZE), not_0xff] {
+            let results = object_with_fmp_add_store(addend.clone()).analyze_heap(TEST_HEAP_SIZE);
+            assert!(
+                results.fmp_could_be_unbounded(),
+                "add(mload(0x40), {addend:#x}) can leave the heap and must not be trusted"
+            );
+        }
+    }
+
+    /// Solidity allocates by storing `add(mload(0x40), size)`, which must keep the range proof.
+    #[test]
+    fn fmp_add_of_bounded_size_is_trusted() {
+        let results =
+            object_with_fmp_add_store(BigUint::from(0x20u32)).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "add(mload(0x40), 0x20) is an allocation and must stay trusted"
+        );
+    }
+
+    /// A non-inlined `finalize_allocation(memPtr, size)` stores `add(memPtr, and(add(size, 31),
+    /// not(31)))` with both arguments parameters, so only the literal 31 marks the rounded size
+    /// as bounded; it must keep the range proof although 31 is below the dynamic heap base.
+    #[test]
+    fn fmp_allocation_from_parameters_is_trusted() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = vec![
+            literal_binding(2, 31),
+            binary_binding(3, BinaryOperation::Add, 1, 2),
+            big_literal_binding(4, not_0x1f()),
+            binary_binding(5, BinaryOperation::And, 3, 4),
+            binary_binding(6, BinaryOperation::Add, 0, 5),
+            literal_binding(7, 0x40),
+            Statement::MStore {
+                offset: Value::int(ValueId(7)),
+                value: Value::int(ValueId(6)),
+                region: MemoryRegion::FreePointerSlot,
+            },
+        ];
+        statements.extend(observe_fmp_statements(8));
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "an allocation rounded up with the literal 31 must stay trusted"
+        );
+    }
+
     #[test]
     fn test_offset_info_from_literal() {
         let analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
@@ -3788,5 +3883,129 @@ mod tests {
             !after.can_use_native(0x80),
             "post-dedup native mode must be disabled for the now-variable offset word"
         );
+    }
+
+    /// `range_words` covers every touched word, respects the cap, and does not overflow at the top.
+    #[test]
+    fn range_words_walks_every_covered_word() {
+        let words = |address, size| range_words(address, size).map(Iterator::collect::<Vec<_>>);
+        let top = word_align(u64::MAX);
+
+        assert_eq!(words(0x30, BYTE_LENGTH_WORD as u64), Some(vec![0x20, 0x40]));
+        assert_eq!(words(0, 2 * BYTE_LENGTH_WORD as u64), Some(vec![0, 0x20]));
+        assert_eq!(words(0x21, 1), Some(vec![0x20]));
+        assert_eq!(words(0x20, 0), Some(vec![]));
+
+        assert_eq!(
+            range_words(0, MAX_RANGE_WORDS * BYTE_LENGTH_WORD as u64).map(Iterator::count),
+            Some(MAX_RANGE_WORDS as usize)
+        );
+        assert!(range_words(0, (MAX_RANGE_WORDS + 1) * BYTE_LENGTH_WORD as u64).is_none());
+
+        assert_eq!(words(u64::MAX, BYTE_LENGTH_WORD as u64), Some(vec![top]));
+        assert_eq!(words(u64::MAX - 1, u64::MAX), Some(vec![top]));
+    }
+
+    /// `taint_range` taints the covered words, collapses wide or empty ranges to the start word.
+    #[test]
+    fn taint_range_taints_covered_words() {
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
+        analysis.taint_range(Some(0x30), Some(BYTE_LENGTH_WORD as u64));
+        assert_eq!(analysis.tainted_regions, BTreeSet::from([0x20, 0x40]));
+        assert!(analysis.escaping_regions.is_empty());
+        assert!(!analysis.has_dynamic_accesses);
+
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
+        analysis.taint_range(Some(u64::MAX), Some(BYTE_LENGTH_WORD as u64));
+        assert_eq!(
+            analysis.tainted_regions,
+            BTreeSet::from([word_align(u64::MAX)])
+        );
+        assert!(analysis.escaping_regions.is_empty());
+        assert!(!analysis.has_dynamic_accesses);
+
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
+        analysis.taint_range(
+            Some(0),
+            Some((MAX_RANGE_WORDS + 1) * BYTE_LENGTH_WORD as u64),
+        );
+        assert_eq!(analysis.tainted_regions, BTreeSet::from([0]));
+        assert!(analysis.escaping_regions.is_empty());
+        assert!(analysis.has_dynamic_accesses);
+
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
+        analysis.taint_range(Some(0x30), Some(0));
+        assert_eq!(analysis.tainted_regions, BTreeSet::from([0x20]));
+        assert!(analysis.escaping_regions.is_empty());
+        assert!(analysis.has_dynamic_accesses);
+    }
+
+    /// Binds `id` to the static offset `value` so the range helpers can resolve it.
+    fn offset_value(analysis: &mut HeapAnalysis, id: u32, value: u64) -> Value {
+        use crate::ir::{Type, ValueId};
+        analysis.offset_values.insert(
+            id,
+            OffsetInfo {
+                static_value: Some(value),
+                ..Default::default()
+            },
+        );
+        Value::new(ValueId(id), Type::default())
+    }
+
+    /// `mark_escaping_range` marks the covered words escaping and collapses wide ranges.
+    #[test]
+    fn mark_escaping_range_marks_covered_words() {
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
+        let offset = offset_value(&mut analysis, 1, 0x30);
+        let length = offset_value(&mut analysis, 2, BYTE_LENGTH_WORD as u64);
+        analysis.mark_escaping_range(&offset, &length);
+        assert_eq!(analysis.escaping_regions, BTreeSet::from([0x20, 0x40]));
+        assert!(analysis.tainted_regions.is_empty());
+        assert!(!analysis.has_dynamic_escapes);
+
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
+        let offset = offset_value(&mut analysis, 1, u64::MAX);
+        let length = offset_value(&mut analysis, 2, BYTE_LENGTH_WORD as u64);
+        analysis.mark_escaping_range(&offset, &length);
+        assert_eq!(
+            analysis.escaping_regions,
+            BTreeSet::from([word_align(u64::MAX)])
+        );
+        assert!(analysis.tainted_regions.is_empty());
+        assert!(!analysis.has_dynamic_escapes);
+
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
+        let offset = offset_value(&mut analysis, 1, 0);
+        let length = offset_value(
+            &mut analysis,
+            2,
+            (MAX_RANGE_WORDS + 1) * BYTE_LENGTH_WORD as u64,
+        );
+        analysis.mark_escaping_range(&offset, &length);
+        assert_eq!(analysis.escaping_regions, BTreeSet::from([0]));
+        assert!(analysis.tainted_regions.is_empty());
+        assert!(analysis.has_dynamic_escapes);
+    }
+
+    /// `mark_escaping_and_tainted_range` puts every covered word in both sets.
+    #[test]
+    fn mark_escaping_and_tainted_range_marks_both_sets() {
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
+        let offset = offset_value(&mut analysis, 1, 0x30);
+        let length = offset_value(&mut analysis, 2, BYTE_LENGTH_WORD as u64);
+        analysis.mark_escaping_and_tainted_range(&offset, &length);
+        assert_eq!(analysis.escaping_regions, BTreeSet::from([0x20, 0x40]));
+        assert_eq!(analysis.tainted_regions, BTreeSet::from([0x20, 0x40]));
+        assert!(!analysis.has_dynamic_escapes);
+
+        let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
+        let offset = offset_value(&mut analysis, 1, u64::MAX);
+        let length = offset_value(&mut analysis, 2, BYTE_LENGTH_WORD as u64);
+        analysis.mark_escaping_and_tainted_range(&offset, &length);
+        let top = BTreeSet::from([word_align(u64::MAX)]);
+        assert_eq!(analysis.escaping_regions, top);
+        assert_eq!(analysis.tainted_regions, top);
+        assert!(!analysis.has_dynamic_escapes);
     }
 }

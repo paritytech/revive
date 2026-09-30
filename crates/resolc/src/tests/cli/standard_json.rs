@@ -18,6 +18,7 @@ use crate::cli_utils::{
 use crate::{pipeline_name, ResolcVersion};
 
 const JSON_OPTION: &str = "--standard-json";
+const MULTIPLE_MODES_ERROR: &str = "Only one mode is allowed at the same time";
 
 /// A subset of contracts and sources expected to exist in the JSON output.
 struct ExpectedOutput {
@@ -562,6 +563,18 @@ fn invalid_extra_arguments() {
             arguments: vec![JSON_OPTION, "--newyork"],
             error_message:
                 "The newyork IR pipeline must be enabled in standard JSON input polkavm settings",
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--yul"],
+            error_message: MULTIPLE_MODES_ERROR,
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--link"],
+            error_message: MULTIPLE_MODES_ERROR,
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--combined-json", "abi"],
+            error_message: MULTIPLE_MODES_ERROR,
         },
     ];
 

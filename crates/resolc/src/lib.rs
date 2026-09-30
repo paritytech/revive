@@ -352,7 +352,14 @@ pub fn combined_json<T: Compiler>(
         ));
     }
 
-    let mut combined_json = solc.combined_json(paths, selectors)?;
+    let mut combined_json = solc.combined_json(
+        paths,
+        selectors,
+        base_path.clone(),
+        include_paths.clone(),
+        allow_paths.clone(),
+        remappings.clone(),
+    )?;
     combined_json.resolc_version = Some(ResolcVersion::default().long);
     standard_output(
         solc,

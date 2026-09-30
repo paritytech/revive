@@ -1,5 +1,6 @@
 //! The Solidity compiler solc interface.
 
+use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
@@ -127,6 +128,10 @@ impl Compiler for SolcCompiler {
         &self,
         paths: &[PathBuf],
         mut selectors: HashSet<CombinedJsonSelector>,
+        base_path: Option<String>,
+        include_paths: Vec<String>,
+        allow_paths: Option<String>,
+        remappings: BTreeSet<String>,
     ) -> anyhow::Result<CombinedJson> {
         selectors.retain(|selector| selector.is_source_solc());
         if selectors.is_empty() {
@@ -139,7 +144,20 @@ impl Compiler for SolcCompiler {
         let mut command = std::process::Command::new(executable.as_str());
         command.stdout(std::process::Stdio::piped());
         command.stderr(std::process::Stdio::piped());
+        command.args(remappings);
         command.args(paths);
+        for include_path in include_paths.into_iter() {
+            command.arg("--include-path");
+            command.arg(include_path);
+        }
+        if let Some(base_path) = base_path {
+            command.arg("--base-path");
+            command.arg(base_path);
+        }
+        if let Some(allow_paths) = allow_paths {
+            command.arg("--allow-paths");
+            command.arg(allow_paths);
+        }
         command.arg("--combined-json");
         command.arg(
             selectors

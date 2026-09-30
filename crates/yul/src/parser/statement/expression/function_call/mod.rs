@@ -105,7 +105,11 @@ impl FunctionCall {
                 ..
             }) = self.arguments.first().expect("Always exists")
             {
-                libraries.insert(library_path.to_string());
+                libraries.insert(
+                    library_path
+                        .unescape()
+                        .unwrap_or_else(|_| library_path.to_string()),
+                );
             }
             return libraries;
         }
@@ -882,10 +886,13 @@ impl FunctionCall {
             }
 
             Name::LinkerSymbol => {
-                let mut arguments = self.pop_arguments::<1>(context)?;
-                let path = arguments[0].original.take().ok_or_else(|| {
-                    anyhow::anyhow!("{} Linker symbol literal is missing", location)
-                })?;
+                let path = match self.arguments.first() {
+                    Some(Expression::Literal(Literal {
+                        inner: LexicalLiteral::String(path),
+                        ..
+                    })) => path.unescape()?,
+                    _ => anyhow::bail!("{} Linker symbol literal is missing", location),
+                };
                 revive_llvm_context::polkavm_evm_call::linker_symbol(context, &path).map(Some)
             }
             Name::MemoryGuard => {

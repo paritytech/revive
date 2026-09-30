@@ -113,6 +113,15 @@ pub const STANDARD_JSON_YUL_PVM_CODEGEN_PATH: &str =
 /// PVM bytecode generation and only validate the Yul.
 pub const STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/yul_no_pvm_codegen.json";
+/// A library in `ü.sol`, whose path solc escapes in `linkersymbol`, with the library address set.
+pub const STANDARD_JSON_LIBRARY_ESCAPED_PATH: &str =
+    "src/tests/data/standard_json/library_escaped_path.json";
+/// The same input as [`STANDARD_JSON_LIBRARY_ESCAPED_PATH`] compiled with the newyork pipeline.
+pub const STANDARD_JSON_LIBRARY_ESCAPED_PATH_NEWYORK: &str =
+    "src/tests/data/standard_json/library_escaped_path_newyork.json";
+/// The same source as [`STANDARD_JSON_LIBRARY_ESCAPED_PATH`] without the library address.
+pub const STANDARD_JSON_LIBRARY_ESCAPED_PATH_UNLINKED: &str =
+    "src/tests/data/standard_json/library_escaped_path_unlinked.json";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";

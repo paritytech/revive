@@ -1,0 +1,25 @@
+{
+    "language": "Solidity",
+    "sources": {
+        "ü.sol": {
+            "content": "library L { function f(uint256 x) external pure returns (uint256) { return x * 3; } }\ncontract C { function g(uint256 x) external pure returns (uint256) { return L.f(x); } }\n"
+        }
+    },
+    "settings": {
+        "optimizer": {
+            "enabled": true
+        },
+        "libraries": {
+            "ü.sol": {
+                "L": "0x1111111111111111111111111111111111111111"
+            }
+        },
+        "outputSelection": {
+            "*": {
+                "*": [
+                    "evm.bytecode"
+                ]
+            }
+        }
+    }
+}

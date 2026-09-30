@@ -3,6 +3,8 @@
 use serde::Deserialize;
 use serde::Serialize;
 
+use revive_common::BASE_HEXADECIMAL;
+
 use crate::lexer::token::lexeme::Lexeme;
 use crate::lexer::token::lexeme::Literal;
 use crate::lexer::token::location::Location;
@@ -24,6 +26,46 @@ impl String {
             inner,
             is_hexadecimal,
         }
+    }
+
+    /// Returns the string with its escape sequences decoded.
+    pub fn unescape(&self) -> anyhow::Result<std::string::String> {
+        let mut bytes = Vec::with_capacity(self.inner.len());
+        let mut characters = self.inner.chars();
+        while let Some(character) = characters.next() {
+            if character != '\\' {
+                bytes.extend_from_slice(character.encode_utf8(&mut [0; 4]).as_bytes());
+                continue;
+            }
+
+            match characters.next() {
+                Some('x') => {
+                    let digits: std::string::String = characters.by_ref().take(2).collect();
+                    let byte = u8::from_str_radix(&digits, BASE_HEXADECIMAL).map_err(|error| {
+                        anyhow::anyhow!("Invalid hexadecimal escape `\\x{digits}`: {error}")
+                    })?;
+                    bytes.push(byte);
+                }
+                Some('u') => {
+                    let digits: std::string::String = characters.by_ref().take(4).collect();
+                    let codepoint =
+                        u32::from_str_radix(&digits, BASE_HEXADECIMAL).map_err(|error| {
+                            anyhow::anyhow!("Invalid codepoint `{digits}`: {error}")
+                        })?;
+                    let unicode_character = char::from_u32(codepoint)
+                        .ok_or_else(|| anyhow::anyhow!("Invalid codepoint {codepoint}"))?;
+                    bytes.extend_from_slice(unicode_character.encode_utf8(&mut [0; 4]).as_bytes());
+                }
+                Some('t') => bytes.push(b'\t'),
+                Some('n') => bytes.push(b'\n'),
+                Some('r') => bytes.push(b'\r'),
+                Some('\n') | None => {}
+                Some(other) => bytes.extend_from_slice(other.encode_utf8(&mut [0; 4]).as_bytes()),
+            }
+        }
+
+        std::string::String::from_utf8(bytes)
+            .map_err(|error| anyhow::anyhow!("Invalid UTF-8 in string `{}`: {error}", self.inner))
     }
 
     /// Parses the value from the source code slice.

@@ -61,6 +61,9 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_PATH: &str =
 /// infamous "Stack too deep" error in the EVM codegen.
 pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
     "src/tests/data/standard_json/no_evm_codegen_complex.json";
+/// The verbatim reproducer from paritytech/revive#627: a library address used only in a switch expression.
+pub const STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH: &str =
+    "src/tests/data/standard_json/switch_missing_libraries.json";
 /// The standard JSON PVM codegen all wildcard test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.

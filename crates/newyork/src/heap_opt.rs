@@ -3902,5 +3902,6 @@ mod tests {
         let top = BTreeSet::from([word_align(u64::MAX)]);
         assert_eq!(analysis.escaping_regions, top);
         assert_eq!(analysis.tainted_regions, top);
+        assert!(!analysis.has_dynamic_escapes);
     }
 }

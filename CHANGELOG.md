@@ -20,7 +20,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 - `--newyork`: a memory offset carried by a loop counter resolved to its first iteration address on every iteration, leaving words written by later iterations eligible for native byte order, and a stale free memory pointer survived an unresolvable `mstore8`, or an unresolvable `mstore` inside a branch, loop, or called function. [#612](https://github.com/paritytech/revive/pull/612)
 - `--newyork`: `mcopy` and call returns overwriting the free memory pointer. [#613](https://github.com/paritytech/revive/pull/613)
 - `--newyork`: Fixed a constant folding bug (reproduced only with hand-crafted Yul input). [#618](https://github.com/paritytech/revive/pull/618)
-- resolc: A bug that arbitrarily picks an input mode when multiple are specified. [#644](https://github.com/paritytech/revive/pull/644)
+- resolc: A bug that arbitrarily picks an input mode when multiple are specified. [#635](https://github.com/paritytech/revive/pull/635)
 
 ## v1.4.0
 

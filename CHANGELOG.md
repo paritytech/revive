@@ -20,6 +20,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 - `--newyork`: a memory offset carried by a loop counter resolved to its first iteration address on every iteration, leaving words written by later iterations eligible for native byte order, and a stale free memory pointer survived an unresolvable `mstore8`, or an unresolvable `mstore` inside a branch, loop, or called function. [#612](https://github.com/paritytech/revive/pull/612)
 - `--newyork`: `mcopy` and call returns overwriting the free memory pointer. [#613](https://github.com/paritytech/revive/pull/613)
 - `--newyork`: a static memory access at the top of the address space, such as a store through a free memory pointer corrupted to `u64::MAX`, crashed the compiler with "attempt to add with overflow". [#582](https://github.com/paritytech/revive/pull/582)
+- `--newyork`: Fixed a constant folding bug (reproduced only with hand-crafted Yul input). [#618](https://github.com/paritytech/revive/pull/618)
 
 ## v1.4.0
 

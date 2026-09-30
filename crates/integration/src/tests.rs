@@ -4269,6 +4269,74 @@ fn fmp_literal_not_zero() {
     run_differential(actions);
 }
 
+/// Calls a fixture whose memory offsets or free memory pointer values newyork computes at compile
+/// time. The calldata word, which the memory fixtures store, has no zero byte, so forwarding the
+/// wrong word to a load or removing a live store changes the result.
+fn run_memory_constant_folding_fixture(contract: &str) {
+    let mut actions = instantiate_yul(&format!("contracts/{contract}.yul"), contract);
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0x11; 32]);
+    run_differential(actions);
+}
+
+/// `shl` takes the shift first, so a load must not be forwarded the word stored at another offset.
+#[test]
+fn shl_offset_load() {
+    run_memory_constant_folding_fixture("ShlOffsetLoad");
+}
+
+/// `shl` takes the shift first, so the store at `shl(shift, 1)` must survive a later store to
+/// another offset.
+#[test]
+fn shl_offset_dead_store() {
+    run_memory_constant_folding_fixture("ShlOffsetDeadStore");
+}
+
+/// `mul` wraps at 2^256 before an offset is divided from the product, so a load must not be
+/// forwarded the word stored at another offset.
+#[test]
+fn mul_div_offset_load() {
+    run_memory_constant_folding_fixture("MulDivOffsetLoad");
+}
+
+/// Moving the free memory pointer down with `add(p, not(k))` wraps at 2^256, so a comparison on
+/// the forwarded pointer must fold to the EVM result.
+#[test]
+fn fmp_wrap_compare() {
+    run_memory_constant_folding_fixture("FmpWrapCompare");
+}
+
+/// Moving the free memory pointer down with `add(p, not(k))` wraps at 2^256, so a subtraction from
+/// the forwarded pointer must fold instead of crashing the compiler.
+#[test]
+fn fmp_wrap_subtract() {
+    run_memory_constant_folding_fixture("FmpWrapSubtract");
+}
+
+/// Moving the free memory pointer down to 0x20 lets a copy to `mload(0x40)` overwrite it with a
+/// calldata word of at least 2^17, so the pointer's load must not be truncated to the heap size.
+#[test]
+fn fmp_wrap_copy() {
+    let mut actions = instantiate_yul("contracts/FmpWrapCopy.yul", "FmpWrapCopy");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0x11; 64]);
+    run_differential(actions);
+}
+
+/// Adding `not(0xff)` to an untracked free memory pointer moves it out of the heap, so the
+/// pointer's load must not be truncated to the heap size.
+#[test]
+fn fmp_wrap_untracked() {
+    let mut actions = instantiate_yul("contracts/FmpWrapUntracked.yul", "FmpWrapUntracked");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![]);
+    run_differential(actions);
+}
+
+/// A called function's store to an offset it computes can overwrite the free memory pointer, so
+/// the pointer computed at compile time must not be forwarded past the call.
+#[test]
+fn fmp_computed_call_store() {
+    run_memory_constant_folding_fixture("FmpComputedCallStore");
+}
+
 /// Generative differential fuzzer over memory ops with DYNAMIC (computed, non-constant)
 /// offsets — `and(<expr>, mask)` keeps them bounded but non-literal, exercising the
 /// offset-narrowing + bounds-check codegen path (distinct from the static-offset mem

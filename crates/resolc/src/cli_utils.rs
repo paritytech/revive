@@ -107,6 +107,32 @@ pub const STANDARD_JSON_YUL_PVM_CODEGEN_PATH: &str =
 /// PVM bytecode generation and only validate the Yul.
 pub const STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/yul_no_pvm_codegen.json";
+/// A standard JSON fixture with `settings.debug.revertStrings` set to `"default"`,
+/// so solc keeps the `require` reason string of its contract.
+pub const STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH: &str =
+    "src/tests/data/standard_json/revert_strings_default.json";
+/// A standard JSON fixture with `settings.debug.revertStrings` set to `"strip"`,
+/// so solc removes the reason string.
+pub const STANDARD_JSON_REVERT_STRINGS_STRIP_PATH: &str =
+    "src/tests/data/standard_json/revert_strings_strip.json";
+/// A standard JSON fixture with `settings.debug.revertStrings` set to `"verboseDebug"`.
+pub const STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH: &str =
+    "src/tests/data/standard_json/revert_strings_verbose_debug.json";
+/// A `"language": "Yul"` standard JSON fixture with `settings.debug.revertStrings` set to `"strip"`,
+/// which solc rejects for Yul.
+pub const STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH: &str =
+    "src/tests/data/standard_json/yul_revert_strings_strip.json";
+/// A standard JSON fixture without `settings.debug`, so solc adds its default
+/// source location annotations to the Yul IR.
+pub const STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH: &str =
+    "src/tests/data/standard_json/debug_info_default.json";
+/// A standard JSON fixture with an empty `settings.debug.debugInfo`, so solc omits its
+/// source location annotations from the Yul IR.
+pub const STANDARD_JSON_DEBUG_INFO_EMPTY_PATH: &str =
+    "src/tests/data/standard_json/debug_info_empty.json";
+/// A standard JSON fixture with an unknown key inside `settings.debug`.
+pub const STANDARD_JSON_DEBUG_UNKNOWN_KEY_PATH: &str =
+    "src/tests/data/standard_json/debug_unknown_key.json";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";

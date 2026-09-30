@@ -3880,6 +3880,7 @@ mod tests {
         );
         analysis.mark_escaping_range(&offset, &length);
         assert_eq!(analysis.escaping_regions, BTreeSet::from([0]));
+        assert!(analysis.tainted_regions.is_empty());
         assert!(analysis.has_dynamic_escapes);
     }
 

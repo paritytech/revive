@@ -9,6 +9,15 @@ use self::ir_type::IRType;
 
 pub mod ir_type;
 
+/// The escape character used when flattening a source path into a file name.
+const ESCAPE: &str = "%";
+/// The escaped form of [`ESCAPE`].
+const ESCAPED_ESCAPE: &str = "%25";
+/// The escaped form of an underscore, which otherwise stands for a path separator.
+const ESCAPED_UNDERSCORE: &str = "%5F";
+/// The escaped form of a colon inside the source path.
+const ESCAPED_COLON: &str = "%3A";
+
 /// The debug configuration.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct DebugConfig {
@@ -140,7 +149,19 @@ impl DebugConfig {
 
     /// Creates a full file name, given the contract full path, suffix, and extension.
     fn full_file_name(contract_path: &str, suffix: Option<&str>, ir_type: IRType) -> String {
-        let mut full_file_name = contract_path.replace('/', "_").replace(':', ".");
+        let (source_path, contract_name) = match contract_path.rsplit_once(':') {
+            Some((source_path, contract_name)) => (source_path, Some(contract_name)),
+            None => (contract_path, None),
+        };
+        let mut full_file_name = source_path
+            .replace(ESCAPE, ESCAPED_ESCAPE)
+            .replace('_', ESCAPED_UNDERSCORE)
+            .replace(':', ESCAPED_COLON)
+            .replace('/', "_");
+        if let Some(contract_name) = contract_name {
+            full_file_name.push('.');
+            full_file_name.push_str(contract_name);
+        }
         if let Some(suffix) = suffix {
             full_file_name.push('.');
             full_file_name.push_str(suffix);

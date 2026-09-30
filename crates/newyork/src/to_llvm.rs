@@ -2327,6 +2327,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// and offset + length > heap_size) and traps if out of bounds.
     /// Then uses unchecked GEP + seal_return. This replaces the sbrk-based
     /// `__revive_exit` for dynamic return/revert in non-msize contracts.
+    /// A zero length exits from the heap base whatever the offset is.
     fn get_or_create_exit_checked_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -2377,6 +2378,26 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let flags_parameter = function.get_nth_param(0).unwrap().into_int_value();
         let offset_parameter = function.get_nth_param(1).unwrap().into_int_value();
         let length_parameter = function.get_nth_param(2).unwrap().into_int_value();
+
+        let is_empty = context
+            .builder()
+            .build_int_compare(
+                inkwell::IntPredicate::EQ,
+                length_parameter,
+                xlen_type.const_zero(),
+                "exit_is_empty",
+            )
+            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
+        let offset_parameter = context
+            .builder()
+            .build_select(
+                is_empty,
+                xlen_type.const_zero(),
+                offset_parameter,
+                "exit_offset",
+            )
+            .map_err(|error| CodegenError::Llvm(error.to_string()))?
+            .into_int_value();
 
         let heap_size = context.heap_size();
         let offset_oob = context
@@ -5175,11 +5196,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     }
                 }
                 if !self.has_msize {
-                    let offset_xlen = context
-                        .safe_truncate_int_to_xlen(offset_value)
-                        .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-                    let length_xlen = context
-                        .safe_truncate_int_to_xlen(length_value)
+                    let operands = context
+                        .truncate_exit_operands(offset_value, length_value)
                         .map_err(|error| CodegenError::Llvm(error.to_string()))?;
                     let flags = context.xlen_type().const_int(1, false);
                     let function = self.get_or_create_exit_checked_fn(context)?;
@@ -5187,7 +5205,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .builder()
                         .build_call(
                             function,
-                            &[flags.into(), offset_xlen.into(), length_xlen.into()],
+                            &[flags.into(), operands.offset.into(), operands.length.into()],
                             "",
                         )
                         .map_err(|error| CodegenError::Llvm(error.to_string()))?;
@@ -5226,11 +5244,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         Some(revive_llvm_context::PolkaVMCodeType::Deploy)
                     )
                 {
-                    let offset_xlen = context
-                        .safe_truncate_int_to_xlen(offset_value)
-                        .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-                    let length_xlen = context
-                        .safe_truncate_int_to_xlen(length_value)
+                    let operands = context
+                        .truncate_exit_operands(offset_value, length_value)
                         .map_err(|error| CodegenError::Llvm(error.to_string()))?;
                     let flags = context.xlen_type().const_int(0, false);
                     let function = self.get_or_create_exit_checked_fn(context)?;
@@ -5238,7 +5253,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         .builder()
                         .build_call(
                             function,
-                            &[flags.into(), offset_xlen.into(), length_xlen.into()],
+                            &[flags.into(), operands.offset.into(), operands.length.into()],
                             "",
                         )
                         .map_err(|error| CodegenError::Llvm(error.to_string()))?;

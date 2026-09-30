@@ -21,6 +21,10 @@ pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
     "src/tests/data/solidity/folded_guard_inlined_loop.sol";
 /// The verbatim reproducer from paritytech/revive#625: a contract calling an external library.
 pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/library_call.sol";
+/// The paritytech/revive#622 reproducer contract at `a/c.sol`.
+pub const SOLIDITY_COLLISION_NESTED_PATH: &str = "src/tests/data/solidity/collision/a/c.sol";
+/// The paritytech/revive#622 reproducer contract at `a_c.sol`.
+pub const SOLIDITY_COLLISION_UNDERSCORE_PATH: &str = "src/tests/data/solidity/collision/a_c.sol";
 
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";

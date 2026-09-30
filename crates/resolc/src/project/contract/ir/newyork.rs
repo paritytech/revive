@@ -46,8 +46,13 @@ impl NewYork {
     ///
     /// `capture_ir_snapshot` requests the mid-pipeline IR snapshot, which is dumped via
     /// [`revive_llvm_context::DebugConfig`] when a debug output directory is configured.
-    fn translate_to_ir(&self, capture_ir_snapshot: bool) -> anyhow::Result<TranslationResult> {
-        revive_newyork::translate_yul_object(&self.yul_object, capture_ir_snapshot)
+    /// `heap_size` is the configured EVM heap size in bytes.
+    fn translate_to_ir(
+        &self,
+        capture_ir_snapshot: bool,
+        heap_size: u64,
+    ) -> anyhow::Result<TranslationResult> {
+        revive_newyork::translate_yul_object(&self.yul_object, capture_ir_snapshot, heap_size)
             .map_err(|e| anyhow::anyhow!("newyork IR translation: {e}"))
     }
 }
@@ -81,8 +86,12 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
     }
 
     fn into_llvm(self, context: &mut revive_llvm_context::PolkaVMContext) -> anyhow::Result<()> {
+        let heap_size = context
+            .heap_size()
+            .get_zero_extended_constant()
+            .expect("the heap size is a compile time constant");
         let translation_result =
-            self.translate_to_ir(context.debug_config().output_directory.is_some())?;
+            self.translate_to_ir(context.debug_config().output_directory.is_some(), heap_size)?;
         let ir_object = translation_result.object;
         let heap_opt = translation_result.heap_opt;
         let type_info = translation_result.type_info;

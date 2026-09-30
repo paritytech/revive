@@ -3868,6 +3868,8 @@ mod tests {
             analysis.escaping_regions,
             BTreeSet::from([word_align(u64::MAX)])
         );
+        assert!(analysis.tainted_regions.is_empty());
+        assert!(!analysis.has_dynamic_escapes);
 
         let mut analysis = HeapAnalysis::new(TEST_HEAP_SIZE);
         let offset = offset_value(&mut analysis, 1, 0);

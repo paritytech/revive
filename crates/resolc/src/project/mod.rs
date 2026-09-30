@@ -86,10 +86,9 @@ impl Project {
 
         let results = iter
             .map(|(path, mut contract)| {
-                // Every object `resolc` compiles is a contract of its own, so an object referenced
-                // by `dataoffset` or `datasize` has to be one of them. A sibling object that is
-                // not, or the dotted notation for a nested object, has no entry here and used to
-                // panic.
+                // Every nested object other than the `_deployed` runtime code is taken for a
+                // contract this one deploys, so it has to be compiled as a contract of its own.
+                // A nested object that is not has no entry here and used to panic.
                 let dependencies = contract.ir.drain_factory_dependencies();
                 let unresolved = dependencies
                     .iter()
@@ -99,10 +98,10 @@ impl Project {
                 if !unresolved.is_empty() {
                     let error = SolcStandardJsonOutputError::new_error(
                         format!(
-                            "{path}: the object(s) `{}` referenced by `dataoffset` or `datasize` \
-                             are not compiled contracts. `resolc` expects every Yul object to be a \
-                             contract of its own; sibling objects that are not, and the dotted \
-                             notation for addressing a nested object, are not supported.",
+                            "{path}: the nested object(s) `{}` are not contracts. `resolc` treats \
+                             every nested Yul object other than the `_deployed` runtime code as a \
+                             contract to deploy, and does not support nested objects of any other \
+                             kind.",
                             unresolved.join("`, `"),
                         ),
                         None,

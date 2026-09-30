@@ -29,7 +29,7 @@ fn reports_a_sibling_object_that_is_not_a_contract() {
 
     assert_reported_not_aborted(&result, "A sibling object that is not a contract");
     assert!(
-        result.stderr.contains("Error"),
+        result.stderr.contains("`Error`"),
         "the object should be named in the diagnostic, got: {}",
         result.stderr
     );

@@ -206,6 +206,14 @@ impl<'ctx> Context<'ctx> {
 
     fn link_immutable_data(&self, contract_path: &str) -> anyhow::Result<()> {
         let size = self.solidity().immutables_size() as u32;
+        if size > revive_runtime_api::immutable_data::IMMUTABLE_DATA_MAX_SIZE {
+            anyhow::bail!(
+                "The contract `{}` immutable data size of {} bytes exceeds the limit of {} bytes",
+                contract_path,
+                size,
+                revive_runtime_api::immutable_data::IMMUTABLE_DATA_MAX_SIZE
+            );
+        }
         let immutables = revive_runtime_api::immutable_data::module(self.llvm(), size);
 
         self.module.link_in_module(immutables).map_err(|error| {

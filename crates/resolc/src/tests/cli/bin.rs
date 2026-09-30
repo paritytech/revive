@@ -2,9 +2,10 @@
 
 use crate::{
     cli_utils::{
-        absolute_path, assert_command_success, execute_command, execute_resolc, CommandResult,
-        ResolcOptSettings, SolcOptSettings, SOLIDITY_CONTRACT_PATH,
-        SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH, STANDARD_JSON_CONTRACTS_PATH,
+        absolute_path, assert_command_failure, assert_command_success, execute_command,
+        execute_resolc, CommandResult, ResolcOptSettings, SolcOptSettings, SOLIDITY_CONTRACT_PATH,
+        SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH, SOLIDITY_IMMUTABLES_AT_LIMIT_PATH,
+        SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_CONTRACTS_PATH,
         YUL_EMPTY_RUNTIME_OBJECT_PATH, YUL_MEMSET_CONTRACT_PATH,
     },
     SolcCompiler,
@@ -187,6 +188,39 @@ fn compiles_newyork_empty_runtime_object() {
 
     let result = execute_resolc(arguments);
     assert_pvm_blob(&result);
+}
+
+/// Immutable data of exactly 4096 bytes compiles on both pipelines.
+#[test]
+fn compiles_immutables_at_limit() {
+    let path = absolute_path(SOLIDITY_IMMUTABLES_AT_LIMIT_PATH);
+    for arguments in [
+        vec![path.as_str(), "--bin"],
+        vec![path.as_str(), "--newyork", "--bin"],
+    ] {
+        let result = execute_resolc(&arguments);
+        assert_pvm_blob(&result);
+    }
+}
+
+/// Immutable data above 4096 bytes is a compile error naming the limit on both pipelines.
+#[test]
+fn rejects_immutables_over_limit() {
+    let path = absolute_path(SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH);
+    for arguments in [
+        vec![path.as_str(), "--bin"],
+        vec![path.as_str(), "--newyork", "--bin"],
+    ] {
+        let result = execute_resolc(&arguments);
+        assert_command_failure(&result, "Compiling immutable data above the limit");
+        assert!(
+            result
+                .stderr
+                .contains("immutable data size of 4128 bytes exceeds the limit of 4096 bytes"),
+            "unexpected error output: {}",
+            result.stderr
+        );
+    }
 }
 
 /// This test mimics the command used in the `resolc` benchmarks when compiling Solidity via standard JSON input.

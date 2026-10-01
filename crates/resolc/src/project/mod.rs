@@ -68,6 +68,10 @@ impl Project {
     }
 
     /// Compiles all contracts, returning their build artifacts.
+    ///
+    /// Every nested object other than the `_deployed` runtime code is taken for a contract the
+    /// enclosing one deploys, so it has to be compiled as a contract of its own. A contract with
+    /// a nested object that is not one is reported as an error.
     pub fn compile(
         self,
         messages: &mut Vec<SolcStandardJsonOutputError>,
@@ -86,9 +90,6 @@ impl Project {
 
         let results = iter
             .map(|(path, mut contract)| {
-                // Every nested object other than the `_deployed` runtime code is taken for a
-                // contract this one deploys, so it has to be compiled as a contract of its own.
-                // A nested object that is not has no entry here and used to panic.
                 let dependencies = contract.ir.drain_factory_dependencies();
                 let unresolved = dependencies
                     .iter()

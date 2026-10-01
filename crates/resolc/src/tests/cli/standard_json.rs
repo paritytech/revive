@@ -9,12 +9,13 @@ use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
     STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH, STANDARD_JSON_DEBUG_INFO_EMPTY_PATH,
-    STANDARD_JSON_DEBUG_UNKNOWN_KEY_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
-    STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
-    STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
-    STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH,
-    STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH,
-    STANDARD_JSON_REVERT_STRINGS_STRIP_PATH, STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH,
+    STANDARD_JSON_DEBUG_UNKNOWN_KEY_PATH, STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
+    STANDARD_JSON_NEWYORK_DISABLED_PATH, STANDARD_JSON_NEWYORK_ENABLED_PATH,
+    STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
+    STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
+    STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH,
+    STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH, STANDARD_JSON_REVERT_STRINGS_STRIP_PATH,
+    STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH, STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH,
     STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH, STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH,
     STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
     STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH,
@@ -597,6 +598,18 @@ fn invalid_extra_arguments() {
     }
 }
 
+/// Immutable data above 4096 bytes is reported in the standard JSON `errors`.
+#[test]
+fn immutables_over_limit_error() {
+    let result =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH);
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_standard_json_errors_contain(
+        &output,
+        "immutable data size of 4128 bytes exceeds the limit of 4096 bytes",
+    );
+}
+
 /// Extracts the hex PVM bytecode object of `path`/`name` from a standard JSON output.
 fn bytecode_object(output: &SolcStandardJsonOutput, path: &str, name: &str) -> String {
     let contract = output
@@ -711,6 +724,29 @@ fn populates_output_metadata_fields() {
         assert!(
             output.long_version.is_some(),
             "Standard JSON output for `{path}` should populate `long_version`"
+        );
+    }
+}
+
+/// A library used only in a switch expression is reported as missing.
+#[test]
+fn switch_expression_missing_libraries() {
+    for arguments in [
+        vec![JSON_OPTION],
+        vec![JSON_OPTION, "--detect-missing-libraries"],
+    ] {
+        let result = execute_resolc_with_stdin_input(
+            &arguments,
+            STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH,
+        );
+        assert_command_success(&result, "the switch missing libraries input fixture");
+        assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+        let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+        assert_eq!(
+            output["contracts"]["sw.sol"]["C"]["missingLibraries"],
+            serde_json::json!(["sw.sol:L"]),
+            "the library `sw.sol:L` should be reported as missing with arguments {arguments:?}"
         );
     }
 }

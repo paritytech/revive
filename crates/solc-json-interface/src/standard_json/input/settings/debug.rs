@@ -7,7 +7,7 @@ use crate::standard_json::input::settings::revert_strings::RevertStrings;
 
 /// The `solc --standard-json` input debugging settings.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[serde(rename_all = "camelCase")]
 pub struct Debug {
     /// How to treat revert and require reason strings.
     #[serde(skip_serializing_if = "Option::is_none")]

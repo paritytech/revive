@@ -18,9 +18,6 @@ pub enum RevertStrings {
     /// Add revert strings to the compiler-generated internal reverts.
     #[serde(rename = "debug")]
     Debug,
-    /// Also extend the user-supplied revert strings, which solc does not yet implement.
-    #[serde(rename = "verboseDebug")]
-    VerboseDebug,
 }
 
 impl FromStr for RevertStrings {
@@ -31,7 +28,6 @@ impl FromStr for RevertStrings {
             "default" => Ok(Self::Default),
             "strip" => Ok(Self::Strip),
             "debug" => Ok(Self::Debug),
-            "verboseDebug" => Ok(Self::VerboseDebug),
             _ => anyhow::bail!("unknown revert strings mode: `{string}`"),
         }
     }

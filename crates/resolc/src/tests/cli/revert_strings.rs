@@ -46,7 +46,6 @@ fn compile(mode: Option<&str>) -> String {
 /// if given, and returns the bytecode and metadata.
 fn compile_to_combined_json(mode: Option<&str>) -> (String, String) {
     let result = compile_with_revert_strings(mode, &["--combined-json", "bin,metadata"]);
-
     let output: serde_json::Value =
         serde_json::from_str(&result.stdout).expect("Combined JSON output should be valid JSON");
     let contract_name = format!("{SOLIDITY_REVERT_STRINGS_CONTRACT_PATH}:C");

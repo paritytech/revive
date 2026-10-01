@@ -91,7 +91,7 @@ pub struct Arguments {
     pub evm_version: Option<String>,
 
     /// Strip revert and require reason strings or add additional debugging information.
-    /// Available arguments: `default`, `strip`, `debug`, `verboseDebug`.
+    /// Available arguments: `default`, `strip`, `debug`.
     #[arg(long = "revert-strings")]
     pub revert_strings: Option<SolcStandardJsonInputSettingsRevertStrings>,
 

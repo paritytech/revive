@@ -154,9 +154,6 @@ pub const STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH: &str =
 /// source location annotations from the Yul IR.
 pub const STANDARD_JSON_DEBUG_INFO_EMPTY_PATH: &str =
     "src/tests/data/standard_json/debug_info_empty.json";
-/// A standard JSON fixture with an unknown key inside `settings.debug`.
-pub const STANDARD_JSON_DEBUG_UNKNOWN_KEY_PATH: &str =
-    "src/tests/data/standard_json/debug_unknown_key.json";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";

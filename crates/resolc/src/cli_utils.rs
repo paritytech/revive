@@ -19,6 +19,9 @@ pub const SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH: &str = "src/tests/data/solidity/
 /// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
 pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
     "src/tests/data/solidity/folded_guard_inlined_loop.sol";
+/// A Solidity contract whose `require` has a reason string.
+pub const SOLIDITY_REVERT_STRINGS_CONTRACT_PATH: &str =
+    "src/tests/data/solidity/revert_strings.sol";
 
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
@@ -139,6 +142,9 @@ pub const RESOLC_YUL_FLAG: &str = "--yul";
 /// The `--yul` option was deprecated in Solidity 0.8.27 in favor of `--strict-assembly`.
 /// See section `--strict-assembly vs. --yul` in the [release announcement](https://soliditylang.org/blog/2024/09/04/solidity-0.8.27-release-announcement/).
 pub const SOLC_YUL_FLAG: &str = "--strict-assembly";
+
+/// The starting hex value of a PVM blob (encoding of `"PVM"`).
+pub const PVM_BLOB_START: &str = "50564d";
 
 /// Common `resolc` CLI optimization settings.
 pub struct ResolcOptSettings;

@@ -24,9 +24,7 @@ use crate::{pipeline_name, ResolcVersion};
 const JSON_OPTION: &str = "--standard-json";
 const MULTIPLE_MODES_ERROR: &str = "Only one mode is allowed at the same time";
 /// The `require` reason literal of the revert strings fixtures as the Yul code spells it.
-/// The `@src` snippet comments that solc adds carry the same text with escaped quotes.
 const REVERT_STRING_LITERAL: &str = r#""too small""#;
-/// The annotation solc prefixes to every source location comment in the Yul IR.
 const SOURCE_LOCATION_ANNOTATION: &str = "@src";
 
 /// A subset of contracts and sources expected to exist in the JSON output.
@@ -545,6 +543,11 @@ fn invalid_extra_arguments() {
         TestCase {
             arguments: vec![JSON_OPTION, "--evm-version", "osaka"],
             error_message: "EVM version must be passed via standard JSON input",
+        },
+        TestCase {
+            arguments: vec![JSON_OPTION, "--revert-strings", "strip"],
+            error_message:
+                "Revert strings mode must be specified in standard JSON input debug settings",
         },
         TestCase {
             arguments: vec![JSON_OPTION, "--output-dir", "tmp"],

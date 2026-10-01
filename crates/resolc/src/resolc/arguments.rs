@@ -8,7 +8,8 @@ use clap::{parser::ValueSource, ArgMatches, CommandFactory, Parser};
 use path_slash::PathExt;
 use revive_common::MetadataHash;
 use revive_solc_json_interface::{
-    PolkaVMDefaultHeapMemorySize, PolkaVMDefaultStackMemorySize, SolcStandardJsonOutputError,
+    PolkaVMDefaultHeapMemorySize, PolkaVMDefaultStackMemorySize,
+    SolcStandardJsonInputSettingsRevertStrings, SolcStandardJsonOutputError,
 };
 
 /// Compiles the provided Solidity input files (or use the standard input if no files
@@ -88,6 +89,11 @@ pub struct Arguments {
     /// See https://github.com/paritytech/revive/blob/main/crates/common/src/evm_version.rs for reference.
     #[arg(long = "evm-version")]
     pub evm_version: Option<String>,
+
+    /// Strip revert and require reason strings or add additional debugging information.
+    /// Available arguments: `default`, `strip`, `debug`, `verboseDebug`.
+    #[arg(long = "revert-strings")]
+    pub revert_strings: Option<SolcStandardJsonInputSettingsRevertStrings>,
 
     /// Specify addresses of deployable libraries. Syntax: `<libraryName>=<address> [, or whitespace] ...`.
     /// Addresses are interpreted as hexadecimal strings prefixed with `0x`.
@@ -304,6 +310,13 @@ impl Arguments {
                     None,
                 ));
             }
+            if self.revert_strings.is_some() {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "`revert-strings` is not used in Yul and linker modes.",
+                    None,
+                    None,
+                ));
+            }
             if self.disable_solc_optimizer {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "Disabling the solc optimizer is not supported in Yul and linker modes.",
@@ -347,6 +360,13 @@ impl Arguments {
             if self.evm_version.is_some() {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "EVM version must be passed via standard JSON input.",
+                    None,
+                    None,
+                ));
+            }
+            if self.revert_strings.is_some() {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Revert strings mode must be specified in standard JSON input debug settings.",
                     None,
                     None,
                 ));

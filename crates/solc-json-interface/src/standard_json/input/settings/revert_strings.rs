@@ -1,5 +1,7 @@
 //! The revert strings mode.
 
+use std::str::FromStr;
+
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -19,4 +21,18 @@ pub enum RevertStrings {
     /// Also extend the user-supplied revert strings, which solc does not yet implement.
     #[serde(rename = "verboseDebug")]
     VerboseDebug,
+}
+
+impl FromStr for RevertStrings {
+    type Err = anyhow::Error;
+
+    fn from_str(string: &str) -> Result<Self, Self::Err> {
+        match string {
+            "default" => Ok(Self::Default),
+            "strip" => Ok(Self::Strip),
+            "debug" => Ok(Self::Debug),
+            "verboseDebug" => Ok(Self::VerboseDebug),
+            _ => anyhow::bail!("unknown revert strings mode: `{string}`"),
+        }
+    }
 }

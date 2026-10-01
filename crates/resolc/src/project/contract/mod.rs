@@ -59,6 +59,22 @@ impl Contract {
         }
     }
 
+    /// Returns the nested factory dependencies missing in `identifier_paths` as contracts.
+    pub fn unresolved_factory_dependencies(
+        &self,
+        identifier_paths: &BTreeMap<String, String>,
+    ) -> Vec<Self> {
+        self.ir
+            .unresolved_factory_dependencies(identifier_paths)
+            .into_iter()
+            .map(|(identifier, ir)| {
+                let identifier =
+                    ContractIdentifier::new(self.identifier.path.to_owned(), Some(identifier));
+                Self::new(identifier, ir, serde_json::Value::Null)
+            })
+            .collect()
+    }
+
     /// Compiles the specified contract, setting its build artifacts.
     pub fn compile(
         self,

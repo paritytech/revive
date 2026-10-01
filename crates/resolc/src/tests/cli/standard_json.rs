@@ -8,6 +8,7 @@ use revive_solc_json_interface::{
 use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH,
     STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
     STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
@@ -721,6 +722,35 @@ fn switch_expression_missing_libraries() {
             output["contracts"]["sw.sol"]["C"]["missingLibraries"],
             serde_json::json!(["sw.sol:L"]),
             "the library `sw.sol:L` should be reported as missing with arguments {arguments:?}"
+        );
+    }
+}
+
+/// A factory dependency outside the output selection is compiled too.
+#[test]
+fn factory_dependency_outside_output_selection() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH,
+    );
+    assert_command_success(
+        &result,
+        "the factory dependency outside output selection fixture",
+    );
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    let factory_dependencies = output["contracts"]["A.sol"]["P"]["factoryDependencies"]
+        .as_object()
+        .expect("the contract `A.sol:P` should have factory dependencies");
+    assert_eq!(factory_dependencies.len(), 1);
+    for dependency in factory_dependencies.values() {
+        let (path, name) = dependency.as_str().unwrap().split_once(':').unwrap();
+        assert!(
+            output["contracts"][path][name]["evm"]["bytecode"]["object"]
+                .as_str()
+                .is_some_and(|bytecode| !bytecode.is_empty()),
+            "the dependency `{dependency}` should be compiled"
         );
     }
 }

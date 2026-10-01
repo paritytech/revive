@@ -49,14 +49,33 @@ pub struct Project {
 
 impl Project {
     /// A shortcut constructor.
+    ///
+    /// Nested factory dependency objects not otherwise part of `contracts` are added as contracts.
     pub fn new(
         version: Option<SolcVersion>,
-        contracts: BTreeMap<String, Contract>,
+        mut contracts: BTreeMap<String, Contract>,
         libraries: SolcStandardJsonInputSettingsLibraries,
     ) -> Self {
         let mut identifier_paths = BTreeMap::new();
         for (path, contract) in contracts.iter() {
             identifier_paths.insert(contract.object_identifier().to_owned(), path.to_owned());
+        }
+
+        let mut unresolved_contracts: Vec<Contract> = contracts
+            .values()
+            .flat_map(|contract| contract.unresolved_factory_dependencies(&identifier_paths))
+            .collect();
+        while let Some(contract) = unresolved_contracts.pop() {
+            if identifier_paths.contains_key(contract.object_identifier()) {
+                continue;
+            }
+            identifier_paths.insert(
+                contract.object_identifier().to_owned(),
+                contract.identifier.full_path.to_owned(),
+            );
+            unresolved_contracts
+                .extend(contract.unresolved_factory_dependencies(&identifier_paths));
+            contracts.insert(contract.identifier.full_path.to_owned(), contract);
         }
 
         Self {

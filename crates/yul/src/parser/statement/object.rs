@@ -1,7 +1,7 @@
 //! The YUL object.
 
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
-use std::collections::HashSet;
 
 use inkwell::debug_info::AsDIScope;
 use revive_llvm_context::PolkaVMCodeType;
@@ -40,10 +40,8 @@ pub struct Object {
     pub code: Code,
     /// The optional inner object, representing the runtime code.
     pub inner_object: Option<Box<Self>>,
-    /// The factory dependency objects, which are represented by nested Yul object. The nested
-    /// objects are duplicates of the upper-level objects describing the dependencies, so only
-    /// their identifiers are preserved. The identifiers are used to address upper-level objects.
-    pub factory_dependencies: HashSet<String>,
+    /// The factory dependency objects, which are represented by nested Yul objects, by identifier.
+    pub factory_dependencies: BTreeMap<String, Self>,
 }
 
 impl Object {
@@ -100,7 +98,7 @@ impl Object {
 
         let code = Code::parse(lexer, None)?;
         let mut inner_object = None;
-        let mut factory_dependencies = HashSet::new();
+        let mut factory_dependencies = BTreeMap::new();
 
         if !is_runtime_code {
             inner_object = match lexer.peek()? {
@@ -119,7 +117,7 @@ impl Object {
                         .into());
                     }
 
-                    factory_dependencies.extend(object.factory_dependencies.drain());
+                    factory_dependencies.append(&mut object.factory_dependencies);
                     Some(Box::new(object))
                 }
                 _ => Some(Box::new(Self::implicit_runtime_code(&identifier, location))),
@@ -149,7 +147,7 @@ impl Object {
                     ..
                 } => {
                     let dependency = Self::parse(lexer, Some(token))?;
-                    factory_dependencies.insert(dependency.identifier);
+                    factory_dependencies.insert(dependency.identifier.clone(), dependency);
                 }
                 Token {
                     lexeme: Lexeme::Identifier(identifier),
@@ -197,7 +195,7 @@ impl Object {
                 },
             },
             inner_object: None,
-            factory_dependencies: HashSet::new(),
+            factory_dependencies: BTreeMap::new(),
         }
     }
 

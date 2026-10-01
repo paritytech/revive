@@ -1,0 +1,1 @@
+{"language":"Solidity","sources":{"A.sol":{"content":"import \"B.sol\"; contract P { function mk() external returns (address) { return address(new K()); } }"},"B.sol":{"content":"contract K { uint256 public v = 7; }"}},"settings":{"optimizer":{"enabled":true},"outputSelection":{"A.sol":{"*":["evm.bytecode"]}}}}

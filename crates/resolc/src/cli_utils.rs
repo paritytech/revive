@@ -31,6 +31,9 @@ pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/l
 pub const SOLIDITY_COLLISION_NESTED_PATH: &str = "src/tests/data/solidity/collision/a/c.sol";
 /// The paritytech/revive#622 reproducer contract at `a_c.sol`.
 pub const SOLIDITY_COLLISION_UNDERSCORE_PATH: &str = "src/tests/data/solidity/collision/a_c.sol";
+/// The verbatim reproducer from paritytech/revive#631: a contract creating another contract.
+pub const SOLIDITY_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH: &str =
+    "src/tests/data/solidity/factory_dependency_nested_object.sol";
 /// The verbatim reproducer from paritytech/revive#632: two contracts calling the same library.
 pub const SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH: &str =
     "src/tests/data/solidity/link_independent_objects.sol";
@@ -53,6 +56,9 @@ pub const YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH: &str =
 pub const YUL_EMPTY_RUNTIME_OBJECT_PATH: &str = "src/tests/data/yul/empty_runtime_object.yul";
 /// Yul contract carrying deploy code only, without the `_deployed` runtime sub-object.
 pub const YUL_DEPLOY_ONLY_OBJECT_PATH: &str = "src/tests/data/yul/deploy_only_object.yul";
+/// The solc IR of [`SOLIDITY_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH`], with the dependency as a nested object.
+pub const YUL_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH: &str =
+    "src/tests/data/yul/factory_dependency_nested_object.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
@@ -76,6 +82,9 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
 /// The verbatim reproducer from paritytech/revive#627: a library address used only in a switch expression.
 pub const STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH: &str =
     "src/tests/data/standard_json/switch_missing_libraries.json";
+/// The verbatim reproducer from paritytech/revive#631: a factory dependency outside the output selection.
+pub const STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH: &str =
+    "src/tests/data/standard_json/factory_dependency_outside_output_selection.json";
 /// The standard JSON PVM codegen all wildcard test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.

@@ -1,5 +1,6 @@
 //! The contract source code.
 
+use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 
 use serde::Deserialize;
@@ -30,11 +31,39 @@ impl IR {
     /// Drains the list of factory dependencies.
     pub fn drain_factory_dependencies(&mut self) -> BTreeSet<String> {
         match self {
-            IR::Yul(ref mut yul) => yul.object.factory_dependencies.drain().collect(),
+            IR::Yul(ref mut yul) => std::mem::take(&mut yul.object.factory_dependencies),
             IR::NewYork(ref mut newyork) => {
-                newyork.yul_object.factory_dependencies.drain().collect()
+                std::mem::take(&mut newyork.yul_object.factory_dependencies)
             }
         }
+        .into_keys()
+        .collect()
+    }
+
+    /// Returns the nested factory dependency objects missing in `identifier_paths`, by identifier.
+    pub fn unresolved_factory_dependencies(
+        &self,
+        identifier_paths: &BTreeMap<String, String>,
+    ) -> Vec<(String, Self)> {
+        let factory_dependencies = match self {
+            IR::Yul(yul) => &yul.object.factory_dependencies,
+            IR::NewYork(newyork) => &newyork.yul_object.factory_dependencies,
+        };
+        factory_dependencies
+            .iter()
+            .filter(|(identifier, _)| !identifier_paths.contains_key(identifier.as_str()))
+            .map(|(identifier, object)| {
+                let ir = match self {
+                    IR::Yul(_) => Self::Yul(Yul {
+                        object: object.to_owned(),
+                    }),
+                    IR::NewYork(_) => Self::NewYork(NewYork {
+                        yul_object: object.to_owned(),
+                    }),
+                };
+                (identifier.to_owned(), ir)
+            })
+            .collect()
     }
 
     /// Get the list of missing deployable libraries.

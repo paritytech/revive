@@ -233,6 +233,12 @@ pub fn standard_json<T: Compiler>(
         .polkavm
         .debug_information
         .unwrap_or(false);
+    let memory_config = solc_input
+        .settings
+        .polkavm
+        .memory_config
+        .unwrap_or_default();
+    memory_config.validate()?;
 
     solc_input.extend_selection(
         SolcStandardJsonInputSettingsSelection::new_required_for_codegen(
@@ -282,11 +288,7 @@ pub fn standard_json<T: Compiler>(
         metadata_hash,
         &debug_config,
         &solc_input.settings.llvm_arguments,
-        solc_input
-            .settings
-            .polkavm
-            .memory_config
-            .unwrap_or_default(),
+        memory_config,
     )?;
     if build.has_errors() {
         build.write_to_standard_json(&mut solc_output, &solc_version)?;

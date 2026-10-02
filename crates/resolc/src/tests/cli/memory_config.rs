@@ -1,7 +1,7 @@
 //! The tests for running `resolc` with the heap and stack size options.
 
 use crate::cli_utils::{
-    absolute_path, assert_command_failure, execute_resolc, SOLIDITY_EMPTY_CONTRACT_PATH,
+    absolute_path, assert_command_failure, execute_resolc, SOLIDITY_CONTRACT_PATH,
 };
 
 /// The panic message prefix `resolc` must never print.
@@ -9,7 +9,7 @@ const PANIC_MESSAGE: &str = "panicked";
 
 /// Asserts that compiling the empty contract with `arguments` fails with `error_message`.
 fn assert_compilation_error(arguments: &[&str], error_message: &str) {
-    let path = absolute_path(SOLIDITY_EMPTY_CONTRACT_PATH);
+    let path = absolute_path(SOLIDITY_CONTRACT_PATH);
     let mut resolc_arguments = vec![path.as_str(), "--bin"];
     resolc_arguments.extend_from_slice(arguments);
 

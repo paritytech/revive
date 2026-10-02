@@ -109,7 +109,7 @@ impl Build {
                         link_errors.insert(
                             path.to_owned(),
                             SolcStandardJsonOutputError::new_error(
-                                error,
+                                format!("{path} failed to link: {error}"),
                                 Some(source_location),
                                 None,
                             ),

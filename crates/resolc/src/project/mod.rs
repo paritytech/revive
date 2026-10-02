@@ -81,7 +81,6 @@ impl Project {
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<Build> {
-        memory_config.validate()?;
         let deployed_libraries = self.libraries.as_paths();
 
         #[cfg(feature = "parallel")]

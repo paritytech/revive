@@ -29,5 +29,7 @@ inspect storageLayout     --json | jq -e '.storage | length > 0'  > /dev/null
 inspect metadata          --json | jq -e 'length > 0'             > /dev/null
 inspect devdoc            --json | jq -e 'length > 0'             > /dev/null
 inspect userdoc           --json | jq -e 'length > 0'             > /dev/null
+# solc only injects this revert string when `debug` is used.
+inspect irOptimized       --revert-strings debug | grep 'Ether sent to non-payable' > /dev/null
 
 echo "all checks passed"

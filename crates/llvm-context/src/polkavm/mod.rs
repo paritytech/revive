@@ -107,6 +107,11 @@ pub fn link(
     })
 }
 
+/// Returns the linker symbol name of the library address at `path`.
+pub fn library_address_symbol(path: &str) -> String {
+    format!("{GLOBAL_LIBRARY_ADDRESS_PREFIX}{path}")
+}
+
 /// The returned module defines given `linker_symbols` and `factory_dependencies` global values.
 pub fn build_symbols(
     linker_symbols: &BTreeMap<String, [u8; BYTE_LENGTH_ETH_ADDRESS]>,
@@ -124,7 +129,11 @@ pub fn build_symbols(
         .expect("valid integer width");
 
     for (name, value) in linker_symbols {
-        let global_value = module.add_global(address_type, Default::default(), name);
+        let global_value = module.add_global(
+            address_type,
+            Default::default(),
+            &library_address_symbol(name),
+        );
         global_value.set_linkage(inkwell::module::Linkage::External);
         global_value.set_initializer(
             &address_type

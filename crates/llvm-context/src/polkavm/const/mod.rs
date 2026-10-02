@@ -20,6 +20,9 @@ pub static GLOBAL_HEAP_MEMORY: &str = "__heap_memory";
 /// The spill buffer global variable name.
 pub static GLOBAL_ADDRESS_SPILL_BUFFER: &str = "address_spill_buffer";
 
+/// The library address linker symbol name prefix.
+pub static GLOBAL_LIBRARY_ADDRESS_PREFIX: &str = "__library_address_";
+
 /// The deployer call header size that consists of:
 /// - bytecode hash (32 bytes)
 pub const DEPLOYER_CALL_HEADER_SIZE: usize = BYTE_LENGTH_WORD;

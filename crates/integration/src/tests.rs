@@ -5507,3 +5507,105 @@ fn calldatacopy_fmp_range_proof() {
     });
     run_differential(actions);
 }
+
+/// Calls `contract` from `path`, compiled with `optimizer_settings`, and expects it to return `output`.
+fn assert_returns_with_optimizer(
+    path: &str,
+    contract: &str,
+    optimizer_settings: revive_llvm_context::OptimizerSettings,
+    data: Vec<u8>,
+    output: U256,
+) {
+    let source_code = std::fs::read_to_string(path).unwrap();
+    let code = resolc::test_utils::compile_blob_with_options(
+        contract,
+        &source_code,
+        true,
+        optimizer_settings,
+        Default::default(),
+    );
+    Specs {
+        actions: vec![
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Bytes(code),
+                data: vec![],
+                salt: OptionalHex::default(),
+            },
+            Call {
+                origin: TestAddress::Alice,
+                dest: TestAddress::Instantiated(0),
+                value: 0,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                data,
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: true,
+                output: OptionalHex::from(output.to_be_bytes::<32>().to_vec()),
+                gas_consumed: None,
+            }),
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
+/// Encodes a call to `signature` with the given word arguments.
+fn encode_call(signature: &str, arguments: &[U256]) -> Vec<u8> {
+    let mut data = keccak256(signature.as_bytes())[..4].to_vec();
+    for argument in arguments {
+        data.extend_from_slice(&argument.to_be_bytes::<32>());
+    }
+    data
+}
+
+/// Reproducer from paritytech/security_findings#113.
+#[test]
+fn loop_storage_write_stack_usage() {
+    let iterations = U256::from(5000);
+    assert_returns_with_optimizer(
+        "contracts/LoopStackStorageWrite.sol",
+        "LoopStackStorageWrite",
+        revive_llvm_context::OptimizerSettings::size(),
+        encode_call("f(uint256)", &[iterations]),
+        iterations,
+    );
+}
+
+/// Reproducer from paritytech/security_findings#113.
+#[test]
+fn loop_tuple_write_stack_usage() {
+    let iterations = U256::from(2100);
+    assert_returns_with_optimizer(
+        "contracts/LoopStackTupleWrite.sol",
+        "LoopStackTupleWrite",
+        revive_llvm_context::OptimizerSettings::size(),
+        encode_call("f(uint256)", &[iterations]),
+        iterations,
+    );
+}
+
+/// Reproducer from paritytech/security_findings#113.
+#[test]
+fn loop_pure_unoptimized_stack_usage() {
+    let iterations = 1400u64;
+    let mut state = U256::from(5);
+    for index in 0..iterations {
+        state = ((U256::from(index) * U256::from(3)) ^ state) + U256::from(1);
+    }
+    assert_returns_with_optimizer(
+        "contracts/LoopStackPure.sol",
+        "LoopStackPure",
+        revive_llvm_context::OptimizerSettings::none(),
+        encode_call(
+            "q(uint256,uint256)",
+            &[U256::from(iterations), U256::from(5)],
+        ),
+        state,
+    );
+}

@@ -9515,6 +9515,7 @@ dependencies = [
  "resolc",
  "revive-llvm-context",
  "revive-runner",
+ "revive-solc-json-interface",
  "serde",
  "serde_json",
  "sha1",

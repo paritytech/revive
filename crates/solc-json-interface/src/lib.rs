@@ -9,6 +9,7 @@ pub use self::combined_json::contract::Contract as CombinedJsonContract;
 pub use self::combined_json::selector::Selector as CombinedJsonSelector;
 pub use self::combined_json::selector::MESSAGE_SELECTOR_INVALID as CombinedJsonInvalidSelectorMessage;
 pub use self::standard_json::input::language::Language as SolcStandardJsonInputLanguage;
+pub use self::standard_json::input::settings::debug::Debug as SolcStandardJsonInputSettingsDebug;
 pub use self::standard_json::input::settings::libraries::Libraries as SolcStandardJsonInputSettingsLibraries;
 pub use self::standard_json::input::settings::metadata::Metadata as SolcStandardJsonInputSettingsMetadata;
 pub use self::standard_json::input::settings::metadata_hash::MetadataHash as SolcStandardJsonInputSettingsMetadataHash;
@@ -18,6 +19,7 @@ pub use self::standard_json::input::settings::polkavm::memory::MemoryConfig as S
 pub use self::standard_json::input::settings::polkavm::memory::DEFAULT_HEAP_SIZE as PolkaVMDefaultHeapMemorySize;
 pub use self::standard_json::input::settings::polkavm::memory::DEFAULT_STACK_SIZE as PolkaVMDefaultStackMemorySize;
 pub use self::standard_json::input::settings::polkavm::PolkaVM as SolcStandardJsonInputSettingsPolkaVM;
+pub use self::standard_json::input::settings::revert_strings::RevertStrings as SolcStandardJsonInputSettingsRevertStrings;
 pub use self::standard_json::input::settings::selection::file::flag::Flag as SolcStandardJsonInputSettingsSelectionFileFlag;
 pub use self::standard_json::input::settings::selection::file::File as SolcStandardJsonInputSettingsSelectionFile;
 pub use self::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;

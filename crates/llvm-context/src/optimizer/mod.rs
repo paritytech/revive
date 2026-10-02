@@ -51,7 +51,9 @@ impl Optimizer {
     /// 1. `default<O{level}>`: initial optimization at the configured size level.
     /// 2. `ipsccp,deadargelim`: propagate inter-function constants through outlined helpers and
     ///    remove now-constant arguments.
-    /// 3. `attributor`: infer function attributes the next stage can exploit.
+    /// 3. `attributor`: infer function attributes the next stage can exploit. Self-recursive
+    ///    functions are made interposable (`linkonce`) during this stage only, because the
+    ///    attributor takes the callee's local values for the caller's at a self-recursive call.
     /// 4. `default<O1>`: re-optimize with newly discovered constants and attributes.
     ///
     /// `mergefunc` runs before stage 1, after stage 1, and after stage 4 to deduplicate functions
@@ -73,14 +75,40 @@ impl Optimizer {
         module: &inkwell::module::Module,
     ) -> Result<(), inkwell::support::LLVMString> {
         let optimization_level = self.settings.middle_end_as_string();
-        let pass_pipeline = if self.newyork {
-            format!(
-                "mergefunc,default<O{optimization_level}>,mergefunc,ipsccp,deadargelim,attributor,default<O1>,mergefunc"
-            )
-        } else {
-            format!("default<O{optimization_level}>")
-        };
-        target_machine.run_optimization_passes(module, &pass_pipeline)
+        if !self.newyork {
+            return target_machine
+                .run_optimization_passes(module, &format!("default<O{optimization_level}>"));
+        }
+
+        target_machine.run_optimization_passes(
+            module,
+            &format!("mergefunc,default<O{optimization_level}>,mergefunc,ipsccp,deadargelim"),
+        )?;
+
+        let self_recursive_functions: Vec<_> = module
+            .get_functions()
+            .filter(|function| Self::is_self_recursive(*function))
+            .map(|function| {
+                let linkage = function.get_linkage();
+                function.set_linkage(inkwell::module::Linkage::LinkOnceAny);
+                (function, linkage)
+            })
+            .collect();
+        target_machine.run_optimization_passes(module, "attributor")?;
+        for (function, linkage) in self_recursive_functions {
+            function.set_linkage(linkage);
+        }
+
+        target_machine.run_optimization_passes(module, "default<O1>,mergefunc")
+    }
+
+    /// Whether `function` contains a direct call to itself.
+    fn is_self_recursive(function: inkwell::values::FunctionValue) -> bool {
+        function
+            .get_basic_block_iter()
+            .flat_map(|block| block.get_instructions())
+            .filter_map(|instruction| inkwell::values::CallSiteValue::try_from(instruction).ok())
+            .any(|call| call.get_called_fn_value() == Some(function))
     }
 
     /// Returns the optimizer settings reference.

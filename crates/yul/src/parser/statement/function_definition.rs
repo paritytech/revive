@@ -285,7 +285,8 @@ impl PolkaVMWriteLLVM for FunctionDefinition {
             })
             .collect();
         for (index, argument) in self.arguments.iter().enumerate() {
-            let pointer = context.build_alloca(argument_types[index], argument.inner.as_str());
+            let pointer =
+                context.build_alloca_at_entry(argument_types[index], argument.inner.as_str());
             context
                 .current_function()
                 .borrow_mut()

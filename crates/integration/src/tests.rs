@@ -5477,6 +5477,26 @@ fn mapping_sstore_writes_scratch() {
     run_differential(actions);
 }
 
+/// Scratch written between a mapping store's hash and its `sstore` must survive the fused store.
+#[test]
+fn mapping_sstore_keeps_intervening_scratch() {
+    let mut actions = instantiate_yul(
+        "contracts/MappingSStoreScratchOrder.yul",
+        "MappingSStoreScratchOrder",
+    );
+    let mut data = U256::from(0xabcdef0123u64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so

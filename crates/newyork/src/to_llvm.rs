@@ -2656,24 +2656,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let key_parameter = function.get_nth_param(0).unwrap().into_int_value();
         let slot_parameter = function.get_nth_param(1).unwrap().into_int_value();
 
-        let offset0 = xlen_type.const_int(0, false);
-        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+        let input_pointer = revive_llvm_context::polkavm_evm_memory::store_scratch_pair_unchecked(
             context,
-            offset0,
             key_parameter,
-        )
-        .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-        let offset32 = xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
-        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
-            context,
-            offset32,
             slot_parameter,
         )
         .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-
-        let input_pointer = context
-            .build_heap_gep_unchecked(offset0)
-            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
         let length = xlen_type.const_int(2 * revive_common::BYTE_LENGTH_WORD as u64, false);
 
         let hash_output = context.build_alloca_at_entry(word_type, "map_sload_hash");
@@ -2751,24 +2739,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let slot_parameter = function.get_nth_param(1).unwrap().into_int_value();
         let value_parameter = function.get_nth_param(2).unwrap().into_int_value();
 
-        let offset0 = xlen_type.const_int(0, false);
-        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+        let input_pointer = revive_llvm_context::polkavm_evm_memory::store_scratch_pair_unchecked(
             context,
-            offset0,
             key_parameter,
-        )
-        .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-        let offset32 = xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
-        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
-            context,
-            offset32,
             slot_parameter,
         )
         .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-
-        let input_pointer = context
-            .build_heap_gep_unchecked(offset0)
-            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
 
         let value_bswap = context
             .build_byte_swap(value_parameter.as_basic_value_enum())

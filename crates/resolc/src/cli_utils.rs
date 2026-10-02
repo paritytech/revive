@@ -16,7 +16,8 @@ pub const SOLIDITY_DEPENDENCY_CONTRACT_PATH: &str = "src/tests/data/solidity/dep
 /// that should be compiled correctly.
 pub const SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH: &str = "src/tests/data/solidity/large_div_rem.sol";
 /// The reproducer from paritytech/revive#628: a library and a contract using its address.
-pub const SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH: &str = "src/tests/data/solidity/Ch.sol";
+pub const SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH: &str =
+    "src/tests/data/solidity/use_library_address.sol";
 /// The verbatim reproducer from paritytech/revive#560: a folded guard plus an
 /// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
 pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =

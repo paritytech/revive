@@ -94,12 +94,7 @@ fn link_output_is_independent_of_other_inputs() {
     let unlinked_directory = temp_dir.path().join("out");
     let reference_directory = temp_dir.path().join("ref");
     let source_path = temp_dir.path().join("x.sol");
-    std::fs::copy(
-        SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH,
-        SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH,
-        &source_path,
-    )
-    .unwrap();
+    std::fs::copy(SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH, &source_path).unwrap();
     let library = format!(
         "{}:L=0x1111111111111111111111111111111111111111",
         source_path.to_str().unwrap()
@@ -166,7 +161,10 @@ fn link_output_is_independent_of_other_inputs() {
 fn library_address_is_not_resolved_from_library_blob() {
     let temp_dir = tempfile::TempDir::new().unwrap();
     let output_directory = temp_dir.path().to_path_buf();
-    let source_path = temp_dir.path().to_path_buf().join("Ch.sol");
+    let source_path = temp_dir
+        .path()
+        .to_path_buf()
+        .join("use_library_address.sol");
     std::fs::copy(SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH, &source_path).unwrap();
 
     assert_command_success(

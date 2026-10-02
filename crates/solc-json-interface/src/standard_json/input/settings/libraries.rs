@@ -97,6 +97,11 @@ impl TryFrom<&[String]> for Libraries {
             let address = path_and_address
                 .next()
                 .ok_or_else(|| anyhow::anyhow!("Library `{path}` address is missing."))?;
+            if path_and_address.next().is_some() {
+                anyhow::bail!(
+                    "Only one equal sign `=` is allowed in the library string `{library}`."
+                );
+            }
             libraries
                 .entry(file.to_owned())
                 .or_insert_with(BTreeMap::new)

@@ -74,7 +74,7 @@ impl WriteLLVM for WordToPointer {
     }
 }
 
-/// The revive runtime exit function.
+/// The revive runtime exit function. A zero-length exit ignores its offset.
 pub struct Exit;
 
 impl RuntimeFunction for Exit {
@@ -105,8 +105,17 @@ impl RuntimeFunction for Exit {
         let offset = Self::paramater(context, 1).into_int_value();
         let length = Self::paramater(context, 2).into_int_value();
 
-        let offset_truncated = context.safe_truncate_int_to_xlen(offset)?;
-        let length_truncated = context.safe_truncate_int_to_xlen(length)?;
+        let operands = context.truncate_exit_operands(offset, length)?;
+        let length_truncated = operands.length;
+        let offset_truncated = context
+            .builder()
+            .build_select(
+                operands.is_empty,
+                context.xlen_type().const_zero(),
+                operands.offset,
+                "exit_offset",
+            )?
+            .into_int_value();
         let heap_pointer = context.build_heap_gep(offset_truncated, length_truncated)?;
         let offset_pointer = context.builder().build_ptr_to_int(
             heap_pointer.value,

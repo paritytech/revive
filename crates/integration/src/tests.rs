@@ -5326,6 +5326,140 @@ fn copy_onto_fmp_word_with_loop_counter_length() {
     }
 }
 
+/// A zero-length exit succeeds for any offset, inline and across function calls.
+#[test]
+fn zero_length_exit_ignores_offset() {
+    for selector in 0..=3 {
+        for offset in exit_offsets() {
+            let data = words(&[U256::from(selector), offset, U256::ZERO]);
+            assert_exited(&run_exit_call("ZeroLengthExit", data));
+        }
+    }
+    for selector in 4..=7 {
+        let data = words(&[U256::from(selector)]);
+        assert_exited(&run_exit_call("ZeroLengthExit", data));
+    }
+}
+
+/// An exit with a runtime zero length succeeds for any offset.
+#[test]
+fn runtime_zero_length_exit_ignores_offset() {
+    for selector in 0..=3 {
+        for offset in exit_offsets() {
+            let data = words(&[U256::from(selector), offset, U256::ZERO, U256::ZERO]);
+            assert_exited(&run_exit_call("RuntimeLengthExit", data));
+        }
+    }
+}
+
+/// An exit with a runtime non-zero length still traps on an offset past the word range.
+#[test]
+fn runtime_length_exit_traps_on_huge_offset() {
+    for selector in 0..=3 {
+        for offset in [U256::from(1) << 64, U256::from(1) << 200, U256::MAX] {
+            let data = words(&[U256::from(selector), offset, U256::from(1), U256::ZERO]);
+            assert_trapped(&run_exit_call("RuntimeLengthExit", data));
+        }
+    }
+}
+
+/// An exit with a runtime non-zero length from an in-bounds offset returns the memory.
+#[test]
+fn runtime_length_exit_in_bounds() {
+    for selector in 0..=3 {
+        let data = words(&[U256::from(selector), U256::ZERO, U256::from(32), U256::ZERO]);
+        assert_exited(&run_exit_call("RuntimeLengthExit", data));
+    }
+}
+
+/// The reported fallback returning `calldatasize()` bytes from `not(0)`.
+#[test]
+fn zero_length_return_fallback() {
+    for (data, is_empty) in [(vec![], true), (vec![1; 32], false)] {
+        let mut actions = instantiate(
+            "contracts/ZeroLengthExitFallback.sol",
+            "ZeroLengthExitFallback",
+        );
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(0),
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            data,
+        });
+        let result = run_differential_results(actions);
+        if is_empty {
+            assert_exited(&result);
+        } else {
+            assert_trapped(&result);
+        }
+    }
+}
+
+/// Offsets from the heap size to past the word range.
+fn exit_offsets() -> Vec<U256> {
+    vec![
+        U256::from(revive_solc_json_interface::PolkaVMDefaultHeapMemorySize),
+        U256::from(u32::MAX),
+        U256::from(1) << 32,
+        U256::from(1) << 64,
+        U256::from(1) << 200,
+        U256::MAX,
+    ]
+}
+
+/// Concatenates the big endian encoding of `values`.
+fn words(values: &[U256]) -> Vec<u8> {
+    values
+        .iter()
+        .flat_map(|value| value.to_be_bytes::<32>())
+        .collect()
+}
+
+/// Runs `data` against the exit fixture `contract` differentially.
+fn run_exit_call(contract: &str, data: Vec<u8>) -> CallResult {
+    let mut actions = instantiate_yul(&format!("contracts/{contract}.yul"), contract);
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential_results(actions)
+}
+
+/// Runs `actions` differentially and returns the result of the last call.
+fn run_differential_results(actions: Vec<SpecsAction>) -> CallResult {
+    Specs {
+        differential: true,
+        actions,
+        ..Default::default()
+    }
+    .run()
+    .pop()
+    .expect("the actions contain a call")
+}
+
+/// Asserts that the call returned or reverted without consuming all gas.
+fn assert_exited(result: &CallResult) {
+    let CallResult::Exec { result, .. } = result else {
+        unreachable!()
+    };
+    assert!(result.result.is_ok(), "{result:?}");
+    assert_ne!(result.weight_consumed, GAS_LIMIT);
+}
+
+/// Asserts that the call trapped and consumed all gas.
+fn assert_trapped(result: &CallResult) {
+    let CallResult::Exec { result, .. } = result else {
+        unreachable!()
+    };
+    assert_eq!(result.weight_consumed, GAS_LIMIT);
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so

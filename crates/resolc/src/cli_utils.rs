@@ -21,6 +21,21 @@ pub const SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH: &str = "src/tests/data/solidit
 /// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
 pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
     "src/tests/data/solidity/folded_guard_inlined_loop.sol";
+/// The reproducer from paritytech/revive#624 with 129 immutables, one more than the limit allows.
+pub const SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH: &str =
+    "src/tests/data/solidity/immutables_over_limit.sol";
+/// The reproducer from paritytech/revive#624 with 128 immutables, exactly at the limit.
+pub const SOLIDITY_IMMUTABLES_AT_LIMIT_PATH: &str =
+    "src/tests/data/solidity/immutables_at_limit.sol";
+/// The verbatim reproducer from paritytech/revive#625: a contract calling an external library.
+pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/library_call.sol";
+/// The paritytech/revive#622 reproducer contract at `a/c.sol`.
+pub const SOLIDITY_COLLISION_NESTED_PATH: &str = "src/tests/data/solidity/collision/a/c.sol";
+/// The paritytech/revive#622 reproducer contract at `a_c.sol`.
+pub const SOLIDITY_COLLISION_UNDERSCORE_PATH: &str = "src/tests/data/solidity/collision/a_c.sol";
+/// The verbatim reproducer from paritytech/revive#632: two contracts calling the same library.
+pub const SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH: &str =
+    "src/tests/data/solidity/link_independent_objects.sol";
 
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
@@ -40,10 +55,17 @@ pub const YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH: &str =
 pub const YUL_EMPTY_RUNTIME_OBJECT_PATH: &str = "src/tests/data/yul/empty_runtime_object.yul";
 /// Yul contract carrying deploy code only, without the `_deployed` runtime sub-object.
 pub const YUL_DEPLOY_ONLY_OBJECT_PATH: &str = "src/tests/data/yul/deploy_only_object.yul";
+/// Yul contract with a sibling object that is not a contract of its own.
+pub const YUL_SIBLING_OBJECTS_PATH: &str = "src/tests/data/yul/sibling_objects.yul";
+/// Yul contract addressing a nested object through the dotted notation.
+pub const YUL_DOTTED_OBJECT_PATH: &str = "src/tests/data/yul/dotted_object_path.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
     "src/tests/data/standard_json/solidity_contracts.json";
+/// The standard JSON fixture with the 129 immutables reproducer from paritytech/revive#624.
+pub const STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH: &str =
+    "src/tests/data/standard_json/immutables_over_limit.json";
 /// The standard JSON contracts test fixture path that requests every single output.
 pub const STANDARD_JSON_ALL_OUTPUTS_PATH: &str = "src/tests/data/standard_json/all_outputs.json";
 /// The standard JSON no EVM codegen test fixture path.
@@ -57,6 +79,9 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_PATH: &str =
 /// infamous "Stack too deep" error in the EVM codegen.
 pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
     "src/tests/data/standard_json/no_evm_codegen_complex.json";
+/// The verbatim reproducer from paritytech/revive#627: a library address used only in a switch expression.
+pub const STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH: &str =
+    "src/tests/data/standard_json/switch_missing_libraries.json";
 /// The standard JSON PVM codegen all wildcard test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.

@@ -5507,3 +5507,30 @@ fn calldatacopy_fmp_range_proof() {
     });
     run_differential(actions);
 }
+
+/// Calls `f(3)` on a contract whose Yul function names contain LLVM attribute markers.
+fn run_function_name_fixture(contract: &str) {
+    let mut actions = instantiate(&format!("contracts/{contract}.sol"), contract);
+    let mut data = keccak256(b"f(uint256)")[..4].to_vec();
+    data.extend_from_slice(&U256::from(3).to_be_bytes::<32>());
+    push_call(&mut actions, TestAddress::Instantiated(0), data);
+    run_differential(actions);
+}
+
+/// Reproducer from paritytech/security_findings#111.
+#[test]
+fn function_name_injected_no_return() {
+    run_function_name_fixture("NameInjectedNoReturn");
+}
+
+/// Reproducer from paritytech/security_findings#111.
+#[test]
+fn function_name_injected_unknown_attribute() {
+    run_function_name_fixture("NameInjectedUnknownAttribute");
+}
+
+/// Reproducer from paritytech/security_findings#111.
+#[test]
+fn function_name_overlapping_llvm_markers() {
+    run_function_name_fixture("NameOverlappingLlvmMarkers");
+}

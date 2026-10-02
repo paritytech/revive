@@ -8,9 +8,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use revive_common::BIT_LENGTH_X32;
-use revive_llvm_context::PolkaVMAttribute;
 use revive_llvm_context::PolkaVMContext;
-use revive_llvm_context::PolkaVMFunction;
 use revive_llvm_context::PolkaVMFunctionReturn;
 use revive_llvm_context::PolkaVMFunctionYulData;
 use revive_llvm_context::PolkaVMWriteLLVM;
@@ -44,17 +42,9 @@ pub struct FunctionDefinition {
     pub result: Vec<Identifier>,
     /// The function body block.
     pub body: Block,
-    /// The function LLVM attributes encoded in the identifier.
-    pub attributes: BTreeSet<PolkaVMAttribute>,
 }
 
 impl FunctionDefinition {
-    /// The LLVM attribute section prefix.
-    pub const LLVM_ATTRIBUTE_PREFIX: &'static str = "$llvm_";
-
-    /// The LLVM attribute section suffix.
-    pub const LLVM_ATTRIBUTE_SUFFIX: &'static str = "_llvm$";
-
     /// The element parser.
     pub fn parse(lexer: &mut Lexer, initial: Option<Token>) -> Result<Self, Error> {
         let token = crate::parser::take_or_next(initial, lexer)?;
@@ -142,58 +132,18 @@ impl FunctionDefinition {
 
         let body = Block::parse(lexer, next)?;
 
-        let attributes = Self::get_llvm_attributes(&identifier)?;
-
         Ok(Self {
             location,
             identifier: identifier.inner,
             arguments,
             result,
             body,
-            attributes,
         })
     }
 
     /// Gets the list of missing deployable libraries.
     pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         self.body.get_missing_libraries()
-    }
-
-    /// Gets the list of LLVM attributes provided in the function name.
-    pub fn get_llvm_attributes(
-        identifier: &Identifier,
-    ) -> Result<BTreeSet<PolkaVMAttribute>, Error> {
-        let mut valid_attributes = BTreeSet::new();
-
-        let llvm_begin = identifier.inner.find(Self::LLVM_ATTRIBUTE_PREFIX);
-        let llvm_end = identifier.inner.find(Self::LLVM_ATTRIBUTE_SUFFIX);
-        let attribute_string = if let (Some(llvm_begin), Some(llvm_end)) = (llvm_begin, llvm_end) {
-            if llvm_begin < llvm_end {
-                &identifier.inner[llvm_begin + Self::LLVM_ATTRIBUTE_PREFIX.len()..llvm_end]
-            } else {
-                return Ok(valid_attributes);
-            }
-        } else {
-            return Ok(valid_attributes);
-        };
-
-        let mut invalid_attributes = BTreeSet::new();
-        for value in attribute_string.split('_') {
-            match PolkaVMAttribute::try_from(value) {
-                Ok(attribute) => valid_attributes.insert(attribute),
-                Err(value) => invalid_attributes.insert(value),
-            };
-        }
-
-        if !invalid_attributes.is_empty() {
-            return Err(ParserError::InvalidAttributes {
-                location: identifier.location,
-                values: invalid_attributes,
-            }
-            .into());
-        }
-
-        Ok(valid_attributes)
     }
 }
 
@@ -219,12 +169,6 @@ impl PolkaVMWriteLLVM for FunctionDefinition {
             Some((self.location.line, self.location.column)),
             true,
         )?;
-        PolkaVMFunction::set_attributes(
-            context.llvm(),
-            function.borrow().declaration(),
-            &self.attributes.clone().into_iter().collect::<Vec<_>>(),
-            true,
-        );
         function
             .borrow_mut()
             .set_yul_data(PolkaVMFunctionYulData::default());
@@ -355,8 +299,6 @@ impl AstNode for FunctionDefinition {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
-
     use crate::lexer::token::location::Location;
     use crate::lexer::Lexer;
     use crate::parser::error::Error;
@@ -536,81 +478,6 @@ object "Test" {
             Err(Error::ReservedIdentifier {
                 location: Location::new(14, 22),
                 identifier: "basefee".to_owned()
-            }
-            .into())
-        );
-    }
-
-    #[test]
-    fn error_invalid_attributes_single() {
-        let input = r#"
-object "Test" {
-    code {
-        {
-            return(0, 0)
-        }
-    }
-    object "Test_deployed" {
-        code {
-            {
-                return(0, 0)
-            }
-
-            function test_$llvm_UnknownAttribute_llvm$_test() -> result {
-                result := 42
-            }
-        }
-    }
-}
-    "#;
-        let mut invalid_attributes = BTreeSet::new();
-        invalid_attributes.insert("UnknownAttribute".to_owned());
-
-        let mut lexer = Lexer::new(input.to_owned());
-        let result = Object::parse(&mut lexer, None);
-        assert_eq!(
-            result,
-            Err(Error::InvalidAttributes {
-                location: Location::new(14, 22),
-                values: invalid_attributes,
-            }
-            .into())
-        );
-    }
-
-    #[test]
-    fn error_invalid_attributes_multiple_repeated() {
-        let input = r#"
-object "Test" {
-    code {
-        {
-            return(0, 0)
-        }
-    }
-    object "Test_deployed" {
-        code {
-            {
-                return(0, 0)
-            }
-
-            function test_$llvm_UnknownAttribute1_UnknownAttribute1_UnknownAttribute2_llvm$_test() -> result {
-                result := 42
-            }
-        }
-    }
-}
-    "#;
-        let mut invalid_attributes = BTreeSet::new();
-        invalid_attributes.insert("UnknownAttribute1".to_owned());
-        invalid_attributes.insert("UnknownAttribute2".to_owned());
-
-        let mut lexer = Lexer::new(input.to_owned());
-        let result = Object::parse(&mut lexer, None);
-        assert_eq!(
-            result,
-            Err(Error::InvalidAttributes {
-                location: Location::new(14, 22),
-                values: invalid_attributes,
             }
             .into())
         );

@@ -15,6 +15,9 @@ pub const SOLIDITY_DEPENDENCY_CONTRACT_PATH: &str = "src/tests/data/solidity/dep
 /// The simple Solidity contract containing i256 divisions and remains
 /// that should be compiled correctly.
 pub const SOLIDITY_LARGE_DIV_REM_CONTRACT_PATH: &str = "src/tests/data/solidity/large_div_rem.sol";
+/// The reproducer from paritytech/revive#628: a library and a contract using its address.
+pub const SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH: &str =
+    "src/tests/data/solidity/use_library_address.sol";
 /// The verbatim reproducer from paritytech/revive#560: a folded guard plus an
 /// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
 pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
@@ -56,6 +59,10 @@ pub const YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH: &str =
 pub const YUL_EMPTY_RUNTIME_OBJECT_PATH: &str = "src/tests/data/yul/empty_runtime_object.yul";
 /// Yul contract carrying deploy code only, without the `_deployed` runtime sub-object.
 pub const YUL_DEPLOY_ONLY_OBJECT_PATH: &str = "src/tests/data/yul/deploy_only_object.yul";
+/// Yul contract with a sibling object that is not a contract of its own.
+pub const YUL_SIBLING_OBJECTS_PATH: &str = "src/tests/data/yul/sibling_objects.yul";
+/// Yul contract addressing a nested object through the dotted notation.
+pub const YUL_DOTTED_OBJECT_PATH: &str = "src/tests/data/yul/dotted_object_path.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =

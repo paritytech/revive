@@ -11,3 +11,4 @@ mod revert_strings;
 mod standard_json;
 mod usage;
 mod yul;
+mod yul_objects;

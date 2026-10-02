@@ -8,6 +8,7 @@ use revive_solc_json_interface::{
 use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
+    STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH, STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH,
     STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
     STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
@@ -700,6 +701,30 @@ fn populates_output_metadata_fields() {
             "Standard JSON output for `{path}` should populate `long_version`"
         );
     }
+}
+
+/// A heap size outside the PVM memory map is reported in the standard JSON errors.
+#[test]
+fn heap_size_out_of_range() {
+    let result =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH);
+    assert_command_success(&result, "Providing an out of range heap size");
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_standard_json_errors_contain(&output, "do not fit into the PVM memory map");
+}
+
+/// A polkavm linker failure is reported in the standard JSON errors.
+#[test]
+fn heap_size_linker_failure() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH,
+    );
+    assert_command_success(&result, "Providing a heap size the linker rejects");
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_standard_json_errors_contain(&output, "polkavm linker failed");
 }
 
 /// A library used only in a switch expression is reported as missing.

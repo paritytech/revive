@@ -23,6 +23,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 - `--newyork`: a static memory access at the top of the address space, such as a store through a free memory pointer corrupted to `u64::MAX`, crashed the compiler with "attempt to add with overflow". [#582](https://github.com/paritytech/revive/pull/582)
 - `--newyork`: Fixed a constant folding bug (reproduced only with hand-crafted Yul input). [#618](https://github.com/paritytech/revive/pull/618)
 - resolc: A bug that arbitrarily picks an input mode when multiple are specified. [#635](https://github.com/paritytech/revive/pull/635)
+- Yul objects that `resolc` cannot represent, a sibling object that is not a contract and the dotted notation for a nested object, aborted the compiler instead of being reported. [#600](https://github.com/paritytech/revive/pull/600)
 - `--newyork`: the outlined mapping store helper hashed its key and slot from a private buffer while the fused `mstore(0, key)` and `mstore(0x20, slot)` had been eliminated, so a later read of scratch memory `[0, 0x40)` observed stale bytes.
 
 ## v1.4.0

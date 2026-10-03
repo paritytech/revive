@@ -5150,6 +5150,26 @@ fn fmp_loop_mstore8() {
     run_differential(actions);
 }
 
+/// Reproducer from paritytech/security_findings#118.
+#[test]
+fn calldata_copy_over_free_pointer() {
+    let mut actions = instantiate(
+        "contracts/CalldataCopyOverFreePointer.sol",
+        "CalldataCopyOverFreePointer",
+    );
+    let mut data = vec![0; 64];
+    data.extend(U256::from(1u64 << 40).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Deploys the Yul fixture `name` and calls it with the calldata words `v`, `0x11…11` and `c`,
 /// where `v` and `c` have all bits set. The fixture reverts when the free memory pointer it reads
 /// back differs from what its own stores wrote, so a stale or truncated pointer fails the test.

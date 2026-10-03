@@ -25,6 +25,7 @@ use crate::ir::{
     for_each_statement, word_align, Block, Expression, FunctionId, MemoryRegion, Object, Statement,
     Value, ValueId,
 };
+use revive_common::BIT_LENGTH_WORD;
 use revive_common::BYTE_LENGTH_WORD;
 
 /// Maximum number of words to iterate when marking escaping/tainted ranges.
@@ -194,8 +195,9 @@ pub struct HeapAnalysis {
     /// to the caller's observation scan.
     fmp_corrupting_functions: BTreeSet<FunctionId>,
     /// Dynamic destinations of writes that may cover the FMP word unless they are free pointer
-    /// relative. They are checked once the whole object is analyzed, because a destination
-    /// derived from a function parameter or a call result depends on every call site.
+    /// relative, and trusted values stored to the FMP word, which must be free pointer relative
+    /// for `mload(0x40)` to be. They are checked once the whole object is analyzed, because a
+    /// value derived from a function parameter or a call result depends on every call site.
     deferred_write_destinations: Vec<u32>,
     /// Parameters for which every call site passes a free pointer relative argument.
     free_pointer_relative_parameters: BTreeSet<u32>,
@@ -494,9 +496,12 @@ impl HeapAnalysis {
                         }
                     }
                 }
-                let is_fmp_store = region.is_free_pointer_slot(static_offset);
-                if is_fmp_store && !self.is_trusted_fmp_source(value.id.0) {
-                    self.fmp_could_be_unbounded = true;
+                if region.is_free_pointer_slot(static_offset) {
+                    if !self.is_trusted_fmp_source(value.id.0) {
+                        self.fmp_could_be_unbounded = true;
+                    } else if !self.is_free_pointer_relative(value.id.0) {
+                        self.deferred_write_destinations.push(value.id.0);
+                    }
                 }
                 if static_offset.is_none()
                     && (*region == MemoryRegion::Scratch
@@ -1068,10 +1073,13 @@ impl HeapAnalysis {
     /// `fmp_could_be_unbounded` so the corrupted `mload(0x40)` skips the `FMP < heap_size` range
     /// proof. Recognized as at-or-above the free pointer: `mload(0x40)`, a literal base `>= 0x60`
     /// that fits in 64 bits (`mem_opt` constant-forwards `mload(0x40)` to its `0x80` literal), an
-    /// `add` with such an operand, `Var` forwarding chains, and the parameters and call results
-    /// trusted by [`Self::check_deferred_write_destinations`]. (The adversarial `add(mload(0x40),
-    /// k)` / `add(0x80, k)` that wraps mod 2^256 back to `0x40` is the same solc-unreachable residual
-    /// as the dynamic full-word `MStore` gap; see the `fmp_could_be_unbounded` field docs.)
+    /// `add` with such an operand, an `and` of such an operand with a mask that clears only bits
+    /// below `0x20` (`not(31)`) or keeps at least the low 64 bits (inserted by guard narrowing),
+    /// `Var` forwarding chains, and the parameters and call results trusted by
+    /// [`Self::check_deferred_write_destinations`]. (The adversarial `add(mload(0x40), k)` /
+    /// `add(0x80, k)` that wraps mod 2^256, or mod 2^64 under such a mask, back to `0x40` is the
+    /// same solc-unreachable residual as the dynamic full-word `MStore` gap; see the
+    /// `fmp_could_be_unbounded` field docs.)
     fn is_free_pointer_relative(&self, value_id: u32) -> bool {
         const MAX_DEPTH: u32 = 32;
         let mut current = value_id;
@@ -1099,6 +1107,23 @@ impl HeapAnalysis {
                 }) => {
                     return self.is_free_pointer_relative(lhs.id.0)
                         || self.is_free_pointer_relative(rhs.id.0);
+                }
+                Some(Expression::Binary {
+                    operation: crate::ir::BinaryOperation::And,
+                    lhs,
+                    rhs,
+                }) => {
+                    let keeps_pointer = |mask: &Value| match self.value_expressions.get(&mask.id.0)
+                    {
+                        Some(Expression::Literal { value, .. }) => {
+                            (value | BigUint::from(0x1fu64)).count_ones() == BIT_LENGTH_WORD as u64
+                                || (value.bits() >= u64::BITS as u64
+                                    && value.count_ones() == value.bits())
+                        }
+                        _ => false,
+                    };
+                    return (keeps_pointer(rhs) && self.is_free_pointer_relative(lhs.id.0))
+                        || (keeps_pointer(lhs) && self.is_free_pointer_relative(rhs.id.0));
                 }
                 _ => return false,
             }
@@ -3752,13 +3777,13 @@ mod tests {
         );
     }
 
-    /// A non-inlined `finalize_allocation(memPtr, size)` stores `add(memPtr, and(add(size, 31),
-    /// not(31)))` with both arguments parameters, so only the literal 31 marks the rounded size
-    /// as bounded; it must keep the range proof although 31 is below the dynamic heap base.
-    #[test]
-    fn fmp_allocation_from_parameters_is_trusted() {
-        use crate::ir::{BinaryOperation, ValueId};
-        let mut statements = vec![
+    /// Builds an object calling `finalize_allocation(memPtr, size)` with `mload(0x40)` and
+    /// `calldataload(0)`, which stores `add(memPtr, and(add(size, 31), not(31)))` and reads it back.
+    fn object_with_finalize_allocation() -> Object {
+        use crate::ir::{BinaryOperation, Function, FunctionId, Type, ValueId};
+        let mut function = Function::new(FunctionId(0), "finalize_allocation".to_string());
+        function.parameters = vec![(ValueId(0), Type::default()), (ValueId(1), Type::default())];
+        let mut body = vec![
             literal_binding(2, 31),
             binary_binding(3, BinaryOperation::Add, 1, 2),
             big_literal_binding(4, not_0x1f()),
@@ -3771,12 +3796,48 @@ mod tests {
                 region: MemoryRegion::FreePointerSlot,
             },
         ];
-        statements.extend(observe_fmp_statements(8));
-        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        body.extend(observe_fmp_statements(8));
+        function.body = Block { statements: body };
+        let mut statements = free_pointer_binding(20);
+        statements.push(calldata_binding(22));
+        statements.push(Statement::Expression(Expression::Call {
+            function: FunctionId(0),
+            arguments: vec![Value::int(ValueId(20)), Value::int(ValueId(22))],
+        }));
+        object_with_code(statements, vec![function])
+    }
+
+    /// A non-inlined `finalize_allocation(memPtr, size)` gets both arguments as parameters, so only
+    /// the literal 31 marks the rounded size as bounded; it must keep the range proof although 31
+    /// is below the dynamic heap base.
+    #[test]
+    fn fmp_allocation_from_parameters_is_trusted() {
+        let results = object_with_finalize_allocation().analyze_heap(TEST_HEAP_SIZE);
         assert!(
             !results.fmp_could_be_unbounded(),
             "an allocation rounded up with the literal 31 must stay trusted"
         );
+    }
+
+    /// `mstore(0x40, and(calldataload(0), 0x1f))` can drop the FMP below `0x60`, so a copy to
+    /// `add(mload(0x40), k)` can land on the FMP word and the FMP must count as unbounded.
+    #[test]
+    fn fmp_masked_below_free_memory_is_untrusted() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = vec![
+            calldata_binding(1),
+            literal_binding(2, 0x1f),
+            binary_binding(3, BinaryOperation::And, 1, 2),
+            literal_binding(4, 0x40),
+            Statement::MStore {
+                offset: Value::int(ValueId(4)),
+                value: Value::int(ValueId(3)),
+                region: MemoryRegion::FreePointerSlot,
+            },
+        ];
+        statements.extend(observe_fmp_statements(5));
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded());
     }
 
     #[test]

@@ -273,7 +273,25 @@ fn is_memory_free_expression(expression: &Expression) -> bool {
             | Expression::Caller
             | Expression::Origin
             | Expression::CallDataSize
+            | Expression::CodeSize
+            | Expression::GasPrice
+            | Expression::ExtCodeSize { .. }
+            | Expression::ReturnDataSize
+            | Expression::ExtCodeHash { .. }
+            | Expression::BlockHash { .. }
+            | Expression::Coinbase
+            | Expression::Timestamp
+            | Expression::Number
+            | Expression::Difficulty
+            | Expression::GasLimit
+            | Expression::ChainId
+            | Expression::SelfBalance
+            | Expression::BaseFee
+            | Expression::BlobHash { .. }
+            | Expression::BlobBaseFee
+            | Expression::Gas
             | Expression::Address
+            | Expression::Balance { .. }
             | Expression::SLoad { .. }
             | Expression::TLoad { .. }
             | Expression::Truncate { .. }

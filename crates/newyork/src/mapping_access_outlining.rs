@@ -410,8 +410,8 @@ mod tests {
         assert!(crate::validate::validate_object(&object).is_ok());
     }
 
-    /// Builds `let v4 = keccak256_pair(v1, v2); <between>; sstore(v4, v3)`.
-    fn mapping_sstore_object(between: Statement) -> Object {
+    /// Builds `let v4 = keccak256_pair(v1, v2); <between>; <access>`.
+    fn mapping_access_object(between: Statement, access: Statement) -> Object {
         Object {
             name: "test".to_string(),
             code: Block {
@@ -427,17 +427,39 @@ mod tests {
                         },
                     },
                     between,
-                    Statement::SStore {
-                        key: value(4),
-                        value: value(3),
-                        static_slot: None,
-                    },
+                    access,
                 ],
             },
             functions: BTreeMap::new(),
             subobjects: vec![],
             data: BTreeMap::new(),
         }
+    }
+
+    /// Builds `let v4 = keccak256_pair(v1, v2); <between>; sstore(v4, v3)`.
+    fn mapping_sstore_object(between: Statement) -> Object {
+        mapping_access_object(
+            between,
+            Statement::SStore {
+                key: value(4),
+                value: value(3),
+                static_slot: None,
+            },
+        )
+    }
+
+    /// Builds `let v4 = keccak256_pair(v1, v2); <between>; let v6 = sload(v4)`.
+    fn mapping_sload_object(between: Statement) -> Object {
+        mapping_access_object(
+            between,
+            Statement::Let {
+                bindings: vec![crate::ir::ValueId(6)],
+                value: Expression::SLoad {
+                    key: value(4),
+                    static_slot: None,
+                },
+            },
+        )
     }
 
     /// A scratch write between the hash and the `sstore` must not be clobbered by the fused helper.
@@ -469,6 +491,38 @@ mod tests {
         let statistics = outline_mapping_accesses_in_object(&mut object);
 
         assert_eq!(statistics.mapping_sstores, 1);
+        assert!(crate::validate::validate_object(&object).is_ok());
+    }
+
+    /// A scratch write between the hash and the `sload` must not be clobbered by the fused helper.
+    #[test]
+    fn memory_access_between_hash_and_sload_not_fused() {
+        let mut object = mapping_sload_object(Statement::MStore {
+            offset: value(1),
+            value: value(3),
+            region: crate::ir::MemoryRegion::Scratch,
+        });
+
+        let statistics = outline_mapping_accesses_in_object(&mut object);
+
+        assert_eq!(statistics.mapping_sloads, 0);
+    }
+
+    /// Pure statements between the hash and the `sload` do not prevent fusion.
+    #[test]
+    fn pure_statement_between_hash_and_sload_still_fused() {
+        let mut object = mapping_sload_object(Statement::Let {
+            bindings: vec![crate::ir::ValueId(5)],
+            value: Expression::Binary {
+                operation: crate::ir::BinaryOperation::Add,
+                lhs: value(1),
+                rhs: value(3),
+            },
+        });
+
+        let statistics = outline_mapping_accesses_in_object(&mut object);
+
+        assert_eq!(statistics.mapping_sloads, 1);
         assert!(crate::validate::validate_object(&object).is_ok());
     }
 }

@@ -4,6 +4,7 @@ target-llvm
 *.dot
 .vscode/
 .zed/
+.idea/
 .DS_Store
 /*.sol
 /*.yul

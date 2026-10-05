@@ -4,7 +4,8 @@ use revive_solc_json_interface::{combined_json::CombinedJson, CombinedJsonInvali
 
 use crate::cli_utils::{
     assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
-    execute_solc, SOLIDITY_CONTRACT_PATH, YUL_CONTRACT_PATH,
+    execute_solc, SOLIDITY_CONTRACT_PATH, SOLIDITY_INCLUDED_IMPORT_PATH,
+    SOLIDITY_REMAPPED_IMPORT_PATH, YUL_CONTRACT_PATH,
 };
 use crate::ResolcVersion;
 
@@ -136,5 +137,60 @@ fn populates_output_metadata_fields() {
     assert!(
         !combined_json.version.is_empty(),
         "Combined JSON output should populate `version`"
+    );
+}
+
+/// Asserts that resolc and solc both emit `expected` contracts for `arguments`.
+fn assert_combined_json_contracts(arguments: &[&str], expected: &[&str]) {
+    let resolc_result = execute_resolc(arguments);
+    assert_command_success(&resolc_result, "Compiling with combined JSON");
+
+    let combined_json: CombinedJson = serde_json::from_str(&resolc_result.stdout)
+        .expect("Combined JSON output should deserialize");
+    let contracts = combined_json
+        .contracts
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    assert_eq!(contracts, expected);
+
+    let solc_result = execute_solc(arguments);
+    assert_equal_exit_codes(&solc_result, &resolc_result);
+}
+
+#[test]
+fn resolves_imports_with_remappings() {
+    let arguments = &[
+        "@solidity/=src/tests/data/solidity/",
+        SOLIDITY_REMAPPED_IMPORT_PATH,
+        JSON_OPTION,
+        "abi,bin",
+    ];
+    assert_combined_json_contracts(
+        arguments,
+        &[
+            "src/tests/data/solidity/contract.sol:C",
+            "src/tests/data/solidity/remapped_import.sol:U",
+        ],
+    );
+}
+
+#[test]
+fn resolves_imports_with_base_and_include_paths() {
+    let arguments = &[
+        SOLIDITY_INCLUDED_IMPORT_PATH,
+        "--base-path",
+        ".",
+        "--include-path",
+        "src/tests/data",
+        JSON_OPTION,
+        "abi,bin",
+    ];
+    assert_combined_json_contracts(
+        arguments,
+        &[
+            "solidity/contract.sol:C",
+            "src/tests/data/solidity/included_import.sol:U",
+        ],
     );
 }

@@ -22,6 +22,10 @@ pub const SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH: &str =
 /// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
 pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
     "src/tests/data/solidity/folded_guard_inlined_loop.sol";
+/// The Solidity contract importing the simple contract through a remapping.
+pub const SOLIDITY_REMAPPED_IMPORT_PATH: &str = "src/tests/data/solidity/remapped_import.sol";
+/// The Solidity contract importing the simple contract through an include path.
+pub const SOLIDITY_INCLUDED_IMPORT_PATH: &str = "src/tests/data/solidity/included_import.sol";
 /// The reproducer from paritytech/revive#624 with 129 immutables, one more than the limit allows.
 pub const SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH: &str =
     "src/tests/data/solidity/immutables_over_limit.sol";

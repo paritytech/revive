@@ -22,6 +22,10 @@ pub const SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH: &str =
 /// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
 pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
     "src/tests/data/solidity/folded_guard_inlined_loop.sol";
+/// The Solidity contract importing the simple contract through a remapping.
+pub const SOLIDITY_REMAPPED_IMPORT_PATH: &str = "src/tests/data/solidity/remapped_import.sol";
+/// The Solidity contract importing the simple contract through an include path.
+pub const SOLIDITY_INCLUDED_IMPORT_PATH: &str = "src/tests/data/solidity/included_import.sol";
 /// The reproducer from paritytech/revive#624 with 129 immutables, one more than the limit allows.
 pub const SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH: &str =
     "src/tests/data/solidity/immutables_over_limit.sol";
@@ -37,6 +41,9 @@ pub const SOLIDITY_COLLISION_UNDERSCORE_PATH: &str = "src/tests/data/solidity/co
 /// The verbatim reproducer from paritytech/revive#632: two contracts calling the same library.
 pub const SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH: &str =
     "src/tests/data/solidity/link_independent_objects.sol";
+/// A Solidity contract whose `require` has a reason string.
+pub const SOLIDITY_REVERT_STRINGS_CONTRACT_PATH: &str =
+    "src/tests/data/solidity/revert_strings.sol";
 
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
@@ -135,12 +142,38 @@ pub const STANDARD_JSON_YUL_PVM_CODEGEN_PATH: &str =
 /// PVM bytecode generation and only validate the Yul.
 pub const STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/yul_no_pvm_codegen.json";
+/// A standard JSON fixture with `settings.debug.revertStrings` set to `"default"`,
+/// so solc keeps the `require` reason string of its contract.
+pub const STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH: &str =
+    "src/tests/data/standard_json/revert_strings_default.json";
+/// A standard JSON fixture with `settings.debug.revertStrings` set to `"strip"`,
+/// so solc removes the reason string.
+pub const STANDARD_JSON_REVERT_STRINGS_STRIP_PATH: &str =
+    "src/tests/data/standard_json/revert_strings_strip.json";
+/// A standard JSON fixture with `settings.debug.revertStrings` set to `"verboseDebug"`.
+pub const STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH: &str =
+    "src/tests/data/standard_json/revert_strings_verbose_debug.json";
+/// A `"language": "Yul"` standard JSON fixture with `settings.debug.revertStrings` set to `"strip"`,
+/// which solc rejects for Yul.
+pub const STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH: &str =
+    "src/tests/data/standard_json/yul_revert_strings_strip.json";
+/// A standard JSON fixture without `settings.debug`, so solc adds its default
+/// source location annotations to the Yul IR.
+pub const STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH: &str =
+    "src/tests/data/standard_json/debug_info_default.json";
+/// A standard JSON fixture with an empty `settings.debug.debugInfo`, so solc omits its
+/// source location annotations from the Yul IR.
+pub const STANDARD_JSON_DEBUG_INFO_EMPTY_PATH: &str =
+    "src/tests/data/standard_json/debug_info_empty.json";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";
 /// The `--yul` option was deprecated in Solidity 0.8.27 in favor of `--strict-assembly`.
 /// See section `--strict-assembly vs. --yul` in the [release announcement](https://soliditylang.org/blog/2024/09/04/solidity-0.8.27-release-announcement/).
 pub const SOLC_YUL_FLAG: &str = "--strict-assembly";
+
+/// The starting hex value of a PVM blob (encoding of `"PVM"`).
+pub const PVM_BLOB_START: &str = "50564d";
 
 /// Common `resolc` CLI optimization settings.
 pub struct ResolcOptSettings;

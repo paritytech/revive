@@ -528,7 +528,7 @@ impl HeapAnalysis {
                 let destination_start = self.extract_static_offset(destination);
                 let source_start = self.extract_static_offset(source);
                 let len = self.extract_static_offset(length);
-                self.flag_write_covering_fmp(destination, length, true);
+                self.flag_write_covering_fmp(destination, length);
                 self.taint_range(destination_start, len);
                 self.taint_range(source_start, len);
             }
@@ -542,7 +542,7 @@ impl HeapAnalysis {
             } => {
                 self.mark_escaping_range(args_offset, args_length);
                 self.note_fmp_coverage(args_offset, args_length);
-                self.flag_write_covering_fmp(ret_offset, ret_length, true);
+                self.flag_write_covering_fmp(ret_offset, ret_length);
                 self.mark_escaping_and_tainted_range(ret_offset, ret_length);
                 self.note_fmp_coverage(ret_offset, ret_length);
             }
@@ -816,25 +816,15 @@ impl HeapAnalysis {
     /// bytes to `destination` can cover `[0x40, 0x60)`. A zero length never covers it,
     /// and neither does a dynamic destination that is free pointer relative, or a
     /// loop-varying destination that never drops below `0x60`. A static destination below
-    /// `0x60` with a dynamic length is flagged when `any_dynamic_length` is set or the length
-    /// is loop-varying. Copy opcodes leave it unset, so `calldatacopy(0, 0, calldatasize())`
-    /// is not flagged although a length above `0x40` overwrites the pointer (a known gap).
-    fn flag_write_covering_fmp(
-        &mut self,
-        destination: &Value,
-        length: &Value,
-        any_dynamic_length: bool,
-    ) {
+    /// `0x60` with a dynamic length is flagged.
+    fn flag_write_covering_fmp(&mut self, destination: &Value, length: &Value) {
         let destination_start = self.extract_static_offset(destination);
         let len = self.extract_static_offset(length);
-        let dynamic_length_covers = any_dynamic_length || self.loop_varying(length);
 
         let covers_fmp = match (destination_start, len) {
             (_, Some(0)) => false,
             (Some(address), Some(size)) => address < 0x60 && address.saturating_add(size) > 0x40,
-            (Some(address), None) => {
-                (0x40..0x60).contains(&address) || (dynamic_length_covers && address < 0x60)
-            }
+            (Some(address), None) => address < 0x60,
             (None, _) if self.loop_varying(destination) => {
                 self.loop_offset_may_reach_fmp_word(destination)
             }
@@ -981,7 +971,7 @@ impl HeapAnalysis {
         let len = self.extract_static_offset(length);
 
         let loop_length = self.loop_varying(length);
-        self.flag_write_covering_fmp(destination, length, false);
+        self.flag_write_covering_fmp(destination, length);
 
         match (destination_start, len) {
             (Some(address), Some(size)) => {

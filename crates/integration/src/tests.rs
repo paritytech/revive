@@ -5150,6 +5150,26 @@ fn fmp_loop_mstore8() {
     run_differential(actions);
 }
 
+/// Reproducer from paritytech/security_findings#118.
+#[test]
+fn calldata_copy_over_free_pointer() {
+    let mut actions = instantiate(
+        "contracts/CalldataCopyOverFreePointer.sol",
+        "CalldataCopyOverFreePointer",
+    );
+    let mut data = vec![0; 64];
+    data.extend(U256::from(1u64 << 40).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Reproducer from paritytech/security_findings#116.
 #[test]
 fn non_payable_call_value() {

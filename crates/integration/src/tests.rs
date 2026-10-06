@@ -5727,3 +5727,9 @@ fn function_name_injected_unknown_attribute() {
 fn function_name_overlapping_llvm_markers() {
     run_function_name_fixture("NameOverlappingLlvmMarkers");
 }
+
+/// A struct name containing an LLVM attribute marker.
+#[test]
+fn struct_name_injected_no_return() {
+    run_function_name_fixture("StructNameInjectedNoReturn");
+}

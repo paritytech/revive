@@ -287,8 +287,6 @@ fn is_memory_free_expression(expression: &Expression) -> bool {
             | Expression::ChainId
             | Expression::SelfBalance
             | Expression::BaseFee
-            | Expression::BlobHash { .. }
-            | Expression::BlobBaseFee
             | Expression::Gas
             | Expression::Address
             | Expression::Balance { .. }

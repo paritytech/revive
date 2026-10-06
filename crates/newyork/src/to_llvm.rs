@@ -5751,13 +5751,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     destination.id,
                     "calldatacopy_dest_narrow",
                 )?;
-                let offset_value = self.translate_value(offset)?.into_int_value();
-                let offset_value = self.narrow_offset_for_pointer(
-                    context,
-                    offset_value,
-                    offset.id,
-                    "calldatacopy_offset_narrow",
-                )?;
                 let length_value = self.translate_value(length)?.into_int_value();
                 let length_value = self.narrow_offset_for_pointer(
                     context,
@@ -5765,6 +5758,25 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     length.id,
                     "calldatacopy_length_narrow",
                 )?;
+                let offset_value = match context.code_type() {
+                    Some(revive_llvm_context::PolkaVMCodeType::Deploy) => {
+                        revive_llvm_context::polkavm_evm_calldata::size(context)?.into_int_value()
+                    }
+                    Some(revive_llvm_context::PolkaVMCodeType::Runtime) => {
+                        let offset_value = self.translate_value(offset)?.into_int_value();
+                        self.narrow_offset_for_pointer(
+                            context,
+                            offset_value,
+                            offset.id,
+                            "calldatacopy_offset_narrow",
+                        )?
+                    }
+                    None => {
+                        return Err(CodegenError::Unsupported(
+                            "code type undefined for calldatacopy".into(),
+                        ))
+                    }
+                };
                 revive_llvm_context::polkavm_evm_calldata::copy(
                     context,
                     destination_value,
@@ -6153,20 +6165,28 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
 
-            Expression::CallDataLoad { offset } => {
-                let offset_value = self.translate_value(offset)?.into_int_value();
-                if self.use_outlined_calldataload {
-                    Ok(revive_llvm_context::polkavm_evm_calldata::load_outlined(
-                        context,
-                        offset_value,
-                    )?)
-                } else {
-                    Ok(revive_llvm_context::polkavm_evm_calldata::load(
-                        context,
-                        offset_value,
-                    )?)
+            Expression::CallDataLoad { offset } => match context.code_type() {
+                Some(revive_llvm_context::PolkaVMCodeType::Deploy) => {
+                    Ok(context.word_const(0).as_basic_value_enum())
                 }
-            }
+                Some(revive_llvm_context::PolkaVMCodeType::Runtime) => {
+                    let offset_value = self.translate_value(offset)?.into_int_value();
+                    if self.use_outlined_calldataload {
+                        Ok(revive_llvm_context::polkavm_evm_calldata::load_outlined(
+                            context,
+                            offset_value,
+                        )?)
+                    } else {
+                        Ok(revive_llvm_context::polkavm_evm_calldata::load(
+                            context,
+                            offset_value,
+                        )?)
+                    }
+                }
+                None => Err(CodegenError::Unsupported(
+                    "code type undefined for calldataload".into(),
+                )),
+            },
 
             Expression::CallValue => {
                 if self.use_outlined_callvalue {
@@ -6196,9 +6216,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 Ok(value)
             }
 
-            Expression::CallDataSize => {
-                Ok(revive_llvm_context::polkavm_evm_calldata::size(context)?)
-            }
+            Expression::CallDataSize => match context.code_type() {
+                Some(revive_llvm_context::PolkaVMCodeType::Deploy) => {
+                    Ok(context.word_const(0).as_basic_value_enum())
+                }
+                Some(revive_llvm_context::PolkaVMCodeType::Runtime) => {
+                    Ok(revive_llvm_context::polkavm_evm_calldata::size(context)?)
+                }
+                None => Err(CodegenError::Unsupported(
+                    "code type undefined for calldatasize".into(),
+                )),
+            },
 
             Expression::CodeSize => match context.code_type() {
                 Some(revive_llvm_context::PolkaVMCodeType::Deploy) => {

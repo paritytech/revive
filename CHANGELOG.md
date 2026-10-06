@@ -24,6 +24,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 - `--newyork`: Fixed a constant folding bug (reproduced only with hand-crafted Yul input). [#618](https://github.com/paritytech/revive/pull/618)
 - resolc: A bug that arbitrarily picks an input mode when multiple are specified. [#635](https://github.com/paritytech/revive/pull/635)
 - Yul objects that `resolc` cannot represent, a sibling object that is not a contract and the dotted notation for a nested object, aborted the compiler instead of being reported. [#600](https://github.com/paritytech/revive/pull/600)
+- `--newyork`: In rare cases, a mapping read or write left the wrong bytes in scratch memory. [#610](https://github.com/paritytech/revive/pull/610)
 
 ## v1.4.0
 

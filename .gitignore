@@ -26,3 +26,4 @@ emsdk
 docs-tmp
 coverage-reports
 workdir
+/stages/

@@ -47,6 +47,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::Deserialize;
+use serde::Serialize;
+
 use crate::ir::{
     for_each_statement, for_each_statement_mut, BitWidth, Block, Expression, Function, FunctionId,
     Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value, ValueId,
@@ -113,7 +116,7 @@ pub struct CallGraphAnalysis {
 }
 
 /// Results of the inlining pass.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct InlineResults {
     /// Number of call sites that were inlined.
     pub inlined_call_sites: usize,
@@ -132,7 +135,7 @@ impl std::ops::AddAssign for InlineResults {
 }
 
 /// The inlining decision for a function.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InlineDecision {
     /// Always inline this function at every call site.
     AlwaysInline,
@@ -2185,8 +2188,12 @@ object "T" {
             let mut lexer = Lexer::new(source.to_owned());
             let yul_object =
                 YulObject::parse(&mut lexer, None).expect("the Yul object should parse");
-            crate::translate_yul_object(&yul_object, false, TEST_HEAP_SIZE)
-                .expect("translation should succeed without a validator ICE");
+            crate::translate_yul_object(
+                &yul_object,
+                &mut crate::StageSink::disabled(),
+                TEST_HEAP_SIZE,
+            )
+            .expect("translation should succeed without a validator ICE");
         }
     }
 

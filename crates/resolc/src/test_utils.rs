@@ -37,7 +37,7 @@ static EVM_RUNTIME_BLOB_CACHE: LazyLock<Mutex<HashMap<CachedBlob, Vec<u8>>>> =
     LazyLock::new(Default::default);
 static YUL_IR_CACHE: LazyLock<Mutex<HashMap<CachedBlob, String>>> = LazyLock::new(Default::default);
 
-const DEBUG_CONFIG: revive_llvm_context::DebugConfig = DebugConfig::new(None, true);
+const DEBUG_CONFIG: revive_llvm_context::DebugConfig = DebugConfig::new(None, true, false);
 
 /// Tests may share and re-use contract code.
 /// The compiled blob cache helps avoiding duplicate compilation.
@@ -119,7 +119,11 @@ pub fn build_solidity_with_options(
         return Ok(output);
     }
     let use_newyork = cfg!(feature = "newyork");
-    let debug_config = DebugConfig::new(None, optimizer_settings.middle_end_as_string() != "z");
+    let debug_config = DebugConfig::new(
+        None,
+        optimizer_settings.middle_end_as_string() != "z",
+        false,
+    );
     let linker_symbols = libraries.as_linker_symbols()?;
     let build = Project::try_from_standard_json_output(
         &mut output,

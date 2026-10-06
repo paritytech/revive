@@ -164,6 +164,12 @@ pub struct Arguments {
     #[arg(long = "debug-output-dir")]
     pub debug_output_directory: Option<PathBuf>,
 
+    /// Emit a machine-readable artifact for every newyork IR optimization stage,
+    /// plus a manifest indexing them. Requires `--debug-output-dir`.
+    /// Only for testing and debugging.
+    #[arg(long = "emit-ir-stages")]
+    pub emit_ir_stages: bool,
+
     /// Set the verify-each option in LLVM.
     /// Only for testing and debugging.
     #[arg(long = "llvm-verify-each")]
@@ -239,6 +245,14 @@ impl Arguments {
         if self.supported_solc_versions && std::env::args().count() > 2 {
             messages.push(SolcStandardJsonOutputError::new_error(
                 "No other options are allowed while getting the supported `solc` version.",
+                None,
+                None,
+            ));
+        }
+
+        if self.emit_ir_stages && self.debug_output_directory.is_none() {
+            messages.push(SolcStandardJsonOutputError::new_error(
+                "Emitting IR stages requires an output directory. Pass `--debug-output-dir`.",
                 None,
                 None,
             ));

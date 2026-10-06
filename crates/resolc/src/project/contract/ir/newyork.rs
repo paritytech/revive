@@ -6,11 +6,15 @@
 //! 3. Run heap optimization analysis
 //! 4. Generate LLVM IR from newyork IR
 
+use std::cell::RefCell;
 use std::collections::BTreeSet;
+use std::rc::Rc;
 
 use inkwell::debug_info::AsDIScope;
+use revive_common::Keccak256;
+use revive_llvm_context::DebugConfig;
 use revive_llvm_context::PolkaVMCodeType;
-use revive_newyork::{LlvmCodegen, TranslationResult};
+use revive_newyork::{CapturedStage, LlvmCodegen, StageSink, TranslationResult};
 use revive_yul::lexer::Lexer;
 use revive_yul::parser::statement::object::Object as YulObject;
 use serde::{Deserialize, Serialize};
@@ -44,17 +48,135 @@ impl NewYork {
 
     /// Translate the Yul AST to newyork IR with heap optimization analysis.
     ///
-    /// `capture_ir_snapshot` requests the mid-pipeline IR snapshot, which is dumped via
-    /// [`revive_llvm_context::DebugConfig`] when a debug output directory is configured.
-    /// `heap_size` is the configured EVM heap size in bytes.
+    /// `sink` receives the IR between optimization passes. `heap_size` is the
+    /// configured EVM heap size in bytes.
     fn translate_to_ir(
         &self,
-        capture_ir_snapshot: bool,
+        sink: &mut StageSink<'_>,
         heap_size: u64,
     ) -> anyhow::Result<TranslationResult> {
-        revive_newyork::translate_yul_object(&self.yul_object, capture_ir_snapshot, heap_size)
+        revive_newyork::translate_yul_object(&self.yul_object, sink, heap_size)
             .map_err(|e| anyhow::anyhow!("newyork IR translation: {e}"))
     }
+
+    /// Builds the sink that writes one artifact per optimization pass.
+    ///
+    /// Returns a sink that serializes nothing unless stage export was requested.
+    /// The sink owns a clone of the debug configuration so that it does not
+    /// borrow the context, which codegen needs mutably afterwards.
+    fn stage_sink(
+        debug_config: &DebugConfig,
+        stages: &Rc<RefCell<Vec<ManifestStage>>>,
+    ) -> StageSink<'static> {
+        if !debug_config.emit_ir_stages {
+            return StageSink::disabled();
+        }
+
+        let debug_config = debug_config.clone();
+        let stages = Rc::clone(stages);
+        StageSink::new(Box::new(move |stage: CapturedStage<'_>| {
+            let Some(file) = debug_config.dump_newyork_stage(stage.stage_id, stage.json)? else {
+                return Ok(());
+            };
+            stages.borrow_mut().push(ManifestStage {
+                id: stage.stage_id.to_owned(),
+                pass: stage.pass.to_owned(),
+                object: stage.object.to_owned(),
+                ir_hash: stage.ir_hash.to_owned(),
+                file,
+            });
+
+            Ok(())
+        }))
+    }
+
+    /// Writes the Yul AST and the manifest indexing the stage artifacts.
+    ///
+    /// Also checks that the last exported stage is the IR codegen is about to
+    /// receive. Nothing between translation and codegen mutates the IR today;
+    /// the check is what keeps that true, since a chain whose final stage is not
+    /// what was compiled describes a compilation that did not happen.
+    ///
+    /// A no-op when stage export is off.
+    fn write_stage_manifest(
+        &self,
+        debug_config: &DebugConfig,
+        stages: &Rc<RefCell<Vec<ManifestStage>>>,
+        ir_object: &revive_newyork::Object,
+        heap_size: u64,
+    ) -> anyhow::Result<()> {
+        if !debug_config.emit_ir_stages {
+            return Ok(());
+        }
+
+        let stages = stages.borrow();
+        if let Some(last) = stages.last() {
+            let serialized = serde_json::to_string(ir_object)
+                .map_err(|error| anyhow::anyhow!("serializing the final newyork IR: {error}"))?;
+            let compiled = Keccak256::from_slice(serialized.as_bytes()).to_string();
+            anyhow::ensure!(
+                last.ir_hash == compiled,
+                "ICE: the newyork IR changed after the last exported stage `{}`; \
+                 the stage artifacts do not describe the compiled code",
+                last.id,
+            );
+        }
+
+        let yul_ast = serde_json::to_string(&self.yul_object)
+            .map_err(|error| anyhow::anyhow!("serializing the Yul AST: {error}"))?;
+        let manifest = StageManifest {
+            schema: STAGE_MANIFEST_SCHEMA,
+            contract: self.yul_object.identifier.as_str(),
+            heap_size,
+            yul_ast: debug_config.dump_yul_ast(&yul_ast)?,
+            stages: stages.as_slice(),
+        };
+        let manifest = serde_json::to_string_pretty(&manifest)
+            .map_err(|error| anyhow::anyhow!("serializing the stage manifest: {error}"))?;
+        debug_config.dump_newyork_manifest(&manifest)?;
+
+        Ok(())
+    }
+}
+
+/// The stage manifest format version, raised whenever the shape below changes.
+const STAGE_MANIFEST_SCHEMA: u32 = 1;
+
+/// One entry in the stage manifest.
+#[derive(Serialize)]
+struct ManifestStage {
+    /// The stage identifier, which is also the infix of the artifact's file name.
+    id: String,
+    /// The pass that produced this IR. Stable across pipeline edits that shift
+    /// ordinals, so a consumer should key on this rather than on `id`.
+    pass: String,
+    /// The Yul object the stage belongs to. A contract's deploy and runtime
+    /// halves run the same passes, and this is what separates them.
+    object: String,
+    /// Hash of the serialized IR alone. Equal hashes across adjacent stages of
+    /// one object mean the pass left the IR untouched.
+    ir_hash: String,
+    /// The artifact's file name, beside the manifest.
+    file: String,
+}
+
+/// Indexes the stage artifacts emitted for one contract.
+///
+/// The codegen dumps — LLVM IR, assembly, the object — are written after this
+/// manifest and share its file-name stem, so they are not listed here.
+#[derive(Serialize)]
+struct StageManifest<'a> {
+    /// See [`STAGE_MANIFEST_SCHEMA`].
+    schema: u32,
+    /// The Yul object identifier the chain was compiled from.
+    contract: &'a str,
+    /// The EVM heap size the pipeline was configured with, which the heap
+    /// analysis depends on.
+    heap_size: u64,
+    /// The serialized Yul AST the chain starts from, if it was written.
+    yul_ast: Option<String>,
+    /// Every stage, in pipeline order.
+    stages: &'a [ManifestStage],
 }
 
 /// Code-size threshold for emitting the outlined single-word keccak256 helper.
@@ -90,13 +212,18 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
             .heap_size()
             .get_zero_extended_constant()
             .expect("the heap size is a compile time constant");
-        let translation_result =
-            self.translate_to_ir(context.debug_config().output_directory.is_some(), heap_size)?;
+        let debug_config = context.debug_config().clone();
+        let stages = Rc::new(RefCell::new(Vec::new()));
+        let mut sink = Self::stage_sink(&debug_config, &stages);
+
+        let translation_result = self.translate_to_ir(&mut sink, heap_size)?;
+        if let Some(error) = sink.take_error() {
+            return Err(error.context("writing newyork IR stage artifacts"));
+        }
         let ir_object = translation_result.object;
         let heap_opt = translation_result.heap_opt;
         let type_info = translation_result.type_info;
         let mem_opt = translation_result.mem_opt;
-        let ir_snapshot = translation_result.ir_snapshot;
 
         let inline_decisions: std::collections::BTreeMap<u32, revive_newyork::InlineDecision> =
             translation_result
@@ -113,16 +240,11 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
 
         // Dump the newyork debug artifacts into the debug output directory, when configured.
         // The final IR is annotated with the inferred type widths so the narrow pass's effect is
-        // visible; the snapshot is the IR before the late passes.
+        // visible.
         context.debug_config().dump_newyork(
             None,
             &revive_newyork::print_object_with_types(&ir_object, &type_info),
         )?;
-        if let Some(snapshot) = ir_snapshot.as_ref() {
-            context
-                .debug_config()
-                .dump_newyork(Some("snapshot"), snapshot)?;
-        }
         context.debug_config().dump_newyork(
             Some("heap"),
             &format!(
@@ -150,6 +272,8 @@ impl revive_llvm_context::PolkaVMWriteLLVM for NewYork {
                 mem_opt.fmp_loads_eliminated,
             ),
         )?;
+
+        self.write_stage_manifest(&debug_config, &stages, &ir_object, heap_size)?;
 
         if let Some(debug_info) = context.debug_info() {
             let di_builder = debug_info.builder();

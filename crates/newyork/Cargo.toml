@@ -18,6 +18,10 @@ num = { workspace = true }
 thiserror = { workspace = true }
 inkwell = { workspace = true }
 
+hex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
 revive-yul = { workspace = true }
 revive-llvm-context = { workspace = true }
 revive-common = { workspace = true }

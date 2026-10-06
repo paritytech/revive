@@ -26,6 +26,8 @@ use crate::ir::{
     Value, ValueId,
 };
 use revive_common::BYTE_LENGTH_WORD;
+use serde::Deserialize;
+use serde::Serialize;
 
 /// Maximum number of words to iterate when marking escaping/tainted ranges.
 /// Contracts with `return(0, 320000000000)` or similar huge constants would
@@ -1871,7 +1873,7 @@ pub struct HeapAnalysisStats {
 /// 1. Word-aligned (offset is multiple of 32)
 /// 2. Not escaping to external code
 /// 3. Not tainted by unaligned writes
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct HeapOptResults {
     /// Memory addresses (word-aligned) that can use native byte order.
     /// These are addresses that are NOT in tainted_regions and NOT in escaping_regions.

@@ -3,6 +3,7 @@
 mod asm;
 mod bin;
 mod combined_json;
+mod ir_stages;
 mod linker;
 mod llvm_arguments;
 mod optimization;

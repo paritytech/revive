@@ -6,10 +6,12 @@
 
 use num::BigUint;
 use revive_common::BYTE_LENGTH_WORD;
+use serde::Deserialize;
+use serde::Serialize;
 use std::collections::BTreeMap;
 
 /// Bit width for integer types.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub enum BitWidth {
     I1 = 1,
     I8 = 8,
@@ -66,7 +68,7 @@ impl BitWidth {
 }
 
 /// Address space for pointers - distinguishes memory regions.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum AddressSpace {
     /// EVM heap memory (linear, big-endian).
     Heap,
@@ -79,7 +81,7 @@ pub enum AddressSpace {
 }
 
 /// Type of a value in the IR.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Serialize, Deserialize)]
 pub enum Type {
     /// Integer with specific bit width.
     Int(BitWidth),
@@ -96,7 +98,7 @@ impl Default for Type {
 }
 
 /// Memory region annotation for heap operations.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default, Serialize, Deserialize)]
 pub enum MemoryRegion {
     /// Scratch space: addresses 0x00-0x3f (64 bytes).
     Scratch,
@@ -168,7 +170,7 @@ pub fn word_store_overlaps_free_pointer_slot(resolved_offset: Option<u64>) -> bo
 }
 
 /// An SSA value reference (index into value table).
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub struct ValueId(pub u32);
 
 impl ValueId {
@@ -187,7 +189,7 @@ impl ValueId {
 }
 
 /// A typed SSA value.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Value {
     /// SSA identity of the value.
     pub id: ValueId,
@@ -208,7 +210,7 @@ impl Value {
 }
 
 /// Binary operation kinds.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum BinaryOperation {
     Add,
     Sub,
@@ -236,7 +238,7 @@ pub enum BinaryOperation {
 }
 
 /// Unary operation kinds.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum UnaryOperation {
     /// Zero check - result is I1.
     IsZero,
@@ -247,7 +249,7 @@ pub enum UnaryOperation {
 }
 
 /// External call kinds.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum CallKind {
     Call,
     CallCode,
@@ -256,7 +258,7 @@ pub enum CallKind {
 }
 
 /// Contract creation kinds.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum CreateKind {
     Create,
     Create2,
@@ -271,7 +273,7 @@ pub enum CreateKind {
 ///
 /// Cross-object references go through the [`Object`] `subobjects` field and
 /// contract-creation expressions, not through `FunctionId`.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Serialize, Deserialize)]
 pub struct FunctionId(pub u32);
 
 impl FunctionId {
@@ -290,10 +292,11 @@ impl FunctionId {
 }
 
 /// Pure expressions that produce values without side effects.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Expression {
     /// Literal constant.
     Literal {
+        #[serde(with = "crate::serde_hex::biguint")]
         value: BigUint,
         value_type: Type,
     },
@@ -370,6 +373,7 @@ pub enum Expression {
     SLoad {
         key: Value,
         /// If key is a compile-time constant, store it here for analysis.
+        #[serde(with = "crate::serde_hex::optional_biguint")]
         static_slot: Option<BigUint>,
     },
 
@@ -452,16 +456,17 @@ pub enum Expression {
 }
 
 /// Switch case.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SwitchCase {
     /// Selector value that triggers this case.
+    #[serde(with = "crate::serde_hex::biguint")]
     pub value: BigUint,
     /// Statements executed when the selector matches.
     pub body: Region,
 }
 
 /// A region is a block that can yield values.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Region {
     /// Statements in this region.
     pub statements: Vec<Statement>,
@@ -482,7 +487,7 @@ impl Region {
 }
 
 /// A basic block of statements (no yields - for function bodies).
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Block {
     /// Statements in this block.
     pub statements: Vec<Statement>,
@@ -501,7 +506,7 @@ impl Block {
 }
 
 /// Statements with effects and structured control flow.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Statement {
     /// SSA binding: let x, y, z = expression
     Let {
@@ -535,6 +540,7 @@ pub enum Statement {
         key: Value,
         value: Value,
         /// If key is a compile-time constant, store it here for analysis.
+        #[serde(with = "crate::serde_hex::optional_biguint")]
         static_slot: Option<BigUint>,
     },
 
@@ -631,6 +637,7 @@ pub enum Statement {
         /// The string length in bytes.
         length: u8,
         /// The string data words (1-4 words of 32 bytes each).
+        #[serde(with = "crate::serde_hex::biguint_sequence")]
         data: Vec<BigUint>,
     },
 
@@ -639,6 +646,7 @@ pub enum Statement {
     /// Uses scratch space (offset 0), so no FMP load needed.
     CustomErrorRevert {
         /// The 4-byte error selector, left-shifted by 224 bits (as stored in scratch).
+        #[serde(with = "crate::serde_hex::biguint")]
         selector: BigUint,
         /// The arguments to the custom error (0-3 values).
         arguments: Vec<Value>,
@@ -734,7 +742,7 @@ pub enum Statement {
 }
 
 /// Function definition.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Function {
     /// Unique identifier within the enclosing object.
     pub id: FunctionId,
@@ -777,7 +785,7 @@ impl Function {
 }
 
 /// Top-level object (contract).
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Object {
     /// Yul-level object name (used as the LLVM module identifier).
     pub name: String,
@@ -788,6 +796,7 @@ pub struct Object {
     /// Nested objects (e.g. the deployed-code object for a contract).
     pub subobjects: Vec<Object>,
     /// Embedded data sections keyed by Yul `datasize`/`dataoffset` identifier.
+    #[serde(with = "crate::serde_hex::byte_string_map")]
     pub data: BTreeMap<String, Vec<u8>>,
 }
 

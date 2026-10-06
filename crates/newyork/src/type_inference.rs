@@ -16,6 +16,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use num::ToPrimitive;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::ir::{
     for_each_statement, BinaryOperation, BitWidth, Block, Expression, Function, MemoryRegion,
@@ -23,7 +25,7 @@ use crate::ir::{
 };
 
 /// Type constraint representing the width bounds for a value.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct TypeConstraint {
     /// Minimum bit width required (from forward propagation).
     pub min_width: BitWidth,
@@ -32,6 +34,28 @@ pub struct TypeConstraint {
     pub max_width: BitWidth,
     /// Whether the value is known to be signed.
     pub is_signed: bool,
+}
+
+/// The inference outcome for a single value, as exported to IR stage artifacts.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+pub struct ResolvedType {
+    /// The width bounds at the narrowing fixed point. The width codegen emits —
+    /// [`TypeInference::inferred_width`] — is this constraint's `min_width`.
+    pub constraint: TypeConstraint,
+    /// The widest width any use site needs. Not derivable from `constraint`,
+    /// because it is computed from the recorded use contexts rather than from
+    /// the eagerly narrowed `max_width`.
+    pub use_demand_width: BitWidth,
+}
+
+/// The inference outcome for every value, as exported to IR stage artifacts.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ResolvedTypes {
+    /// Per-value outcome, keyed by SSA value id.
+    pub values: BTreeMap<u32, ResolvedType>,
+    /// Whether the free memory pointer may hold a value above the heap size, which
+    /// forces its `mload` to full width and disables the dependent range proofs.
+    pub fmp_could_be_unbounded: bool,
 }
 
 impl Default for TypeConstraint {
@@ -227,6 +251,37 @@ impl TypeInference {
     /// Gets the constraint for a value, creating a default if none exists.
     pub fn get(&self, id: ValueId) -> TypeConstraint {
         self.constraints.get(&id.0).copied().unwrap_or_default()
+    }
+
+    /// Returns the inference outcome in the form carried by exported IR artifacts.
+    ///
+    /// Only the parts codegen actually reads are exported: the per-value
+    /// constraints, the use-site demand (which the constraint alone does not
+    /// determine) and the free-memory-pointer flag. The internal propagation
+    /// state — use contexts, the fixed-point change flag, the per-function return
+    /// map — is scaffolding for reaching this outcome and is deliberately omitted.
+    pub fn resolved_types(&self) -> ResolvedTypes {
+        let value_ids = self
+            .constraints
+            .keys()
+            .chain(self.uses.keys())
+            .copied()
+            .collect::<BTreeSet<_>>();
+
+        ResolvedTypes {
+            values: value_ids
+                .into_iter()
+                .map(|id| {
+                    let value_id = ValueId(id);
+                    let resolved = ResolvedType {
+                        constraint: self.get(value_id),
+                        use_demand_width: self.use_demand_width(value_id),
+                    };
+                    (id, resolved)
+                })
+                .collect(),
+            fmp_could_be_unbounded: self.fmp_could_be_unbounded,
+        }
     }
 
     /// Returns the inferred width for a value: its forward-propagated `min_width`.
@@ -2044,6 +2099,42 @@ pub(crate) fn narrow_signatures_to_fixed_point(
 mod tests {
     use super::*;
     use num::BigUint;
+
+    /// The exported view must carry the use-site demand, which codegen reads and
+    /// which cannot be recovered from the constraint's eagerly narrowed `max_width`.
+    #[test]
+    fn resolved_types_round_trip_and_carry_use_demand() {
+        let mut inference = TypeInference::new();
+        let mut object = Object::new("Test".to_owned());
+        object.code.push(Statement::Let {
+            bindings: vec![ValueId(0)],
+            value: Expression::Literal {
+                value: BigUint::from(42u32),
+                value_type: Type::default(),
+            },
+        });
+        object.code.push(Statement::MStore {
+            offset: Value::int(ValueId(0)),
+            value: Value::int(ValueId(0)),
+            region: MemoryRegion::Unknown,
+        });
+        inference.infer_object(&object);
+
+        let resolved = inference.resolved_types();
+        assert!(!resolved.values.is_empty(), "no values were resolved");
+        for (id, value) in &resolved.values {
+            let value_id = ValueId(*id);
+            assert_eq!(value.constraint, inference.get(value_id));
+            assert_eq!(value.use_demand_width, inference.use_demand_width(value_id));
+        }
+
+        let json = serde_json::to_string(&resolved).expect("the view should serialize");
+        let parsed: ResolvedTypes = serde_json::from_str(&json).expect("the view should parse");
+        assert_eq!(
+            json,
+            serde_json::to_string(&parsed).expect("the parse should re-serialize"),
+        );
+    }
 
     #[test]
     fn test_literal_width_inference() {

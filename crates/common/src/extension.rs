@@ -12,8 +12,17 @@ pub static EXTENSION_ABI: &str = "abi";
 /// The Yul IR file extension.
 pub static EXTENSION_YUL: &str = "yul";
 
+/// The machine-readable Yul AST file extension.
+pub static EXTENSION_YUL_JSON: &str = "yul.json";
+
 /// The newyork IR debug dump file extension.
 pub static EXTENSION_NEWYORK: &str = "newyork";
+
+/// The machine-readable newyork IR stage artifact file extension.
+pub static EXTENSION_NEWYORK_JSON: &str = "newyork.json";
+
+/// The newyork IR stage manifest file extension.
+pub static EXTENSION_NEWYORK_MANIFEST: &str = "stages.json";
 
 /// The EVM file extension.
 pub static EXTENSION_EVM: &str = "evm";

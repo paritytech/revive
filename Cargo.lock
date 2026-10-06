@@ -9572,6 +9572,7 @@ dependencies = [
  "revive-stdlib",
  "semver 1.0.28",
  "serde",
+ "tempfile",
 ]
 
 [[package]]
@@ -9579,12 +9580,15 @@ name = "revive-newyork"
 version = "1.1.0"
 dependencies = [
  "anyhow",
+ "hex",
  "inkwell",
  "log",
  "num",
  "revive-common",
  "revive-llvm-context",
  "revive-yul",
+ "serde",
+ "serde_json",
  "thiserror 2.0.18",
 ]
 

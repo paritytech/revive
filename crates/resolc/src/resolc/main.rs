@@ -144,9 +144,10 @@ fn main_inner(
             DebugConfig::new(
                 Some(debug_output_directory.to_owned()),
                 arguments.emit_source_debug_info,
+                arguments.emit_ir_stages,
             )
         }
-        None => DebugConfig::new(None, arguments.emit_source_debug_info),
+        None => DebugConfig::new(None, arguments.emit_source_debug_info, false),
     };
 
     let (input_files, remappings) = arguments.split_input_files_and_remappings()?;

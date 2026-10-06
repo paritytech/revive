@@ -54,6 +54,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use num::BigUint;
 use revive_common::BYTE_LENGTH_WORD;
+use serde::Deserialize;
+use serde::Serialize;
 
 use crate::ir::{
     for_each_statement, word_align, word_store_overlaps_free_pointer_slot, BitWidth, Block,
@@ -62,7 +64,7 @@ use crate::ir::{
 use crate::simplify::fold_binary;
 
 /// Results of memory optimization.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct MemOptResults {
     /// Number of loads eliminated (replaced with stored value).
     pub loads_eliminated: usize,

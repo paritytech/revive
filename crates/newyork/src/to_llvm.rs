@@ -5751,13 +5751,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     destination.id,
                     "calldatacopy_dest_narrow",
                 )?;
-                let offset_value = self.translate_value(offset)?.into_int_value();
-                let offset_value = self.narrow_offset_for_pointer(
-                    context,
-                    offset_value,
-                    offset.id,
-                    "calldatacopy_offset_narrow",
-                )?;
                 let length_value = self.translate_value(length)?.into_int_value();
                 let length_value = self.narrow_offset_for_pointer(
                     context,
@@ -5769,7 +5762,15 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     Some(revive_llvm_context::PolkaVMCodeType::Deploy) => {
                         revive_llvm_context::polkavm_evm_calldata::size(context)?.into_int_value()
                     }
-                    Some(revive_llvm_context::PolkaVMCodeType::Runtime) => offset_value,
+                    Some(revive_llvm_context::PolkaVMCodeType::Runtime) => {
+                        let offset_value = self.translate_value(offset)?.into_int_value();
+                        self.narrow_offset_for_pointer(
+                            context,
+                            offset_value,
+                            offset.id,
+                            "calldatacopy_offset_narrow",
+                        )?
+                    }
                     None => {
                         return Err(CodegenError::Unsupported(
                             "code type undefined for calldatacopy".into(),

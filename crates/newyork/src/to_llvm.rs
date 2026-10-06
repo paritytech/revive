@@ -2835,12 +2835,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// `void __revive_callvalue_check()` that checks if callvalue is nonzero
     /// and reverts with empty data if so, returning normally otherwise.
     ///
-    /// Effect: [`PolkaVMMemoryEffect::ReadInaccessible`]. Callvalue is
-    /// immutable for the duration of execution and reachable through
-    /// pallet-revive runtime state; the alloca write inside the body is
-    /// local, with no heap or argmem traffic. CSE is sound because the
-    /// helper either always returns or always reverts for a given execution
-    /// — the visible "effect" is just the read of the callvalue scalar.
+    /// Effect: [`PolkaVMMemoryEffect::WriteInaccessible`]. The revert
+    /// terminates the call frame through pallet-revive runtime state, so the
+    /// call must not be removed even though it returns nothing; heap state
+    /// is untouched.
     fn get_or_create_callvalue_check_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -2858,7 +2856,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         );
 
         add_noinline_minsize_attrs(context, function);
-        add_memory_effect_attribute(context, function, PolkaVMMemoryEffect::ReadInaccessible);
+        add_memory_effect_attribute(context, function, PolkaVMMemoryEffect::WriteInaccessible);
 
         let saved_block = context.basic_block();
         let entry_block = context.llvm().append_basic_block(function, "entry");

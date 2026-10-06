@@ -1,10 +1,12 @@
 //! The `solc --standard-json` input settings.
 
+pub mod debug;
 pub mod libraries;
 pub mod metadata;
 pub mod metadata_hash;
 pub mod optimizer;
 pub mod polkavm;
+pub mod revert_strings;
 pub mod selection;
 #[cfg(feature = "resolc")]
 pub mod warning;
@@ -14,6 +16,7 @@ use std::collections::BTreeSet;
 use serde::Deserialize;
 use serde::Serialize;
 
+use self::debug::Debug;
 use self::libraries::Libraries;
 use self::metadata::Metadata;
 use self::optimizer::Optimizer;
@@ -50,6 +53,9 @@ pub struct Settings {
     /// The metadata settings.
     #[serde(default)]
     pub metadata: Metadata,
+    /// The debugging settings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug: Option<Debug>,
     /// The resolc custom PolkaVM settings.
     #[serde(default, skip_serializing)]
     pub polkavm: PolkaVM,
@@ -80,6 +86,7 @@ impl Settings {
         output_selection: Selection,
         optimizer: Optimizer,
         metadata: Metadata,
+        debug: Option<Debug>,
         polkavm: PolkaVM,
         suppressed_warnings: Vec<Warning>,
         llvm_arguments: Vec<String>,
@@ -93,6 +100,7 @@ impl Settings {
             optimizer,
             metadata,
             via_ir: Some(true),
+            debug,
             polkavm,
             suppressed_warnings,
             llvm_arguments,

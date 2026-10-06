@@ -21,10 +21,12 @@ use revive_solc_json_interface::CombinedJsonSelector;
 use revive_solc_json_interface::ResolcWarning;
 use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonInputLanguage;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsDebug;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVM;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsRevertStrings;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsSelection;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 use revive_solc_json_interface::SolcStandardJsonOutputErrorHandler;
@@ -131,6 +133,7 @@ pub fn standard_output<T: Compiler>(
     messages: &mut Vec<SolcStandardJsonOutputError>,
     evm_version: Option<EVMVersion>,
     solc_optimizer_enabled: bool,
+    revert_strings: Option<SolcStandardJsonInputSettingsRevertStrings>,
     optimizer_settings: OptimizerSettings,
     base_path: Option<String>,
     include_paths: Vec<String>,
@@ -155,6 +158,9 @@ pub fn standard_output<T: Compiler>(
             Default::default(),
         ),
         Default::default(),
+        revert_strings.map(|revert_strings| {
+            SolcStandardJsonInputSettingsDebug::new(Some(revert_strings), None)
+        }),
         suppressed_warnings,
         SolcStandardJsonInputSettingsPolkaVM::new(
             Some(memory_config),
@@ -312,6 +318,7 @@ pub fn combined_json<T: Compiler>(
     evm_version: Option<EVMVersion>,
     format: String,
     solc_optimizer_enabled: bool,
+    revert_strings: Option<SolcStandardJsonInputSettingsRevertStrings>,
     optimizer_settings: OptimizerSettings,
     base_path: Option<String>,
     include_paths: Vec<String>,
@@ -354,7 +361,14 @@ pub fn combined_json<T: Compiler>(
         ));
     }
 
-    let mut combined_json = solc.combined_json(paths, selectors)?;
+    let mut combined_json = solc.combined_json(
+        paths,
+        selectors,
+        base_path.clone(),
+        include_paths.clone(),
+        allow_paths.clone(),
+        remappings.clone(),
+    )?;
     combined_json.resolc_version = Some(ResolcVersion::default().long);
     standard_output(
         solc,
@@ -364,6 +378,7 @@ pub fn combined_json<T: Compiler>(
         messages,
         evm_version,
         solc_optimizer_enabled,
+        revert_strings,
         optimizer_settings,
         base_path,
         include_paths,

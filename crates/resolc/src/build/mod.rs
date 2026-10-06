@@ -15,7 +15,6 @@ use revive_llvm_context::polkavm_link;
 use revive_llvm_context::DebugConfig;
 use revive_solc_json_interface::combined_json::CombinedJson;
 use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
-use revive_solc_json_interface::CombinedJsonContract;
 use revive_solc_json_interface::SolcStandardJsonOutput;
 use revive_solc_json_interface::SolcStandardJsonOutputContract;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
@@ -242,31 +241,23 @@ impl Build {
             let build = result.expect("Exits on an error above");
             let identifier = build.identifier.clone();
 
-            let combined_json_contract =
-                match combined_json
+            let json_path = if combined_json
+                .contracts
+                .contains_key(identifier.full_path.as_str())
+            {
+                identifier.full_path.clone()
+            } else {
+                let full_path = Self::normalize_full_path(identifier.full_path.as_str());
+                combined_json
                     .contracts
-                    .iter_mut()
-                    .find_map(|(json_path, contract)| {
-                        if Self::normalize_full_path(identifier.full_path.as_str())
-                            .ends_with(Self::normalize_full_path(json_path).as_str())
-                        {
-                            Some(contract)
-                        } else {
-                            None
-                        }
-                    }) {
-                    Some(contract) => contract,
-                    None => {
-                        combined_json.contracts.insert(
-                            identifier.full_path.clone(),
-                            CombinedJsonContract::default(),
-                        );
-                        combined_json
-                            .contracts
-                            .get_mut(identifier.full_path.as_str())
-                            .expect("Always exists")
-                    }
-                };
+                    .keys()
+                    .find(|json_path| {
+                        full_path.ends_with(Self::normalize_full_path(json_path).as_str())
+                    })
+                    .cloned()
+                    .unwrap_or_else(|| identifier.full_path.clone())
+            };
+            let combined_json_contract = combined_json.contracts.entry(json_path).or_default();
 
             build.write_to_combined_json(combined_json_contract)?;
         }
@@ -325,6 +316,7 @@ impl Build {
     }
 
     /// Normalizes the full contract path.
+    /// Source unit names that do not exist on disk are kept as they are.
     ///
     /// # Panics
     /// If the path does not contain a colon.
@@ -333,9 +325,11 @@ impl Build {
         let path = iterator.next().expect("Always exists");
         let name = iterator.next().expect("Always exists");
 
-        let mut full_path = PathBuf::from(path)
+        let path = PathBuf::from(path);
+        let mut full_path = path
             .normalize()
-            .expect("Path normalization error")
+            .map(|normalized| normalized.into_path_buf())
+            .unwrap_or(path)
             .as_os_str()
             .to_string_lossy()
             .into_owned();

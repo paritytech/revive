@@ -44,6 +44,8 @@ pub const SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH: &str =
 /// A Solidity contract whose `require` has a reason string.
 pub const SOLIDITY_REVERT_STRINGS_CONTRACT_PATH: &str =
     "src/tests/data/solidity/revert_strings.sol";
+/// A contract whose code depends on the heap and stack size.
+pub const SOLIDITY_HEAP_STACK_SIZE_PATH: &str = "src/tests/data/solidity/heap_stack_size.sol";
 
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";

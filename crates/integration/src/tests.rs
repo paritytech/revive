@@ -5150,6 +5150,26 @@ fn fmp_loop_mstore8() {
     run_differential(actions);
 }
 
+/// Reproducer from paritytech/security_findings#118.
+#[test]
+fn calldata_copy_over_free_pointer() {
+    let mut actions = instantiate(
+        "contracts/CalldataCopyOverFreePointer.sol",
+        "CalldataCopyOverFreePointer",
+    );
+    let mut data = vec![0; 64];
+    data.extend(U256::from(1u64 << 40).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Reproducer from paritytech/security_findings#116.
 #[test]
 fn non_payable_call_value() {
@@ -5503,6 +5523,63 @@ fn assert_trapped(result: &CallResult) {
         unreachable!()
     };
     assert_eq!(result.weight_consumed, GAS_LIMIT);
+}
+
+/// Scratch `[0, 0x40)` must hold the key and slot after a fused mapping store.
+#[test]
+fn mapping_sstore_writes_scratch() {
+    let mut actions = instantiate_yul("contracts/MappingSStoreScratch.yul", "MappingSStoreScratch");
+    let mut data = U256::from(0xabcdef0123u64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// Scratch written between a mapping store's hash and its `sstore` must survive the fused store.
+#[test]
+fn mapping_sstore_keeps_intervening_scratch() {
+    let mut actions = instantiate_yul(
+        "contracts/MappingSStoreScratchOrder.yul",
+        "MappingSStoreScratchOrder",
+    );
+    let mut data = U256::from(0xabcdef0123u64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// Scratch written between a mapping load's hash and its `sload` must survive the fused load.
+#[test]
+fn mapping_sload_keeps_intervening_scratch() {
+    let mut actions = instantiate_yul(
+        "contracts/MappingSLoadScratchOrder.yul",
+        "MappingSLoadScratchOrder",
+    );
+    let mut data = U256::from(0xabcdef0123u64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
 }
 
 /// Regression (newyork dead-store elimination): a store read back by an

@@ -37,7 +37,7 @@ pub mod validate;
 
 pub use export::{
     CapturedStage, ManifestStage, SideTables, StageManifest, StageRecord, StageSink, StageWriter,
-    STAGE_MANIFEST_SCHEMA,
+    PASS_FROM_YUL, STAGE_MANIFEST_SCHEMA,
 };
 pub use from_yul::{TranslationError, YulTranslator};
 pub use heap_opt::{
@@ -107,7 +107,7 @@ pub fn translate_yul_object(
 ) -> Result<TranslationResult, TranslationError> {
     let mut translator = YulTranslator::new();
     let mut ir_object = translator.translate_object(yul_object)?;
-    sink.capture("from_yul", &ir_object, SideTables::none());
+    sink.capture(export::PASS_FROM_YUL, &ir_object, SideTables::none());
 
     let (mut inline_results, mem_opt_results) = optimize_object_tree(&mut ir_object, sink);
 

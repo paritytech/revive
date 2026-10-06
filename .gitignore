@@ -27,3 +27,5 @@ docs-tmp
 coverage-reports
 workdir
 /stages/
+/run.sh
+/stages-logs/

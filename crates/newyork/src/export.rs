@@ -23,6 +23,13 @@ use crate::mem_opt::MemOptResults;
 use crate::type_inference::ResolvedTypes;
 use crate::type_inference::TypeInference;
 
+/// The pass that translates the Yul AST into newyork IR.
+///
+/// The only stage of the chain whose input is not newyork IR. A consumer needs
+/// it to tell what each stage transformed between, so the name is shared rather
+/// than spelled out again on the reading side.
+pub const PASS_FROM_YUL: &str = "from_yul";
+
 /// The number of digits in a stage ordinal.
 ///
 /// Wide enough that the emitted file names sort lexically in pipeline order for

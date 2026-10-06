@@ -5629,3 +5629,20 @@ fn calldatacopy_fmp_range_proof() {
     });
     run_differential(actions);
 }
+
+/// Reproducer from paritytech/security_findings#152.
+#[test]
+fn recursive_call_result() {
+    alloy_sol_types::sol! { function f(uint256 d, uint256 a) external returns (uint256); }
+    let mut actions = instantiate("contracts/RecursiveCallResult.sol", "RecursiveCallResult");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        fCall {
+            d: U256::from(3),
+            a: U256::from(5),
+        }
+        .abi_encode(),
+    );
+    run_differential(actions);
+}

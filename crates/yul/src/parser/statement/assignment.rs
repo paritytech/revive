@@ -145,7 +145,7 @@ impl PolkaVMWriteLLVM for Assignment {
 
         let value = value.access(context)?;
         let llvm_type = value.into_struct_value().get_type();
-        let tuple_pointer = context.build_alloca(llvm_type, "assignment_pointer");
+        let tuple_pointer = context.build_alloca_at_entry(llvm_type, "assignment_pointer");
         context.build_store(tuple_pointer, value)?;
 
         for (index, binding) in self.bindings.into_iter().enumerate() {

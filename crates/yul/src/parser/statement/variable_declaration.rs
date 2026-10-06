@@ -104,7 +104,7 @@ impl PolkaVMWriteLLVM for VariableDeclaration {
             context.set_debug_location(self.location.line, self.location.column, None)?;
             let identifier_type = identifier.r#type.clone().unwrap_or_default();
             let r#type = identifier_type.into_llvm(context);
-            let pointer = context.build_alloca(r#type, identifier.inner.as_str());
+            let pointer = context.build_alloca_at_entry(r#type, identifier.inner.as_str());
             context
                 .current_function()
                 .borrow_mut()
@@ -140,7 +140,7 @@ impl PolkaVMWriteLLVM for VariableDeclaration {
                 .to_owned()
                 .unwrap_or_default()
                 .into_llvm(context);
-            let pointer = context.build_alloca(
+            let pointer = context.build_alloca_at_entry(
                 yul_type.as_basic_type_enum(),
                 format!("binding_{index}_pointer").as_str(),
             );
@@ -183,7 +183,7 @@ impl PolkaVMWriteLLVM for VariableDeclaration {
                 self.bindings
             );
         }
-        let pointer = context.build_alloca(llvm_type, "bindings_pointer");
+        let pointer = context.build_alloca_at_entry(llvm_type, "bindings_pointer");
         context.build_store(pointer, value)?;
 
         for (index, binding) in self.bindings.into_iter().enumerate() {

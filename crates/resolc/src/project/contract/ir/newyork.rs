@@ -6,6 +6,7 @@
 //! 3. Run heap optimization analysis
 //! 4. Generate LLVM IR from newyork IR
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::BTreeSet;
 use std::rc::Rc;
@@ -14,7 +15,10 @@ use inkwell::debug_info::AsDIScope;
 use revive_common::Keccak256;
 use revive_llvm_context::DebugConfig;
 use revive_llvm_context::PolkaVMCodeType;
-use revive_newyork::{CapturedStage, LlvmCodegen, StageSink, TranslationResult};
+use revive_newyork::{
+    CapturedStage, LlvmCodegen, ManifestStage, StageManifest, StageSink, TranslationResult,
+    STAGE_MANIFEST_SCHEMA,
+};
 use revive_yul::lexer::Lexer;
 use revive_yul::parser::statement::object::Object as YulObject;
 use serde::{Deserialize, Serialize};
@@ -126,10 +130,10 @@ impl NewYork {
             .map_err(|error| anyhow::anyhow!("serializing the Yul AST: {error}"))?;
         let manifest = StageManifest {
             schema: STAGE_MANIFEST_SCHEMA,
-            contract: self.yul_object.identifier.as_str(),
+            contract: Cow::Borrowed(self.yul_object.identifier.as_str()),
             heap_size,
             yul_ast: debug_config.dump_yul_ast(&yul_ast)?,
-            stages: stages.as_slice(),
+            stages: Cow::Borrowed(stages.as_slice()),
         };
         let manifest = serde_json::to_string_pretty(&manifest)
             .map_err(|error| anyhow::anyhow!("serializing the stage manifest: {error}"))?;
@@ -137,46 +141,6 @@ impl NewYork {
 
         Ok(())
     }
-}
-
-/// The stage manifest format version, raised whenever the shape below changes.
-const STAGE_MANIFEST_SCHEMA: u32 = 1;
-
-/// One entry in the stage manifest.
-#[derive(Serialize)]
-struct ManifestStage {
-    /// The stage identifier, which is also the infix of the artifact's file name.
-    id: String,
-    /// The pass that produced this IR. Stable across pipeline edits that shift
-    /// ordinals, so a consumer should key on this rather than on `id`.
-    pass: String,
-    /// The Yul object the stage belongs to. A contract's deploy and runtime
-    /// halves run the same passes, and this is what separates them.
-    object: String,
-    /// Hash of the serialized IR alone. Equal hashes across adjacent stages of
-    /// one object mean the pass left the IR untouched.
-    ir_hash: String,
-    /// The artifact's file name, beside the manifest.
-    file: String,
-}
-
-/// Indexes the stage artifacts emitted for one contract.
-///
-/// The codegen dumps — LLVM IR, assembly, the object — are written after this
-/// manifest and share its file-name stem, so they are not listed here.
-#[derive(Serialize)]
-struct StageManifest<'a> {
-    /// See [`STAGE_MANIFEST_SCHEMA`].
-    schema: u32,
-    /// The Yul object identifier the chain was compiled from.
-    contract: &'a str,
-    /// The EVM heap size the pipeline was configured with, which the heap
-    /// analysis depends on.
-    heap_size: u64,
-    /// The serialized Yul AST the chain starts from, if it was written.
-    yul_ast: Option<String>,
-    /// Every stage, in pipeline order.
-    stages: &'a [ManifestStage],
 }
 
 /// Code-size threshold for emitting the outlined single-word keccak256 helper.

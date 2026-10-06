@@ -10,7 +10,10 @@
 //! dependency order, so it hands serialized records to a writer supplied by the
 //! caller, which owns the output directory and the file naming.
 
+use std::borrow::Cow;
+
 use revive_common::Keccak256;
+use serde::Deserialize;
 use serde::Serialize;
 
 use crate::heap_opt::HeapOptResults;
@@ -81,28 +84,119 @@ pub struct CapturedStage<'a> {
 pub type StageWriter<'a> = Box<dyn FnMut(CapturedStage<'_>) -> anyhow::Result<()> + 'a>;
 
 /// The contents of one stage artifact.
-#[derive(Serialize)]
-struct StageRecord<'a> {
+///
+/// This is the schema of a stage file in both directions: the compiler fills it
+/// with borrowed data and serializes it, a consumer deserializes it into owned
+/// data. Keeping one definition for both is what stops the reader's idea of the
+/// format from drifting away from the writer's.
+///
+/// Deserialization always yields owned variants, so the lifetime on a value that
+/// came out of a parser is vestigial — [`Self::into_owned`] discharges it.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StageRecord<'a> {
     /// See [`CapturedStage::stage_id`].
-    stage_id: &'a str,
+    pub stage_id: Cow<'a, str>,
     /// See [`CapturedStage::pass`].
-    pass: &'a str,
+    pub pass: Cow<'a, str>,
     /// See [`CapturedStage::object`].
-    object: &'a str,
+    pub object: Cow<'a, str>,
     /// The IR as it stands after `pass`.
-    ir: &'a Object,
+    pub ir: Cow<'a, Object>,
     /// See [`SideTables::type_info`]. Resolved to the view codegen reads.
     #[serde(skip_serializing_if = "Option::is_none")]
-    type_info: Option<ResolvedTypes>,
+    pub type_info: Option<ResolvedTypes>,
     /// See [`SideTables::heap_opt`].
     #[serde(skip_serializing_if = "Option::is_none")]
-    heap_opt: Option<&'a HeapOptResults>,
+    pub heap_opt: Option<Cow<'a, HeapOptResults>>,
     /// See [`SideTables::inline_results`].
     #[serde(skip_serializing_if = "Option::is_none")]
-    inline_results: Option<&'a InlineResults>,
+    pub inline_results: Option<Cow<'a, InlineResults>>,
     /// See [`SideTables::mem_opt`].
     #[serde(skip_serializing_if = "Option::is_none")]
-    mem_opt: Option<&'a MemOptResults>,
+    pub mem_opt: Option<Cow<'a, MemOptResults>>,
+}
+
+impl StageRecord<'_> {
+    /// Cuts the record loose from the buffer it was parsed out of.
+    ///
+    /// A parsed record owns its data already but stays tied to the input's
+    /// lifetime, which keeps it from outliving the string it was read from.
+    pub fn into_owned(self) -> StageRecord<'static> {
+        StageRecord {
+            stage_id: Cow::Owned(self.stage_id.into_owned()),
+            pass: Cow::Owned(self.pass.into_owned()),
+            object: Cow::Owned(self.object.into_owned()),
+            ir: Cow::Owned(self.ir.into_owned()),
+            type_info: self.type_info,
+            heap_opt: self.heap_opt.map(|table| Cow::Owned(table.into_owned())),
+            inline_results: self
+                .inline_results
+                .map(|table| Cow::Owned(table.into_owned())),
+            mem_opt: self.mem_opt.map(|table| Cow::Owned(table.into_owned())),
+        }
+    }
+}
+
+/// The stage manifest format version, raised whenever the shape below changes.
+///
+/// A consumer should reject a manifest whose `schema` it does not know rather
+/// than guess at the fields, since a raise means a field moved or changed meaning.
+pub const STAGE_MANIFEST_SCHEMA: u32 = 1;
+
+/// One entry in the stage manifest.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ManifestStage {
+    /// The stage identifier, which is also the infix of the artifact's file name.
+    pub id: String,
+    /// The pass that produced this IR. Stable across pipeline edits that shift
+    /// ordinals, so a consumer should key on this rather than on `id`.
+    pub pass: String,
+    /// The Yul object the stage belongs to. A contract's deploy and runtime
+    /// halves run the same passes, and this is what separates them.
+    pub object: String,
+    /// Hash of the serialized IR alone. Equal hashes across adjacent stages of
+    /// one object mean the pass left the IR untouched.
+    pub ir_hash: String,
+    /// The artifact's file name, beside the manifest.
+    pub file: String,
+}
+
+/// Indexes the stage artifacts emitted for one contract.
+///
+/// The codegen dumps — LLVM IR, assembly, the object — are written after this
+/// manifest and share its file-name stem, so they are not listed here.
+///
+/// Like [`StageRecord`], this is one definition serving both the compiler that
+/// writes the manifest and the tooling that reads it back.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct StageManifest<'a> {
+    /// See [`STAGE_MANIFEST_SCHEMA`].
+    pub schema: u32,
+    /// The Yul object identifier the chain was compiled from.
+    pub contract: Cow<'a, str>,
+    /// The EVM heap size the pipeline was configured with, which the heap
+    /// analysis depends on.
+    pub heap_size: u64,
+    /// File name of the dumped Yul AST the chain starts from, beside the
+    /// manifest. Absent when the AST was not written.
+    pub yul_ast: Option<String>,
+    /// Every stage, in pipeline order.
+    pub stages: Cow<'a, [ManifestStage]>,
+}
+
+impl StageManifest<'_> {
+    /// Cuts the manifest loose from the buffer it was parsed out of.
+    ///
+    /// See [`StageRecord::into_owned`].
+    pub fn into_owned(self) -> StageManifest<'static> {
+        StageManifest {
+            schema: self.schema,
+            contract: Cow::Owned(self.contract.into_owned()),
+            heap_size: self.heap_size,
+            yul_ast: self.yul_ast,
+            stages: Cow::Owned(self.stages.into_owned()),
+        }
+    }
 }
 
 /// Collects the IR between optimization passes.
@@ -184,14 +278,14 @@ impl<'a> StageSink<'a> {
         };
 
         let record = StageRecord {
-            stage_id: &stage_id,
-            pass,
-            object: &object.name,
-            ir: object,
+            stage_id: Cow::Borrowed(&stage_id),
+            pass: Cow::Borrowed(pass),
+            object: Cow::Borrowed(&object.name),
+            ir: Cow::Borrowed(object),
             type_info: side_tables.type_info.map(TypeInference::resolved_types),
-            heap_opt: side_tables.heap_opt,
-            inline_results: side_tables.inline_results,
-            mem_opt: side_tables.mem_opt,
+            heap_opt: side_tables.heap_opt.map(Cow::Borrowed),
+            inline_results: side_tables.inline_results.map(Cow::Borrowed),
+            mem_opt: side_tables.mem_opt.map(Cow::Borrowed),
         };
         let json = match serde_json::to_string(&record) {
             Ok(json) => json,

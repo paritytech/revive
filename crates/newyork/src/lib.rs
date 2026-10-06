@@ -35,7 +35,10 @@ pub mod to_llvm;
 pub mod type_inference;
 pub mod validate;
 
-pub use export::{CapturedStage, SideTables, StageSink, StageWriter};
+pub use export::{
+    CapturedStage, ManifestStage, SideTables, StageManifest, StageRecord, StageSink, StageWriter,
+    STAGE_MANIFEST_SCHEMA,
+};
 pub use from_yul::{TranslationError, YulTranslator};
 pub use heap_opt::{
     AccessPattern, HeapAnalysis, HeapAnalysisStats, HeapOptResults, MemorySlot, OffsetInfo,

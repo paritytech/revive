@@ -1,6 +1,7 @@
 .PHONY: \
 	install \
 	install-bin \
+	install-fv \
 	install-npm \
 	install-wasm \
 	install-llvm-builder \
@@ -35,6 +36,11 @@ install: install-bin install-npm
 
 install-bin:
 	cargo install --force --locked --path crates/resolc
+
+# The formal verification tool is built separately from the compiler: it is a
+# consumer of resolc's IR stage artifacts, not part of the compilation pipeline.
+install-fv:
+	cargo install --force --locked --path crates/resolc-fv
 
 install-npm:
 	npm install && npm fund
@@ -256,5 +262,6 @@ clean:
 	rm -rf node_modules ; \
 	rm -rf crates/resolc/src/tests/cli/artifacts ; \
 	cargo uninstall resolc ; \
+	cargo uninstall resolc-fv ; \
 	cargo uninstall revive-llvm-builder ;
 	mdbook clean book

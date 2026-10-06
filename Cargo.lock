@@ -9454,6 +9454,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "resolc-fv"
+version = "0.1.0"
+
+[[package]]
 name = "revive-benchmarks"
 version = "1.1.0"
 dependencies = [

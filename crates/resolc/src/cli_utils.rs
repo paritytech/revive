@@ -165,6 +165,10 @@ pub const STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH: &str =
 /// source location annotations from the Yul IR.
 pub const STANDARD_JSON_DEBUG_INFO_EMPTY_PATH: &str =
     "src/tests/data/standard_json/debug_info_empty.json";
+/// A standard JSON fixture requesting codegen for all contracts in all files
+/// via the "all" (`*`) wildcard, but only additional fields for specific files.
+pub const STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH: &str =
+    "src/tests/data/standard_json/mix_all_wildcard_and_file_selection.json";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";

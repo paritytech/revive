@@ -5630,6 +5630,77 @@ fn calldatacopy_fmp_range_proof() {
     run_differential(actions);
 }
 
+/// Runs `enter(implementation, 7)` across resolc deploys 0 and 1 and EVM deploys 2 and 3.
+fn transient_storage(steps: &[(usize, usize)]) {
+    let source = include_str!("../contracts/TransientCrossVm.sol");
+    let pvm = resolc::test_utils::compile_blob("TransientCrossVm", source);
+    let evm = resolc::test_utils::compile_evm_deploy_code(
+        "TransientCrossVm",
+        source,
+        true,
+        Default::default(),
+    );
+    let codes = [&pvm, &pvm, &evm, &evm];
+    let alice = Address::from(ALICE.0);
+    let mut actions = Vec::new();
+    for (index, code) in codes.iter().enumerate() {
+        actions.push(Instantiate {
+            origin: TestAddress::Alice,
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            code: Code::Bytes(code.to_vec()),
+            data: vec![],
+            salt: OptionalHex::from([index as u8; 32]),
+        });
+    }
+    let mut expected = U256::from(1).to_be_bytes::<32>().to_vec();
+    expected.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    for &(caller, implementation) in steps {
+        let address = alice.create2([implementation as u8; 32], keccak256(codes[implementation]));
+        let mut data = hex!("7e348b7d").to_vec();
+        data.extend_from_slice(address.into_word().as_slice());
+        data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(caller),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data,
+        });
+        actions.push(VerifyCall(VerifyCallExpectation {
+            success: true,
+            output: OptionalHex::from(expected.clone()),
+            gas_consumed: None,
+        }));
+    }
+    Specs {
+        actions,
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
+/// Reproducer from paritytech/security_findings#153.
+#[test]
+fn transient_same_vm() {
+    transient_storage(&[(0, 1), (2, 3)]);
+}
+
+/// Reproducer from paritytech/security_findings#153.
+#[test]
+fn transient_evm_proxy_to_resolc() {
+    transient_storage(&[(2, 1)]);
+}
+
+/// Reproducer from paritytech/security_findings#153.
+#[test]
+fn transient_resolc_to_evm() {
+    transient_storage(&[(0, 3)]);
+}
+
 /// Calls `f(3)` on a contract whose Yul function names contain LLVM attribute markers.
 fn run_function_name_fixture(contract: &str) {
     let mut actions = instantiate(&format!("contracts/{contract}.sol"), contract);

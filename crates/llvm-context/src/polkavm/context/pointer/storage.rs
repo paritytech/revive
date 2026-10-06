@@ -174,7 +174,7 @@ fn emit_load<'ctx>(
     let key_pointer = context.build_alloca_at_entry(context.word_type(), "key_pointer");
     let value_pointer = context.build_alloca_at_entry(context.word_type(), "value_pointer");
 
-    let mut key = context.build_load(
+    let key = context.build_load(
         super::Pointer::new(
             context.word_type(),
             Default::default(),
@@ -182,9 +182,7 @@ fn emit_load<'ctx>(
         ),
         "key",
     )?;
-    if !transient {
-        key = context.build_byte_swap(key)?;
-    }
+    let key = context.build_byte_swap(key)?;
     context.builder().build_store(key_pointer.value, key)?;
 
     let arguments = [
@@ -198,11 +196,7 @@ fn emit_load<'ctx>(
     // If a key doesn't exist the syscall returns zero.
 
     let value = context.build_load(value_pointer, "storage_value")?;
-    Ok(if transient {
-        value
-    } else {
-        context.build_byte_swap(value)?
-    })
+    context.build_byte_swap(value)
 }
 
 fn emit_store<'ctx>(
@@ -215,7 +209,7 @@ fn emit_store<'ctx>(
     let key_pointer = context.build_alloca_at_entry(context.word_type(), "key_pointer");
     let value_pointer = context.build_alloca_at_entry(context.word_type(), "value_pointer");
 
-    let mut key = context.build_load(
+    let key = context.build_load(
         super::Pointer::new(
             context.word_type(),
             Default::default(),
@@ -223,7 +217,7 @@ fn emit_store<'ctx>(
         ),
         "key",
     )?;
-    let mut value = context.build_load(
+    let value = context.build_load(
         super::Pointer::new(
             context.word_type(),
             Default::default(),
@@ -231,10 +225,8 @@ fn emit_store<'ctx>(
         ),
         "value",
     )?;
-    if !transient {
-        key = context.build_byte_swap(key)?;
-        value = context.build_byte_swap(value)?;
-    }
+    let key = context.build_byte_swap(key)?;
+    let value = context.build_byte_swap(value)?;
 
     context.build_store(key_pointer, key)?;
     context.build_store(value_pointer, value)?;

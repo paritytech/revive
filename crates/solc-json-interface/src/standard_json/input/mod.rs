@@ -97,7 +97,13 @@ impl Input {
         let sources = iter
             .map(|path| {
                 let source = Source::try_read(path.as_path())?;
-                Ok((path.to_string_lossy().to_string(), source))
+                let name = path.to_string_lossy();
+                let name = if name == self::source::STDIN_PATH {
+                    self::source::STDIN_SOURCE_NAME.to_owned()
+                } else {
+                    name.to_string()
+                };
+                Ok((name, source))
             })
             .collect::<anyhow::Result<BTreeMap<String, Source>>>()?;
 

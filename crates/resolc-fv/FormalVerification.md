@@ -275,6 +275,120 @@ standard library's randomly keyed hasher. It is deliberately not a dependency:
 nothing here needs statistical quality, only variety across runs and threads.
 It goes when the real checks arrive.
 
+## Visualizing a chain
+
+`cfg-viz/`, at the repository root, renders the control flow of a stage
+artifact. It answers a different question from the proofs — not "did this pass
+preserve meaning" but "what does the IR at this point actually look like" —
+against the same files, so a chain exported for `resolc-fv` needs nothing extra
+to be viewed.
+
+The newyork IR has no control flow graph in it. It stores *structured* regions:
+`If` holds a then-region and an else-region, `Switch` holds one per case, `For`
+holds a condition, a body and a post, and values cross a region boundary through
+`inputs` and the region's `yields`. The viewer therefore derives a graph rather
+than reading one, lowering regions to basic blocks the way
+`crates/newyork/src/to_llvm.rs` does, so the picture matches what codegen builds
+rather than merely resembling it.
+
+### Running it
+
+The viewer is a static site. It is not part of the Rust workspace, has no
+dependencies beyond Python 3 and a browser, and needs no LLVM build — it reads
+artifacts, never the compiler.
+
+```bash
+cd cfg-viz
+python3 -m http.server 8000
+```
+
+Then open `http://localhost:8000`. Opening `index.html` from disk does not work:
+the page fetches its data, and `file://` origins are not allowed to. Everything
+else is served locally, including the layout engine in `vendor/`, so the viewer
+works offline — only the webfont link needs the network, and the page falls back
+to system faces without it.
+
+### Pointing it at a contract
+
+```bash
+resolc MyContract.sol --newyork --overwrite --bin \
+  --emit-ir-stages --debug-output-dir stages-mine/
+
+cd cfg-viz
+python3 bundle.py ../stages-mine ../stages-other
+```
+
+`bundle.py` takes any number of stage directories, lowers every stage each one
+indexes, and writes `data/`. It merges into the index rather than replacing it,
+so rebuilding one contract leaves the other chains in the picker alone — it
+prints a line per chain saying which were rebuilt and which were kept. A chain
+leaves the picker by deleting its file from `data/`, which the next run reports.
+
+The two scripts underneath it are useful on their own:
+
+| Command | What it does |
+| --- | --- |
+| `python3 lower.py <stage>.newyork.json` | Lowers one stage, writes `cfg.json` to stdout |
+| `python3 lower.py <stage>.newyork.json out.json` | The same, to a file, with per-graph block and edge counts |
+| `python3 validate.py out.json` | Checks the lowering's invariants; exits non-zero on a violation |
+| `node smoke.js` | Renders every stage of every bundled chain against a stub DOM |
+
+`validate.py` is the one to reach for when a new contract produces something
+unexpected. It checks that every edge lands on a block that exists, that every
+block is reachable from the entry, that every phi source is a real predecessor
+carrying a resolved value, and that the back edges and the loop headers agree in
+number. A violation is a lowering bug, not a quirk of the contract.
+
+### Reading the graph
+
+Each graph is one object's code or one function body; the rail lists them, and
+`inline` removing a function is visible as that function leaving the list.
+
+Edge kind carries the meaning, so it owns the colour: taken and not-taken
+branches, the back edge of a loop, and the non-local jumps `Break`, `Continue`
+and `Leave`, which are the edges that make the structured IR a graph rather than
+a tree. Terminators — `Return`, `Revert`, `PanicRevert` and the rest — merge
+into one sink per kind, because a contract of any size otherwise renders as a
+bush of revert leaves.
+
+A **dashed outline** marks a block the lowering invented: join blocks, loop
+headers, latches and exits, and the implicit arms of an `If` with no
+`else_region` or a `Switch` with no `default`. Those two are the common case,
+not an edge case — in the `LoopSwitch` fixture 13 of 14 `If`s carry no else
+region at `from_yul` and 14 of 15 at `final`, and its selector `Switch` has no
+default at any stage. Skipping them loses an incoming edge at the join, which is
+where the phis come from.
+
+The pass rail marks the stages that actually rewrote the IR, which the manifest's
+`ir_hash` decides: equal hashes across adjacent stages of one object mean the
+pass left the IR untouched, and most passes do — 6 of 43 adjacent pairs changed
+anything in the `LoopSwitch` fixture, 4 of 43 in `Add3`. The rail also breaks
+the chain by object, since
+a contract's deploy and runtime objects run the same pass sequence and the
+ordinals interleave them.
+
+### Status and the port
+
+**Status: prototype.** The lowering is Python, under `cfg-viz/lower.py`. It
+belongs in Rust behind a `resolc-fv graph` subcommand, where it can deserialize
+`revive_newyork::ir` directly instead of walking untyped JSON, and where `parse.rs`
+already does the chain reading it currently repeats. The `cfg.json` files it
+writes are the snapshots that port has to reproduce.
+
+What it is checked against today:
+
+- Every stage of both fixtures lowers with no invariant violation, and
+  `node smoke.js` renders all of them without error.
+- Against the `.unoptimized.ll` dump beside the artifacts, the final stage of
+  the `LoopSwitch` fixture agrees with codegen on phi count (18) and loop count
+  (3) for the runtime object. Block counts do not match and are not expected to:
+  codegen adds trap, revert and panic blocks that have no counterpart in the IR.
+
+The one known discrepancy is a function whose exit phi count is one higher than
+the dump's, which is most likely the synthesized function exit block being
+materialized differently by codegen. It is worth settling during the port rather
+than carrying forward.
+
 ## The schema
 
 The manifest and stage-artifact types live in `revive_newyork::export`:

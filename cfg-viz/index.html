@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>newyork CFG Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="app">
+  <div id="topbar">
+    <div id="brand">newyork <span>CFG</span></div>
+    <select id="chain" aria-label="Compilation"></select>
+    <div id="contract"></div>
+    <div class="spacer"></div>
+    <div class="legend" id="legend"></div>
+    <button id="detail" class="on" title="Show statements inside each block">Full</button>
+    <button id="fit" title="Fit the graph to the view">Fit</button>
+  </div>
+
+  <div id="main">
+    <div id="rail">
+      <div class="rail-section" id="passes">
+        <div class="rail-head">Pass chain <span class="count" id="pass-count"></span></div>
+        <div class="rail-body" id="pass-list"></div>
+      </div>
+      <div class="rail-section" id="graphs">
+        <div class="rail-head">Graphs <span class="count" id="graph-count"></span></div>
+        <div class="rail-body" id="graph-list"></div>
+      </div>
+    </div>
+
+    <div id="canvas-wrap">
+      <svg id="canvas"></svg>
+      <div id="canvas-tools">
+        <input id="search" type="search" placeholder="v42, sload, …" aria-label="Highlight blocks">
+        <button id="clear" title="Clear highlight">×</button>
+      </div>
+      <div id="stats"></div>
+      <div id="loading">Loading the lowered pass chain…</div>
+    </div>
+
+    <div id="inspector"></div>
+  </div>
+</div>
+
+<!-- Vendored rather than loaded from a CDN, so the viewer works offline. -->
+<script src="vendor/dagre.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

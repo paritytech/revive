@@ -29,3 +29,6 @@ workdir
 /stages/
 /run.sh
 /stages-logs/
+/stages-loopswitch/
+/stages-addition/
+/cfg-viz/data/

@@ -645,11 +645,11 @@ impl YulTranslator {
             FunctionName::CoinBase => Ok(Expression::Coinbase),
             FunctionName::Difficulty | FunctionName::Prevrandao => Ok(Expression::Difficulty),
             FunctionName::BaseFee => Ok(Expression::BaseFee),
-            FunctionName::BlobBaseFee => Ok(Expression::BlobBaseFee),
+            FunctionName::BlobBaseFee => {
+                Err(TranslationError::Unsupported("blobbasefee".to_string()))
+            }
             FunctionName::SlotNum => Err(TranslationError::Unsupported("slotnum".to_string())),
-            FunctionName::BlobHash => Ok(Expression::BlobHash {
-                index: arguments[0],
-            }),
+            FunctionName::BlobHash => Err(TranslationError::Unsupported("blobhash".to_string())),
             FunctionName::MSize => Ok(Expression::MSize),
             FunctionName::CodeSize => Ok(Expression::CodeSize),
             FunctionName::ExtCodeSize => Ok(Expression::ExtCodeSize {
@@ -1651,6 +1651,34 @@ object "Test" {
             Err(TranslationError::Unsupported(name)) => assert_eq!(name, "slotnum"),
             Err(other) => panic!("unexpected error: {other}"),
             Ok(_) => panic!("slotnum must be rejected"),
+        }
+    }
+
+    /// `blobhash` and `blobbasefee` are rejected instead of lowered to 0.
+    #[test]
+    fn blob_opcodes_are_rejected() {
+        for (name, call) in [
+            ("blobhash", "blobhash(0)"),
+            ("blobbasefee", "blobbasefee()"),
+        ] {
+            let source = format!(
+                r#"
+object "Test" {{
+    code {{
+        sstore(0, {call})
+    }}
+}}
+"#
+            );
+            let mut lexer = Lexer::new(source);
+            let yul_object =
+                YulObject::parse(&mut lexer, None).expect("the Yul object should parse");
+
+            match YulTranslator::new().translate_object(&yul_object) {
+                Err(TranslationError::Unsupported(rejected)) => assert_eq!(rejected, name),
+                Err(other) => panic!("unexpected error: {other}"),
+                Ok(_) => panic!("{name} must be rejected"),
+            }
         }
     }
 

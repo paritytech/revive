@@ -65,7 +65,6 @@ pub struct SimplifyResults {
 enum EnvRead {
     Address,
     BaseFee,
-    BlobBaseFee,
     CallDataSize,
     CallValue,
     Caller,
@@ -85,7 +84,6 @@ fn env_read_kind(expression: &Expression) -> Option<EnvRead> {
     match expression {
         Expression::Address => Some(EnvRead::Address),
         Expression::BaseFee => Some(EnvRead::BaseFee),
-        Expression::BlobBaseFee => Some(EnvRead::BlobBaseFee),
         Expression::CallDataSize => Some(EnvRead::CallDataSize),
         Expression::CallValue => Some(EnvRead::CallValue),
         Expression::Caller => Some(EnvRead::Caller),
@@ -804,7 +802,6 @@ impl Simplifier {
 
             Expression::Address => self.cse_env_read(EnvRead::Address, expression),
             Expression::BaseFee => self.cse_env_read(EnvRead::BaseFee, expression),
-            Expression::BlobBaseFee => self.cse_env_read(EnvRead::BlobBaseFee, expression),
             Expression::CallDataSize => self.cse_env_read(EnvRead::CallDataSize, expression),
             Expression::CallValue => self.cse_env_read(EnvRead::CallValue, expression),
             Expression::Caller => self.cse_env_read(EnvRead::Caller, expression),
@@ -2408,10 +2405,6 @@ impl Canonicalizer {
                 buffer.push(0x23);
                 self.encode_value(number, buffer);
             }
-            Expression::BlobHash { index } => {
-                buffer.push(0x26);
-                self.encode_value(index, buffer);
-            }
             Expression::DataOffset { id } => {
                 buffer.push(0x30);
                 buffer.extend_from_slice(&(id.len() as u16).to_le_bytes());
@@ -2906,7 +2899,6 @@ fn nullary_expr_tag(expression: &Expression) -> u8 {
         Expression::ChainId => 0x4C,
         Expression::SelfBalance => 0x4D,
         Expression::BaseFee => 0x4E,
-        Expression::BlobBaseFee => 0x4F,
         Expression::Gas => 0x50,
         Expression::MSize => 0x51,
         Expression::Address => 0x52,

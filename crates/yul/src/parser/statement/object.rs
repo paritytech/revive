@@ -40,6 +40,8 @@ pub struct Object {
     pub code: Code,
     /// The optional inner object, representing the runtime code.
     pub inner_object: Option<Box<Self>>,
+    /// Whether the runtime code object is present in the source rather than implied.
+    pub explicit_runtime_code: bool,
     /// The factory dependency objects, which are represented by nested Yul objects, by identifier.
     pub factory_dependencies: BTreeMap<String, Self>,
 }
@@ -98,6 +100,7 @@ impl Object {
 
         let code = Code::parse(lexer, None)?;
         let mut inner_object = None;
+        let mut explicit_runtime_code = false;
         let mut factory_dependencies = BTreeMap::new();
 
         if !is_runtime_code {
@@ -118,6 +121,7 @@ impl Object {
                     }
 
                     factory_dependencies.append(&mut object.factory_dependencies);
+                    explicit_runtime_code = true;
                     Some(Box::new(object))
                 }
                 _ => Some(Box::new(Self::implicit_runtime_code(&identifier, location))),
@@ -172,6 +176,7 @@ impl Object {
             identifier,
             code,
             inner_object,
+            explicit_runtime_code,
             factory_dependencies,
         })
     }
@@ -195,6 +200,7 @@ impl Object {
                 },
             },
             inner_object: None,
+            explicit_runtime_code: false,
             factory_dependencies: BTreeMap::new(),
         }
     }

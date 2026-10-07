@@ -40,7 +40,9 @@ impl IR {
         .collect()
     }
 
-    /// Returns the nested factory dependency objects missing in `identifier_paths`, by identifier.
+    /// Returns the nested contract objects missing in `identifier_paths`, by identifier.
+    ///
+    /// Only objects with their own `_deployed` runtime object are contracts, as solc emits them.
     pub fn unresolved_factory_dependencies(
         &self,
         identifier_paths: &BTreeMap<String, String>,
@@ -51,7 +53,9 @@ impl IR {
         };
         factory_dependencies
             .iter()
-            .filter(|(identifier, _)| !identifier_paths.contains_key(identifier.as_str()))
+            .filter(|(identifier, object)| {
+                object.explicit_runtime_code && !identifier_paths.contains_key(identifier.as_str())
+            })
             .map(|(identifier, object)| {
                 let ir = match self {
                     IR::Yul(_) => Self::Yul(Yul {

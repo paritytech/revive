@@ -179,6 +179,7 @@ fn main_inner(
         Some(arguments.heap_size),
         Some(arguments.stack_size),
     );
+    memory_config.validate()?;
 
     let use_newyork = arguments.newyork;
 
@@ -219,6 +220,7 @@ fn main_inner(
             evm_version,
             format,
             !arguments.disable_solc_optimizer,
+            arguments.revert_strings,
             optimizer_settings,
             arguments.base_path,
             arguments.include_paths,
@@ -244,6 +246,7 @@ fn main_inner(
             messages,
             evm_version,
             !arguments.disable_solc_optimizer,
+            arguments.revert_strings,
             optimizer_settings,
             arguments.base_path,
             arguments.include_paths,

@@ -2656,24 +2656,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let key_parameter = function.get_nth_param(0).unwrap().into_int_value();
         let slot_parameter = function.get_nth_param(1).unwrap().into_int_value();
 
-        let offset0 = xlen_type.const_int(0, false);
-        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
+        let input_pointer = revive_llvm_context::polkavm_evm_memory::store_scratch_pair_unchecked(
             context,
-            offset0,
             key_parameter,
-        )
-        .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-        let offset32 = xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
-        revive_llvm_context::polkavm_evm_memory::store_bswap_unchecked(
-            context,
-            offset32,
             slot_parameter,
         )
         .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-
-        let input_pointer = context
-            .build_heap_gep_unchecked(offset0)
-            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
         let length = xlen_type.const_int(2 * revive_common::BYTE_LENGTH_WORD as u64, false);
 
         let hash_output = context.build_alloca_at_entry(word_type, "map_sload_hash");
@@ -2717,14 +2705,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     /// Gets or creates `__revive_mapping_sstore(i256 key, i256 slot, i256 value)`.
     /// Combines keccak256_pair + sstore in a single function, eliminating the
-    /// redundant bswap pair between keccak output and sstore key input. Uses
-    /// a local alloca for the keccak input — heap writes would block the
-    /// effect attribute below and prevent heap-load CSE across mapping
-    /// sstores.
+    /// redundant bswap pair between keccak output and sstore key input.
     ///
-    /// Effect: [`PolkaVMMemoryEffect::WriteInaccessible`]. The only
-    /// caller-visible effect is the storage write; heap state is untouched
-    /// so heap and calldata loads survive across this call.
+    /// Writes the pre-image to heap scratch `[0, 0x40)` because the keccak
+    /// fusion removed the source `mstore`s expecting this helper to reproduce them.
     fn get_or_create_mapping_sstore_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -2746,7 +2730,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         );
 
         add_noinline_minsize_attrs(context, function);
-        add_memory_effect_attribute(context, function, PolkaVMMemoryEffect::WriteInaccessible);
 
         let saved_block = context.basic_block();
         let entry_block = context.llvm().append_basic_block(function, "entry");
@@ -2756,36 +2739,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let slot_parameter = function.get_nth_param(1).unwrap().into_int_value();
         let value_parameter = function.get_nth_param(2).unwrap().into_int_value();
 
-        let input_buffer_type = context
-            .byte_type()
-            .array_type(2 * revive_common::BYTE_LENGTH_WORD as u32);
-        let input_pointer = context.build_alloca_at_entry(input_buffer_type, "map_sstore_input");
-        let key_pointer = revive_llvm_context::PolkaVMPointer::new(
-            word_type,
-            Default::default(),
-            input_pointer.value,
-        );
-        let slot_pointer = context.build_gep(
-            input_pointer,
-            &[
-                xlen_type.const_zero(),
-                xlen_type.const_int(revive_common::BYTE_LENGTH_WORD as u64, false),
-            ],
-            word_type,
-            "slot_gep",
-        );
-        let key_swapped = context
-            .build_byte_swap(key_parameter.into())
-            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-        context
-            .build_store(key_pointer, key_swapped)
-            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-        let slot_swapped = context
-            .build_byte_swap(slot_parameter.into())
-            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
-        context
-            .build_store(slot_pointer, slot_swapped)
-            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
+        let input_pointer = revive_llvm_context::polkavm_evm_memory::store_scratch_pair_unchecked(
+            context,
+            key_parameter,
+            slot_parameter,
+        )
+        .map_err(|error| CodegenError::Llvm(error.to_string()))?;
 
         let value_bswap = context
             .build_byte_swap(value_parameter.as_basic_value_enum())
@@ -2876,12 +2835,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// `void __revive_callvalue_check()` that checks if callvalue is nonzero
     /// and reverts with empty data if so, returning normally otherwise.
     ///
-    /// Effect: [`PolkaVMMemoryEffect::ReadInaccessible`]. Callvalue is
-    /// immutable for the duration of execution and reachable through
-    /// pallet-revive runtime state; the alloca write inside the body is
-    /// local, with no heap or argmem traffic. CSE is sound because the
-    /// helper either always returns or always reverts for a given execution
-    /// — the visible "effect" is just the read of the callvalue scalar.
+    /// Effect: [`PolkaVMMemoryEffect::WriteInaccessible`]. The revert
+    /// terminates the call frame through pallet-revive runtime state, so the
+    /// call must not be removed even though it returns nothing; heap state
+    /// is untouched.
     fn get_or_create_callvalue_check_fn(
         &mut self,
         context: &mut PolkaVMContext<'ctx>,
@@ -2899,7 +2856,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         );
 
         add_noinline_minsize_attrs(context, function);
-        add_memory_effect_attribute(context, function, PolkaVMMemoryEffect::ReadInaccessible);
+        add_memory_effect_attribute(context, function, PolkaVMMemoryEffect::WriteInaccessible);
 
         let saved_block = context.basic_block();
         let entry_block = context.llvm().append_basic_block(function, "entry");
@@ -5794,13 +5751,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     destination.id,
                     "calldatacopy_dest_narrow",
                 )?;
-                let offset_value = self.translate_value(offset)?.into_int_value();
-                let offset_value = self.narrow_offset_for_pointer(
-                    context,
-                    offset_value,
-                    offset.id,
-                    "calldatacopy_offset_narrow",
-                )?;
                 let length_value = self.translate_value(length)?.into_int_value();
                 let length_value = self.narrow_offset_for_pointer(
                     context,
@@ -5808,6 +5758,25 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     length.id,
                     "calldatacopy_length_narrow",
                 )?;
+                let offset_value = match context.code_type() {
+                    Some(revive_llvm_context::PolkaVMCodeType::Deploy) => {
+                        revive_llvm_context::polkavm_evm_calldata::size(context)?.into_int_value()
+                    }
+                    Some(revive_llvm_context::PolkaVMCodeType::Runtime) => {
+                        let offset_value = self.translate_value(offset)?.into_int_value();
+                        self.narrow_offset_for_pointer(
+                            context,
+                            offset_value,
+                            offset.id,
+                            "calldatacopy_offset_narrow",
+                        )?
+                    }
+                    None => {
+                        return Err(CodegenError::Unsupported(
+                            "code type undefined for calldatacopy".into(),
+                        ))
+                    }
+                };
                 revive_llvm_context::polkavm_evm_calldata::copy(
                     context,
                     destination_value,
@@ -6196,20 +6165,28 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 }
             }
 
-            Expression::CallDataLoad { offset } => {
-                let offset_value = self.translate_value(offset)?.into_int_value();
-                if self.use_outlined_calldataload {
-                    Ok(revive_llvm_context::polkavm_evm_calldata::load_outlined(
-                        context,
-                        offset_value,
-                    )?)
-                } else {
-                    Ok(revive_llvm_context::polkavm_evm_calldata::load(
-                        context,
-                        offset_value,
-                    )?)
+            Expression::CallDataLoad { offset } => match context.code_type() {
+                Some(revive_llvm_context::PolkaVMCodeType::Deploy) => {
+                    Ok(context.word_const(0).as_basic_value_enum())
                 }
-            }
+                Some(revive_llvm_context::PolkaVMCodeType::Runtime) => {
+                    let offset_value = self.translate_value(offset)?.into_int_value();
+                    if self.use_outlined_calldataload {
+                        Ok(revive_llvm_context::polkavm_evm_calldata::load_outlined(
+                            context,
+                            offset_value,
+                        )?)
+                    } else {
+                        Ok(revive_llvm_context::polkavm_evm_calldata::load(
+                            context,
+                            offset_value,
+                        )?)
+                    }
+                }
+                None => Err(CodegenError::Unsupported(
+                    "code type undefined for calldataload".into(),
+                )),
+            },
 
             Expression::CallValue => {
                 if self.use_outlined_callvalue {
@@ -6239,9 +6216,17 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 Ok(value)
             }
 
-            Expression::CallDataSize => {
-                Ok(revive_llvm_context::polkavm_evm_calldata::size(context)?)
-            }
+            Expression::CallDataSize => match context.code_type() {
+                Some(revive_llvm_context::PolkaVMCodeType::Deploy) => {
+                    Ok(context.word_const(0).as_basic_value_enum())
+                }
+                Some(revive_llvm_context::PolkaVMCodeType::Runtime) => {
+                    Ok(revive_llvm_context::polkavm_evm_calldata::size(context)?)
+                }
+                None => Err(CodegenError::Unsupported(
+                    "code type undefined for calldatasize".into(),
+                )),
+            },
 
             Expression::CodeSize => match context.code_type() {
                 Some(revive_llvm_context::PolkaVMCodeType::Deploy) => {

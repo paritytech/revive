@@ -5150,6 +5150,71 @@ fn fmp_loop_mstore8() {
     run_differential(actions);
 }
 
+/// Reproducer from paritytech/security_findings#118.
+#[test]
+fn calldata_copy_over_free_pointer() {
+    let mut actions = instantiate(
+        "contracts/CalldataCopyOverFreePointer.sol",
+        "CalldataCopyOverFreePointer",
+    );
+    let mut data = vec![0; 64];
+    data.extend(U256::from(1u64 << 40).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// Reproducer from paritytech/security_findings#116.
+#[test]
+fn non_payable_call_value() {
+    let path = "contracts/NonPayableCallValue.sol";
+    let contract = "NonPayableCallValue";
+    let mut actions = instantiate(path, contract);
+    let mut data = keccak256(b"setA(uint256)")[..4].to_vec();
+    data.extend_from_slice(&U256::from(5u64).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 1,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+
+    Specs {
+        actions: vec![
+            Instantiate {
+                origin: TestAddress::Alice,
+                value: 1,
+                gas_limit: Some(GAS_LIMIT),
+                storage_deposit_limit: None,
+                code: Code::Solidity {
+                    path: Some(path.into()),
+                    contract: contract.to_string(),
+                    solc_optimizer: None,
+                    libraries: Default::default(),
+                },
+                data: vec![],
+                salt: OptionalHex::default(),
+            },
+            VerifyCall(VerifyCallExpectation {
+                success: false,
+                ..Default::default()
+            }),
+        ],
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
 /// Deploys the Yul fixture `name` and calls it with the calldata words `v`, `0x11…11` and `c`,
 /// where `v` and `c` have all bits set. The fixture reverts when the free memory pointer it reads
 /// back differs from what its own stores wrote, so a stale or truncated pointer fails the test.
@@ -5460,6 +5525,63 @@ fn assert_trapped(result: &CallResult) {
     assert_eq!(result.weight_consumed, GAS_LIMIT);
 }
 
+/// Scratch `[0, 0x40)` must hold the key and slot after a fused mapping store.
+#[test]
+fn mapping_sstore_writes_scratch() {
+    let mut actions = instantiate_yul("contracts/MappingSStoreScratch.yul", "MappingSStoreScratch");
+    let mut data = U256::from(0xabcdef0123u64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// Scratch written between a mapping store's hash and its `sstore` must survive the fused store.
+#[test]
+fn mapping_sstore_keeps_intervening_scratch() {
+    let mut actions = instantiate_yul(
+        "contracts/MappingSStoreScratchOrder.yul",
+        "MappingSStoreScratchOrder",
+    );
+    let mut data = U256::from(0xabcdef0123u64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// Scratch written between a mapping load's hash and its `sload` must survive the fused load.
+#[test]
+fn mapping_sload_keeps_intervening_scratch() {
+    let mut actions = instantiate_yul(
+        "contracts/MappingSLoadScratchOrder.yul",
+        "MappingSLoadScratchOrder",
+    );
+    let mut data = U256::from(0xabcdef0123u64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so
@@ -5505,5 +5627,106 @@ fn calldatacopy_fmp_range_proof() {
         storage_deposit_limit: None,
         data,
     });
+    run_differential(actions);
+}
+
+/// Runs `enter(implementation, 7)` across resolc deploys 0 and 1 and EVM deploys 2 and 3.
+fn transient_storage(steps: &[(usize, usize)]) {
+    let source = include_str!("../contracts/TransientCrossVm.sol");
+    let pvm = resolc::test_utils::compile_blob("TransientCrossVm", source);
+    let evm = resolc::test_utils::compile_evm_deploy_code(
+        "TransientCrossVm",
+        source,
+        true,
+        Default::default(),
+    );
+    let codes = [&pvm, &pvm, &evm, &evm];
+    let alice = Address::from(ALICE.0);
+    let mut actions = Vec::new();
+    for (index, code) in codes.iter().enumerate() {
+        actions.push(Instantiate {
+            origin: TestAddress::Alice,
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            code: Code::Bytes(code.to_vec()),
+            data: vec![],
+            salt: OptionalHex::from([index as u8; 32]),
+        });
+    }
+    let mut expected = U256::from(1).to_be_bytes::<32>().to_vec();
+    expected.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    for &(caller, implementation) in steps {
+        let address = alice.create2([implementation as u8; 32], keccak256(codes[implementation]));
+        let mut data = hex!("7e348b7d").to_vec();
+        data.extend_from_slice(address.into_word().as_slice());
+        data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(caller),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data,
+        });
+        actions.push(VerifyCall(VerifyCallExpectation {
+            success: true,
+            output: OptionalHex::from(expected.clone()),
+            gas_consumed: None,
+        }));
+    }
+    Specs {
+        actions,
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
+/// Reproducer from paritytech/security_findings#153.
+#[test]
+fn transient_same_vm() {
+    transient_storage(&[(0, 1), (2, 3)]);
+}
+
+/// Reproducer from paritytech/security_findings#153.
+#[test]
+fn transient_evm_proxy_to_resolc() {
+    transient_storage(&[(2, 1)]);
+}
+
+/// Reproducer from paritytech/security_findings#153.
+#[test]
+fn transient_resolc_to_evm() {
+    transient_storage(&[(0, 3)]);
+}
+
+/// Reproducer from paritytech/security_findings#115.
+#[test]
+fn constructor_call_data_is_empty() {
+    let mut actions = instantiate("contracts/ConstructorCallData.sol", "ConstructorCallData");
+    let Instantiate { data, .. } = &mut actions[0] else {
+        unreachable!()
+    };
+    *data = U256::from(5).to_be_bytes::<32>().to_vec();
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"n()")[..4].to_vec(),
+    });
+    run_differential(actions);
+}
+
+/// Deploy code reads empty call data although the instantiate input carries data.
+#[test]
+fn deploy_code_call_data_is_empty() {
+    let mut actions = instantiate_yul("contracts/DeployCallData.yul", "DeployCallData");
+    let Instantiate { data, .. } = &mut actions[0] else {
+        unreachable!()
+    };
+    *data = vec![0xff; 32];
     run_differential(actions);
 }

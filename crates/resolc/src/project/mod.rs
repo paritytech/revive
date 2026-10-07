@@ -87,6 +87,10 @@ impl Project {
     }
 
     /// Compiles all contracts, returning their build artifacts.
+    ///
+    /// Every nested object other than the `_deployed` runtime code is taken for a contract the
+    /// enclosing one deploys, so it has to be compiled as a contract of its own. A contract with
+    /// a nested object that is not one is reported as an error.
     pub fn compile(
         self,
         messages: &mut Vec<SolcStandardJsonOutputError>,
@@ -105,15 +109,33 @@ impl Project {
 
         let results = iter
             .map(|(path, mut contract)| {
-                let factory_dependencies = contract
-                    .ir
-                    .drain_factory_dependencies()
+                let dependencies = contract.ir.drain_factory_dependencies();
+                let unresolved = dependencies
+                    .iter()
+                    .filter(|identifier| !self.identifier_paths.contains_key(*identifier))
+                    .cloned()
+                    .collect::<Vec<String>>();
+                if !unresolved.is_empty() {
+                    let error = SolcStandardJsonOutputError::new_error(
+                        format!(
+                            "{path}: the nested object(s) `{}` are not contracts. `resolc` treats \
+                             every nested Yul object other than the `_deployed` runtime code as a \
+                             contract to deploy, and does not support nested objects of any other \
+                             kind.",
+                            unresolved.join("`, `"),
+                        ),
+                        None,
+                        None,
+                    );
+                    return (path, Err(error));
+                }
+                let factory_dependencies = dependencies
                     .iter()
                     .map(|identifier| {
                         self.identifier_paths
                             .get(identifier)
                             .cloned()
-                            .expect("Always exists")
+                            .expect("checked above")
                     })
                     .collect();
                 let missing_libraries = contract.get_missing_libraries(&deployed_libraries);

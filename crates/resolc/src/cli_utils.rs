@@ -31,10 +31,10 @@ pub const SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH: &str =
     "src/tests/data/solidity/remappings_order/main.sol";
 /// The directory with the `Target` contract defining `first`.
 pub const SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY: &str =
-    "src/tests/data/solidity/remappings_order/first/";
+    "src/tests/data/solidity/remappings_order/b_first/";
 /// The directory with the `Target` contract defining `second`.
 pub const SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY: &str =
-    "src/tests/data/solidity/remappings_order/second/";
+    "src/tests/data/solidity/remappings_order/a_second/";
 /// The reproducer from paritytech/revive#624 with 129 immutables, one more than the limit allows.
 pub const SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH: &str =
     "src/tests/data/solidity/immutables_over_limit.sol";

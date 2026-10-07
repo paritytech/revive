@@ -4,11 +4,11 @@
     "main.sol": {
       "urls": ["src/tests/data/solidity/remappings_order/main.sol"]
     },
-    "first/Target.sol": {
-      "urls": ["src/tests/data/solidity/remappings_order/first/Target.sol"]
+    "b_first/Target.sol": {
+      "urls": ["src/tests/data/solidity/remappings_order/b_first/Target.sol"]
     },
-    "second/Target.sol": {
-      "urls": ["src/tests/data/solidity/remappings_order/second/Target.sol"]
+    "a_second/Target.sol": {
+      "urls": ["src/tests/data/solidity/remappings_order/a_second/Target.sol"]
     }
   },
   "settings": {
@@ -16,8 +16,8 @@
       "enabled": true
     },
     "remappings": [
-      "target/=second/",
-      "target/=first/"
+      "target/=b_first/",
+      "target/=a_second/"
     ],
     "outputSelection": {
       "*": {

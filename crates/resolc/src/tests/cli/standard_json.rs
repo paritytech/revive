@@ -857,7 +857,7 @@ fn remappings_last_one_wins() {
     let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
     assert_eq!(
         output["contracts"]["main.sol"]["Main"]["abi"][0]["name"],
-        "first"
+        "second"
     );
 }
 

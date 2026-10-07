@@ -180,11 +180,11 @@ fn resolves_imports_with_remappings() {
 /// The last of two remappings for the same prefix wins, as in solc.
 #[test]
 fn remappings_last_one_wins() {
-    let second_remapping = format!("target/={SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY}");
     let first_remapping = format!("target/={SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY}");
+    let second_remapping = format!("target/={SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY}");
     let arguments = &[
-        second_remapping.as_str(),
         first_remapping.as_str(),
+        second_remapping.as_str(),
         SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH,
         JSON_OPTION,
         "abi",
@@ -195,7 +195,7 @@ fn remappings_last_one_wins() {
     let combined_json: CombinedJson =
         serde_json::from_str(&result.stdout).expect("Combined JSON output should deserialize");
     let main = &combined_json.contracts[&format!("{SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH}:Main")];
-    assert_eq!(main.abi[0]["name"], "first");
+    assert_eq!(main.abi[0]["name"], "second");
 }
 
 #[test]

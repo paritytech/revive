@@ -51,11 +51,12 @@ impl Project {
     /// A shortcut constructor.
     ///
     /// Nested factory dependency objects not otherwise part of `contracts` are added as contracts.
+    /// A nested object whose path is already taken by another contract is an error.
     pub fn new(
         version: Option<SolcVersion>,
         mut contracts: BTreeMap<String, Contract>,
         libraries: SolcStandardJsonInputSettingsLibraries,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let mut identifier_paths = BTreeMap::new();
         for (path, contract) in contracts.iter() {
             identifier_paths.insert(contract.object_identifier().to_owned(), path.to_owned());
@@ -69,6 +70,15 @@ impl Project {
             if identifier_paths.contains_key(contract.object_identifier()) {
                 continue;
             }
+            if contracts.contains_key(contract.identifier.full_path.as_str()) {
+                anyhow::bail!(
+                    "the nested object `{}` can not be emitted as `{}`, which is the path of another \
+                     contract. Adding the source file of `{}` to the output selection avoids this.",
+                    contract.object_identifier(),
+                    contract.identifier.full_path,
+                    contract.object_identifier(),
+                );
+            }
             identifier_paths.insert(
                 contract.object_identifier().to_owned(),
                 contract.identifier.full_path.to_owned(),
@@ -78,12 +88,12 @@ impl Project {
             contracts.insert(contract.identifier.full_path.to_owned(), contract);
         }
 
-        Self {
+        Ok(Self {
             version,
             contracts,
             identifier_paths,
             libraries,
-        }
+        })
     }
 
     /// Compiles all contracts, returning their build artifacts.
@@ -278,7 +288,7 @@ impl Project {
                 },
             }
         }
-        Ok(Self::new(None, contracts, libraries))
+        Self::new(None, contracts, libraries)
     }
 
     /// Converts the `solc` JSON output into a convenient project.
@@ -329,11 +339,7 @@ impl Project {
                 Err(error) => solc_output.push_error(Some(path), error),
             }
         }
-        Ok(Project::new(
-            Some(solc_version.clone()),
-            contracts,
-            libraries,
-        ))
+        Project::new(Some(solc_version.clone()), contracts, libraries)
     }
 }
 

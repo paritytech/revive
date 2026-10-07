@@ -13,6 +13,7 @@ use crate::cli_utils::{
     STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH,
     STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_LIBRARIES_PATH,
     STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_PATH_COLLISION_PATH,
     STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH, STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH,
     STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
     STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
@@ -901,6 +902,22 @@ fn factory_dependency_outside_output_selection_missing_libraries() {
             "`A.sol:P` should miss the library `B.sol:L` with arguments {arguments:?}"
         );
     }
+}
+
+/// A factory dependency outside the output selection must not replace a contract of the same path.
+#[test]
+fn factory_dependency_path_collision() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_FACTORY_DEPENDENCY_PATH_COLLISION_PATH,
+    );
+    assert_command_success(&result, "the factory dependency path collision fixture");
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_standard_json_errors_contain(
+        &output,
+        "`B.sol:K_4`, which is the path of another contract",
+    );
 }
 
 #[test]

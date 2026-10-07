@@ -73,6 +73,8 @@ pub const YUL_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH: &str =
 pub const YUL_SIBLING_OBJECTS_PATH: &str = "src/tests/data/yul/sibling_objects.yul";
 /// Yul contract addressing a nested object through the dotted notation.
 pub const YUL_DOTTED_OBJECT_PATH: &str = "src/tests/data/yul/dotted_object_path.yul";
+/// Yul contract with two different nested objects of the same name in different scopes.
+pub const YUL_DUPLICATE_OBJECT_NAME_PATH: &str = "src/tests/data/yul/duplicate_object_name.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
@@ -102,6 +104,9 @@ pub const STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH: &str =
 /// A factory dependency outside the output selection calling a library.
 pub const STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_LIBRARIES_PATH: &str =
     "src/tests/data/standard_json/factory_dependency_outside_output_selection_libraries.json";
+/// A factory dependency outside the output selection whose Yul name is a contract name in the creator's file.
+pub const STANDARD_JSON_FACTORY_DEPENDENCY_PATH_COLLISION_PATH: &str =
+    "src/tests/data/standard_json/factory_dependency_path_collision.json";
 /// The standard JSON PVM codegen all wildcard test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.

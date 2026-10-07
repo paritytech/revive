@@ -29,6 +29,9 @@ use crate::parser::statement::Statement;
 use crate::visitor::AstNode;
 use crate::visitor::AstVisitor;
 
+/// The name of the source location field of the serialized syntax tree nodes.
+const LOCATION_FIELD: &str = "location";
+
 /// The upper-level YUL object, representing the deploy code.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct Object {
@@ -151,7 +154,7 @@ impl Object {
                     ..
                 } => {
                     let dependency = Self::parse(lexer, Some(token))?;
-                    factory_dependencies.insert(dependency.identifier.clone(), dependency);
+                    Self::insert_factory_dependency(&mut factory_dependencies, dependency)?;
                 }
                 Token {
                     lexeme: Lexeme::Identifier(identifier),
@@ -179,6 +182,49 @@ impl Object {
             explicit_runtime_code,
             factory_dependencies,
         })
+    }
+
+    /// Inserts `dependency`, keeping an existing copy that differs in source locations only.
+    ///
+    /// Objects are resolved by name alone, so a different object of the same name is an error.
+    fn insert_factory_dependency(
+        factory_dependencies: &mut BTreeMap<String, Self>,
+        dependency: Self,
+    ) -> Result<(), Error> {
+        match factory_dependencies.get(&dependency.identifier) {
+            Some(existing) if existing.without_locations() != dependency.without_locations() => {
+                Err(ParserError::DuplicateObjectName {
+                    location: dependency.location,
+                    identifier: dependency.identifier,
+                }
+                .into())
+            }
+            Some(_) => Ok(()),
+            None => {
+                factory_dependencies.insert(dependency.identifier.clone(), dependency);
+                Ok(())
+            }
+        }
+    }
+
+    /// Returns the object as JSON with all source locations removed.
+    fn without_locations(&self) -> serde_json::Value {
+        fn remove_locations(value: &mut serde_json::Value) {
+            match value {
+                serde_json::Value::Object(fields) => {
+                    fields.remove(LOCATION_FIELD);
+                    fields.values_mut().for_each(remove_locations);
+                }
+                serde_json::Value::Array(elements) => {
+                    elements.iter_mut().for_each(remove_locations)
+                }
+                _ => {}
+            }
+        }
+
+        let mut value = serde_json::to_value(self).expect("Always valid");
+        remove_locations(&mut value);
+        value
     }
 
     /// A short-hand constructor returning an object with a call to `stop`.
@@ -592,5 +638,64 @@ object "Test" {
             }
             statement => panic!("expected an `invalid()` call, found {statement:?}"),
         }
+    }
+
+    #[test]
+    fn ok_duplicate_object_copies() {
+        let input = r#"
+object "P" {
+    code { }
+    object "P_deployed" {
+        code { }
+        object "K" {
+            code { }
+            object "K_deployed" { code { stop() } }
+        }
+    }
+    object "K" {
+        code { }
+        object "K_deployed" {
+            code {
+                stop()
+            }
+        }
+    }
+}
+    "#;
+
+        let mut lexer = Lexer::new(input.to_owned());
+        let object = Object::parse(&mut lexer, None).expect("copies of an object are accepted");
+        assert!(object.factory_dependencies.contains_key("K"));
+    }
+
+    #[test]
+    fn error_duplicate_object_name() {
+        let input = r#"
+object "P" {
+    code { }
+    object "P_deployed" {
+        code { }
+        object "K" {
+            code { }
+            object "K_deployed" { code { stop() } }
+        }
+    }
+    object "K" {
+        code { }
+        object "K_deployed" { code { invalid() } }
+    }
+}
+    "#;
+
+        let mut lexer = Lexer::new(input.to_owned());
+        let result = Object::parse(&mut lexer, None);
+        assert_eq!(
+            result,
+            Err(Error::DuplicateObjectName {
+                location: Location::new(11, 5),
+                identifier: "K".to_owned(),
+            }
+            .into())
+        );
     }
 }

@@ -2,7 +2,7 @@
 
 use std::{
     fs::File,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -38,6 +38,8 @@ pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/l
 pub const SOLIDITY_COLLISION_NESTED_PATH: &str = "src/tests/data/solidity/collision/a/c.sol";
 /// The paritytech/revive#622 reproducer contract at `a_c.sol`.
 pub const SOLIDITY_COLLISION_UNDERSCORE_PATH: &str = "src/tests/data/solidity/collision/a_c.sol";
+/// Two contracts named `First` and `Second` returning `1` and `2`.
+pub const SOLIDITY_TWO_CONTRACTS_PATH: &str = "src/tests/data/solidity/two_contracts.sol";
 /// The verbatim reproducer from paritytech/revive#632: two contracts calling the same library.
 pub const SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH: &str =
     "src/tests/data/solidity/link_independent_objects.sol";
@@ -208,6 +210,23 @@ pub struct CommandResult {
 /// Executes the `resolc` command with the given `arguments`.
 pub fn execute_resolc(arguments: &[&str]) -> CommandResult {
     execute_command("resolc", arguments, None)
+}
+
+/// Executes the `resolc` command with the given `arguments` inside the working `directory`.
+pub fn execute_resolc_in_directory(arguments: &[&str], directory: &Path) -> CommandResult {
+    let result = Command::new("resolc")
+        .args(arguments)
+        .current_dir(directory)
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+
+    CommandResult {
+        stdout: String::from_utf8_lossy(&result.stdout).to_string(),
+        stderr: String::from_utf8_lossy(&result.stderr).to_string(),
+        success: result.status.success(),
+        code: result.status.code().unwrap(),
+    }
 }
 
 /// Executes the `resolc` command with the given `arguments` and file path passed to `stdin`.

@@ -304,9 +304,7 @@ impl Build {
     /// # Panics
     /// If the path does not contain a colon.
     fn normalize_full_path(path: &str) -> String {
-        let mut iterator = path.split(':');
-        let path = iterator.next().expect("Always exists");
-        let name = iterator.next().expect("Always exists");
+        let (path, name) = path.rsplit_once(':').expect("Always exists");
 
         let path = PathBuf::from(path);
         let mut full_path = path

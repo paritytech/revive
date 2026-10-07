@@ -9,6 +9,9 @@ use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
     STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH, STANDARD_JSON_DEBUG_INFO_EMPTY_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_LIBRARIES_PATH,
     STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH,
     STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH, STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH,
     STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
@@ -776,6 +779,28 @@ fn populates_output_metadata_fields() {
     }
 }
 
+/// Missing libraries of a created contract are reported for its creator too.
+#[test]
+fn missing_libraries_include_factory_dependencies() {
+    for path in [
+        STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH,
+        STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH,
+    ] {
+        let result = execute_resolc_with_stdin_input(&[JSON_OPTION], path);
+        assert_command_success(&result, "Compiling with standard JSON");
+        assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+        let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+        for name in ["K", "P"] {
+            assert_eq!(
+                output["contracts"]["Ch.sol"][name]["missingLibraries"],
+                serde_json::json!(["Ch.sol:L"]),
+                "`{name}` in `{path}` should miss the library `L`"
+            );
+        }
+    }
+}
+
 /// A heap size outside the PVM memory map is reported in the standard JSON errors.
 #[test]
 fn heap_size_out_of_range() {
@@ -848,6 +873,32 @@ fn factory_dependency_outside_output_selection() {
                 .as_str()
                 .is_some_and(|bytecode| !bytecode.is_empty()),
             "the dependency `{dependency}` should be compiled"
+        );
+    }
+}
+
+/// Missing libraries of a created contract outside the output selection are reported for its creator.
+#[test]
+fn factory_dependency_outside_output_selection_missing_libraries() {
+    for arguments in [
+        vec![JSON_OPTION],
+        vec![JSON_OPTION, "--detect-missing-libraries"],
+    ] {
+        let result = execute_resolc_with_stdin_input(
+            &arguments,
+            STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_LIBRARIES_PATH,
+        );
+        assert_command_success(
+            &result,
+            "the factory dependency outside output selection libraries fixture",
+        );
+        assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+        let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+        assert_eq!(
+            output["contracts"]["A.sol"]["P"]["missingLibraries"],
+            serde_json::json!(["B.sol:L"]),
+            "`A.sol:P` should miss the library `B.sol:L` with arguments {arguments:?}"
         );
     }
 }

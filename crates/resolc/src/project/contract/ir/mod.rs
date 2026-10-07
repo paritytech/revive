@@ -6,6 +6,8 @@ use std::collections::BTreeSet;
 use serde::Deserialize;
 use serde::Serialize;
 
+use revive_yul::parser::statement::object::Object;
+
 use self::newyork::NewYork;
 use self::yul::Yul;
 
@@ -47,11 +49,7 @@ impl IR {
         &self,
         identifier_paths: &BTreeMap<String, String>,
     ) -> Vec<(String, Self)> {
-        let factory_dependencies = match self {
-            IR::Yul(yul) => &yul.object.factory_dependencies,
-            IR::NewYork(newyork) => &newyork.yul_object.factory_dependencies,
-        };
-        factory_dependencies
+        self.factory_dependencies()
             .iter()
             .filter(|(identifier, object)| {
                 object.explicit_runtime_code && !identifier_paths.contains_key(identifier.as_str())
@@ -68,6 +66,14 @@ impl IR {
                 (identifier.to_owned(), ir)
             })
             .collect()
+    }
+
+    /// Returns the identifiers of the factory dependencies.
+    pub fn factory_dependencies(&self) -> &BTreeMap<String, Object> {
+        match self {
+            IR::Yul(yul) => &yul.object.factory_dependencies,
+            IR::NewYork(newyork) => &newyork.yul_object.factory_dependencies,
+        }
     }
 
     /// Get the list of missing deployable libraries.

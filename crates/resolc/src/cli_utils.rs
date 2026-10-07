@@ -99,6 +99,9 @@ pub const STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH: &str =
 /// The verbatim reproducer from paritytech/revive#631: a factory dependency outside the output selection.
 pub const STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH: &str =
     "src/tests/data/standard_json/factory_dependency_outside_output_selection.json";
+/// A factory dependency outside the output selection calling a library.
+pub const STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_LIBRARIES_PATH: &str =
+    "src/tests/data/standard_json/factory_dependency_outside_output_selection_libraries.json";
 /// The standard JSON PVM codegen all wildcard test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.
@@ -121,6 +124,12 @@ pub const STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH: &str =
 /// `settings.polkavm.newyork` field, so it compiles through the stock pipeline.
 pub const STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH: &str =
     "src/tests/data/standard_json/yul_newyork_disabled.json";
+/// A contract creating a contract that calls a library, compiled normally.
+pub const STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH: &str =
+    "src/tests/data/standard_json/factory_dependency_libraries.json";
+/// The same input as [`STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH`] with `detectMissingLibraries` set.
+pub const STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH: &str =
+    "src/tests/data/standard_json/factory_dependency_libraries_detect.json";
 /// The standard JSON PVM codegen for all files on a per-file basis test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.

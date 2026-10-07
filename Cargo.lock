@@ -9624,6 +9624,7 @@ version = "1.1.0"
 dependencies = [
  "anyhow",
  "hex",
+ "polkavm-common 0.36.0",
  "rayon",
  "revive-common",
  "semver 1.0.28",

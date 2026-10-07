@@ -5,7 +5,9 @@ use revive_solc_json_interface::{combined_json::CombinedJson, CombinedJsonInvali
 use crate::cli_utils::{
     assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
     execute_solc, SOLIDITY_CONTRACT_PATH, SOLIDITY_INCLUDED_IMPORT_PATH,
-    SOLIDITY_REMAPPED_IMPORT_PATH, YUL_CONTRACT_PATH,
+    SOLIDITY_REMAPPED_IMPORT_PATH, SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY,
+    SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH, SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY,
+    YUL_CONTRACT_PATH,
 };
 use crate::ResolcVersion;
 
@@ -173,6 +175,27 @@ fn resolves_imports_with_remappings() {
             "src/tests/data/solidity/remapped_import.sol:U",
         ],
     );
+}
+
+/// The last of two remappings for the same prefix wins, as in solc.
+#[test]
+fn remappings_last_one_wins() {
+    let second_remapping = format!("target/={SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY}");
+    let first_remapping = format!("target/={SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY}");
+    let arguments = &[
+        second_remapping.as_str(),
+        first_remapping.as_str(),
+        SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH,
+        JSON_OPTION,
+        "abi",
+    ];
+    let result = execute_resolc(arguments);
+    assert_command_success(&result, "Compiling with combined JSON");
+
+    let combined_json: CombinedJson =
+        serde_json::from_str(&result.stdout).expect("Combined JSON output should deserialize");
+    let main = &combined_json.contracts[&format!("{SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH}:Main")];
+    assert_eq!(main.abi[0]["name"], "first");
 }
 
 #[test]

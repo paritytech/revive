@@ -26,6 +26,15 @@ pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
 pub const SOLIDITY_REMAPPED_IMPORT_PATH: &str = "src/tests/data/solidity/remapped_import.sol";
 /// The Solidity contract importing the simple contract through an include path.
 pub const SOLIDITY_INCLUDED_IMPORT_PATH: &str = "src/tests/data/solidity/included_import.sol";
+/// The Solidity contract importing `target/Target.sol`, to be remapped to one of two directories.
+pub const SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH: &str =
+    "src/tests/data/solidity/remappings_order/main.sol";
+/// The directory with the `Target` contract defining `first`.
+pub const SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY: &str =
+    "src/tests/data/solidity/remappings_order/first/";
+/// The directory with the `Target` contract defining `second`.
+pub const SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY: &str =
+    "src/tests/data/solidity/remappings_order/second/";
 /// The reproducer from paritytech/revive#624 with 129 immutables, one more than the limit allows.
 pub const SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH: &str =
     "src/tests/data/solidity/immutables_over_limit.sol";
@@ -90,6 +99,9 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
 /// The verbatim reproducer from paritytech/revive#627: a library address used only in a switch expression.
 pub const STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH: &str =
     "src/tests/data/standard_json/switch_missing_libraries.json";
+/// The standard JSON fixture remapping `target/` to `second/` and then to `first/`.
+pub const STANDARD_JSON_REMAPPINGS_ORDER_PATH: &str =
+    "src/tests/data/standard_json/remappings_order.json";
 /// The standard JSON PVM codegen all wildcard test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.

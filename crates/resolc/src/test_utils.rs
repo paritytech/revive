@@ -1,7 +1,6 @@
 //! Common helper utilities used in tests and benchmarks.
 
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Mutex;
@@ -73,7 +72,7 @@ pub fn build_solidity(
 pub fn build_solidity_with_options(
     sources: BTreeMap<String, SolcStandardJsonInputSource>,
     libraries: SolcStandardJsonInputSettingsLibraries,
-    remappings: BTreeSet<String>,
+    remappings: Vec<String>,
     optimizer_settings: OptimizerSettings,
     solc_optimizer_enabled: bool,
     suppressed_warnings: Vec<ResolcWarning>,
@@ -150,7 +149,7 @@ pub fn build_solidity_with_options(
 pub fn build_solidity_with_options_evm(
     sources: BTreeMap<String, SolcStandardJsonInputSource>,
     libraries: SolcStandardJsonInputSettingsLibraries,
-    remappings: BTreeSet<String>,
+    remappings: Vec<String>,
     solc_optimizer_enabled: bool,
 ) -> anyhow::Result<BTreeMap<String, (Bytecode, DeployedBytecode)>> {
     check_dependencies();

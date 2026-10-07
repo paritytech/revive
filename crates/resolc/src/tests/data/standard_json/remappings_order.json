@@ -1,0 +1,30 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "main.sol": {
+      "urls": ["src/tests/data/solidity/remappings_order/main.sol"]
+    },
+    "first/Target.sol": {
+      "urls": ["src/tests/data/solidity/remappings_order/first/Target.sol"]
+    },
+    "second/Target.sol": {
+      "urls": ["src/tests/data/solidity/remappings_order/second/Target.sol"]
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true
+    },
+    "remappings": [
+      "target/=second/",
+      "target/=first/"
+    ],
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi"
+        ]
+      }
+    }
+  }
+}

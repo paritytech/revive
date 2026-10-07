@@ -16,6 +16,9 @@ pub struct Source {
     /// The source file URLs.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub urls: Option<Vec<String>>,
+    /// The expected source code hash.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keccak256: Option<String>,
 }
 
 impl Source {
@@ -32,6 +35,7 @@ impl Source {
         Ok(Self {
             content: Some(content),
             urls: None,
+            keccak256: None,
         })
     }
 
@@ -86,6 +90,7 @@ impl From<String> for Source {
         Self {
             content: Some(content),
             urls: None,
+            keccak256: None,
         }
     }
 }
@@ -95,6 +100,7 @@ impl From<&Path> for Source {
         Self {
             content: None,
             urls: Some(vec![path.to_string_lossy().to_string()]),
+            keccak256: None,
         }
     }
 }

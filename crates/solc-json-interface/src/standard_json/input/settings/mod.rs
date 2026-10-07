@@ -49,6 +49,7 @@ pub struct Settings {
     )]
     pub via_ir: Option<bool>,
     /// The optimizer settings.
+    #[serde(default = "Optimizer::solc_default")]
     pub optimizer: Optimizer,
     /// The metadata settings.
     #[serde(default)]

@@ -1,0 +1,19 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "TransientCounter.sol": {
+      "urls": ["src/tests/data/solidity/transient_counter.sol"],
+      "keccak256": "0xfe1911cfec02e7f06f297b1306aef1a2685e369fcd14bd5c327b4b18979ec91d"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true
+    },
+    "outputSelection": {
+      "*": {
+        "*": ["evm.bytecode"]
+      }
+    }
+  }
+}

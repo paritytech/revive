@@ -36,6 +36,11 @@ impl Optimizer {
     pub fn default_mode() -> char {
         'z'
     }
+
+    /// The settings `solc` assumes when the optimizer is omitted.
+    pub fn solc_default() -> Self {
+        Self::new(false, Self::default_mode(), Details::default())
+    }
 }
 
 impl Default for Optimizer {

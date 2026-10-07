@@ -7,18 +7,21 @@ use revive_solc_json_interface::{
 
 use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
-    execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
-    STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH, STANDARD_JSON_DEBUG_INFO_EMPTY_PATH,
-    STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH, STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH,
-    STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
-    STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
-    STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
+    execute_solc_with_stdin_input, PVM_BLOB_START, STANDARD_JSON_ALL_OUTPUTS_PATH,
+    STANDARD_JSON_CONTRACTS_PATH, STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH,
+    STANDARD_JSON_DEBUG_INFO_EMPTY_PATH, STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH,
+    STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH, STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
+    STANDARD_JSON_NEWYORK_DISABLED_PATH, STANDARD_JSON_NEWYORK_ENABLED_PATH,
+    STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
+    STANDARD_JSON_NO_OPTIMIZER_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
     STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH,
     STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH,
     STANDARD_JSON_REVERT_STRINGS_STRIP_PATH, STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH,
-    STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH, STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH,
-    STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH, STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH,
-    STANDARD_JSON_YUL_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH,
+    STANDARD_JSON_SOURCE_KECCAK256_MATCH_PATH, STANDARD_JSON_SOURCE_KECCAK256_MISMATCH_PATH,
+    STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH, STANDARD_JSON_TRANSIENT_STORAGE_LAYOUT_PATH,
+    STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH, STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH,
+    STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
+    STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH,
 };
 use crate::{pipeline_name, ResolcVersion};
 
@@ -27,6 +30,9 @@ const MULTIPLE_MODES_ERROR: &str = "Only one mode is allowed at the same time";
 /// The `require` reason literal of the revert strings fixtures as the Yul code spells it.
 const REVERT_STRING_LITERAL: &str = r#""too small""#;
 const SOURCE_LOCATION_ANNOTATION: &str = "@src";
+const TRANSIENT_COUNTER_SOURCE_PATH: &str = "TransientCounter.sol";
+const TRANSIENT_COUNTER_CONTRACT_NAME: &str = "TransientCounter";
+const SOURCE_HASH_MISMATCH_ERROR: &str = "Mismatch between content and supplied hash";
 
 /// A subset of contracts and sources expected to exist in the JSON output.
 struct ExpectedOutput {
@@ -843,4 +849,67 @@ fn invalid_debug_input_settings() {
         let output = to_solc_standard_json_output(&result.stdout);
         assert_standard_json_errors_contain(&output, error_message);
     }
+}
+
+/// A source whose content does not match its keccak256 hash is rejected.
+#[test]
+fn source_keccak256_mismatch() {
+    let mismatch = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_SOURCE_KECCAK256_MISMATCH_PATH,
+    );
+    let mismatch_output = to_solc_standard_json_output(&mismatch.stdout);
+    assert_standard_json_errors_contain(&mismatch_output, SOURCE_HASH_MISMATCH_ERROR);
+
+    let matching =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_SOURCE_KECCAK256_MATCH_PATH);
+    assert_command_success(&matching, "a source matching its keccak256 hash");
+    let matching_output = to_solc_standard_json_output(&matching.stdout);
+    assert_no_errors(&matching_output);
+    assert!(bytecode_object(
+        &matching_output,
+        TRANSIENT_COUNTER_SOURCE_PATH,
+        TRANSIENT_COUNTER_CONTRACT_NAME
+    )
+    .starts_with(PVM_BLOB_START));
+}
+
+/// Settings without an optimizer compile.
+#[test]
+fn optimizer_input_setting_omitted() {
+    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NO_OPTIMIZER_PATH);
+    assert_command_success(&result, "a standard JSON input without optimizer settings");
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+    assert!(bytecode_object(
+        &output,
+        TRANSIENT_COUNTER_SOURCE_PATH,
+        TRANSIENT_COUNTER_CONTRACT_NAME
+    )
+    .starts_with(PVM_BLOB_START));
+}
+
+/// The transient storage layout output is passed through from solc.
+#[test]
+fn transient_storage_layout_requested() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_TRANSIENT_STORAGE_LAYOUT_PATH,
+    );
+    assert_command_success(&result, "requesting the transient storage layout");
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+
+    let contract = output
+        .contracts
+        .get(TRANSIENT_COUNTER_SOURCE_PATH)
+        .and_then(|file| file.get(TRANSIENT_COUNTER_CONTRACT_NAME))
+        .expect("the transient counter contract should exist");
+    let storage_label = contract
+        .transient_storage_layout
+        .get("storage")
+        .and_then(|storage| storage.get(0))
+        .and_then(|slot| slot.get("label"))
+        .and_then(|label| label.as_str());
+    assert_eq!(storage_label, Some("counter"));
 }

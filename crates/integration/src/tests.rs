@@ -5733,3 +5733,33 @@ fn function_name_overlapping_llvm_markers() {
 fn struct_name_injected_no_return() {
     run_function_name_fixture("StructNameInjectedNoReturn");
 }
+
+/// Reproducer from paritytech/security_findings#115.
+#[test]
+fn constructor_call_data_is_empty() {
+    let mut actions = instantiate("contracts/ConstructorCallData.sol", "ConstructorCallData");
+    let Instantiate { data, .. } = &mut actions[0] else {
+        unreachable!()
+    };
+    *data = U256::from(5).to_be_bytes::<32>().to_vec();
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"n()")[..4].to_vec(),
+    });
+    run_differential(actions);
+}
+
+/// Deploy code reads empty call data although the instantiate input carries data.
+#[test]
+fn deploy_code_call_data_is_empty() {
+    let mut actions = instantiate_yul("contracts/DeployCallData.yul", "DeployCallData");
+    let Instantiate { data, .. } = &mut actions[0] else {
+        unreachable!()
+    };
+    *data = vec![0xff; 32];
+    run_differential(actions);
+}

@@ -14,6 +14,7 @@ use revive_llvm_context::polkavm_hash;
 use revive_llvm_context::polkavm_link;
 use revive_llvm_context::DebugConfig;
 use revive_solc_json_interface::combined_json::CombinedJson;
+use revive_solc_json_interface::standard_json::output::error::source_location::SourceLocation;
 use revive_solc_json_interface::SolcStandardJsonOutput;
 use revive_solc_json_interface::SolcStandardJsonOutputContract;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
@@ -58,6 +59,7 @@ impl Build {
             .into_iter()
             .map(|(path, result)| (path, result.expect("Cannot link a project with errors")))
             .collect();
+        let mut link_errors = BTreeMap::new();
 
         loop {
             let mut linkage_data = BTreeMap::new();
@@ -65,6 +67,9 @@ impl Build {
                 .iter()
                 .filter(|(_path, contract)| contract.object_format == ObjectFormat::ELF)
             {
+                if link_errors.contains_key(path) {
+                    continue;
+                }
                 match polkavm_link(
                     &contract.build.bytecode,
                     &linker_symbols,
@@ -97,9 +102,18 @@ impl Build {
                         );
                     }
                     Ok((_memory_buffer_linked, ObjectFormat::ELF)) => {}
-                    Err(error) => self
-                        .messages
-                        .push(SolcStandardJsonOutputError::new_error(error, None, None)),
+                    Err(error) => {
+                        let source_location =
+                            SourceLocation::new(contract.identifier.path.to_owned());
+                        link_errors.insert(
+                            path.to_owned(),
+                            SolcStandardJsonOutputError::new_error(
+                                format!("{path} failed to link: {error}"),
+                                Some(source_location),
+                                None,
+                            ),
+                        );
+                    }
                 }
             }
             if linkage_data.is_empty() {
@@ -138,6 +152,9 @@ impl Build {
         let results = contracts
             .into_iter()
             .map(|(path, contract)| {
+                if let Some(error) = link_errors.remove(path.as_str()) {
+                    return (path, Err(error));
+                }
                 if contract.object_format == ObjectFormat::ELF {
                     self.messages.push(SolcStandardJsonOutputError::new_warning(
                         format!("{path} is unlinked. Consider providing missing libraries."),

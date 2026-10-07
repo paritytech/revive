@@ -1,7 +1,7 @@
 use revive_common::ObjectFormat;
 
 use crate::cli_utils::{
-    assert_command_failure, assert_command_success, execute_resolc,
+    assert_command_failure, assert_command_success, execute_resolc, execute_resolc_in_directory,
     SOLIDITY_DEPENDENCY_CONTRACT_PATH, SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH,
     SOLIDITY_LIBRARY_CALL_CONTRACT_PATH, SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH,
 };
@@ -10,54 +10,39 @@ use crate::cli_utils::{
 #[test]
 fn deploy_time_linking_works() {
     let temp_dir = tempfile::TempDir::new().unwrap();
-    let output_directory = temp_dir.path().to_path_buf();
-    let source_path = temp_dir.path().to_path_buf().join("dependency.sol");
-    std::fs::copy(SOLIDITY_DEPENDENCY_CONTRACT_PATH, &source_path).unwrap();
+    std::fs::copy(
+        SOLIDITY_DEPENDENCY_CONTRACT_PATH,
+        temp_dir.path().join("dependency.sol"),
+    )
+    .unwrap();
 
     assert_command_success(
-        &execute_resolc(&[
-            source_path.to_str().unwrap(),
-            "--bin",
-            "-o",
-            &output_directory.to_string_lossy(),
-        ]),
+        &execute_resolc_in_directory(&["dependency.sol", "--bin", "-o", "."], temp_dir.path()),
         "Missing libraries should compile fine",
     );
 
-    let dependency_blob_path = temp_dir
-        .path()
-        .to_path_buf()
-        .join("dependency.sol:Dependency.pvm");
-    let blob_path = temp_dir
-        .path()
-        .to_path_buf()
-        .join("dependency.sol:TestAssert.pvm");
+    let dependency_blob_path = "dependency.sol:Dependency.pvm";
+    let blob_path = "dependency.sol:TestAssert.pvm";
 
-    let output = execute_resolc(&[
-        "--link",
-        blob_path.to_str().unwrap(),
-        dependency_blob_path.to_str().unwrap(),
-    ]);
+    let output = execute_resolc_in_directory(
+        &["--link", blob_path, dependency_blob_path],
+        temp_dir.path(),
+    );
     assert_command_success(&output, "The linker mode with missing library should work");
     assert!(output.stdout.contains("still unresolved"));
 
-    let assert_library_path = format!(
-        "{}:Assert=0x0000000000000000000000000000000000000001",
-        source_path.to_str().unwrap()
+    let output = execute_resolc_in_directory(
+        &[
+            "--link",
+            "--libraries",
+            "dependency.sol:Assert=0x0000000000000000000000000000000000000001",
+            "--libraries",
+            "dependency.sol:AssertNe=0x0000000000000000000000000000000000000002",
+            blob_path,
+            dependency_blob_path,
+        ],
+        temp_dir.path(),
     );
-    let assert_ne_library_path = format!(
-        "{}:AssertNe=0x0000000000000000000000000000000000000002",
-        source_path.to_str().unwrap()
-    );
-    let output = execute_resolc(&[
-        "--link",
-        "--libraries",
-        &assert_library_path,
-        "--libraries",
-        &assert_ne_library_path,
-        blob_path.to_str().unwrap(),
-        dependency_blob_path.to_str().unwrap(),
-    ]);
     assert_command_success(&output, "The linker mode with all library should work");
     assert!(!output.stdout.contains("still unresolved"));
 }
@@ -95,29 +80,27 @@ fn link_output_is_independent_of_other_inputs() {
     let reference_directory = temp_dir.path().join("ref");
     let source_path = temp_dir.path().join("x.sol");
     std::fs::copy(SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH, &source_path).unwrap();
-    let library = format!(
-        "{}:L=0x1111111111111111111111111111111111111111",
-        source_path.to_str().unwrap()
-    );
+    let library = "x.sol:L=0x1111111111111111111111111111111111111111";
 
     assert_command_success(
-        &execute_resolc(&[
-            source_path.to_str().unwrap(),
-            "--bin",
-            "-o",
-            unlinked_directory.to_str().unwrap(),
-        ]),
+        &execute_resolc_in_directory(
+            &["x.sol", "--bin", "-o", unlinked_directory.to_str().unwrap()],
+            temp_dir.path(),
+        ),
         "Missing libraries should compile fine",
     );
     assert_command_success(
-        &execute_resolc(&[
-            source_path.to_str().unwrap(),
-            "--bin",
-            "-o",
-            reference_directory.to_str().unwrap(),
-            "--libraries",
-            &library,
-        ]),
+        &execute_resolc_in_directory(
+            &[
+                "x.sol",
+                "--bin",
+                "-o",
+                reference_directory.to_str().unwrap(),
+                "--libraries",
+                library,
+            ],
+            temp_dir.path(),
+        ),
         "Compiling with libraries should work",
     );
 
@@ -128,7 +111,7 @@ fn link_output_is_independent_of_other_inputs() {
     let output = execute_resolc(&[
         "--link",
         "--libraries",
-        &library,
+        library,
         blob_b_path.to_str().unwrap(),
     ]);
     assert_command_success(&output, "Linking B alone should work");
@@ -138,7 +121,7 @@ fn link_output_is_independent_of_other_inputs() {
     let output = execute_resolc(&[
         "--link",
         "--libraries",
-        &library,
+        library,
         blob_a_path.to_str().unwrap(),
         blob_b_path.to_str().unwrap(),
     ]);
@@ -160,7 +143,6 @@ fn link_output_is_independent_of_other_inputs() {
 #[test]
 fn library_address_is_not_resolved_from_library_blob() {
     let temp_dir = tempfile::TempDir::new().unwrap();
-    let output_directory = temp_dir.path().to_path_buf();
     let source_path = temp_dir
         .path()
         .to_path_buf()
@@ -168,12 +150,10 @@ fn library_address_is_not_resolved_from_library_blob() {
     std::fs::copy(SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH, &source_path).unwrap();
 
     assert_command_success(
-        &execute_resolc(&[
-            source_path.to_str().unwrap(),
-            "--bin",
-            "-o",
-            &output_directory.to_string_lossy(),
-        ]),
+        &execute_resolc_in_directory(
+            &["use_library_address.sol", "--bin", "-o", "."],
+            temp_dir.path(),
+        ),
         "Missing libraries should compile fine",
     );
 
@@ -188,11 +168,8 @@ fn library_address_is_not_resolved_from_library_blob() {
         ObjectFormat::ELF
     );
 
-    let library_path = format!(
-        "{}:L=0x1111111111111111111111111111111111111111",
-        source_path.to_str().unwrap()
-    );
-    let output = execute_resolc(&["--link", "--libraries", &library_path, &blob_path]);
+    let library_path = "use_library_address.sol:L=0x1111111111111111111111111111111111111111";
+    let output = execute_resolc(&["--link", "--libraries", library_path, &blob_path]);
     assert_command_success(&output, "The linker mode with the library should work");
     assert!(!output.stdout.contains("still unresolved"));
     assert_eq!(

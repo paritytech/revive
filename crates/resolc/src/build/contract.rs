@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::Write;
+use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -104,7 +105,12 @@ impl Contract {
             .expect("Always exists")
             .to_str()
             .expect("Always valid");
-        let output_path = path.to_owned();
+        let mut output_path = path.to_owned();
+        for component in file_path.parent().into_iter().flat_map(Path::components) {
+            if let Component::Normal(name) = component {
+                output_path.push(name);
+            }
+        }
         std::fs::create_dir_all(output_path.as_path())?;
 
         if output_metadata {

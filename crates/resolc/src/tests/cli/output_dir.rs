@@ -6,11 +6,16 @@ use tempfile::tempdir;
 
 use crate::cli_utils::{
     assert_command_success, execute_resolc, CommandResult, SOLIDITY_COLLISION_NESTED_PATH,
-    SOLIDITY_COLLISION_UNDERSCORE_PATH, SOLIDITY_CONTRACT_PATH,
+    SOLIDITY_COLLISION_UNDERSCORE_PATH, SOLIDITY_CONTRACT_PATH, SOLIDITY_DUPLICATE_FIRST_PATH,
+    SOLIDITY_DUPLICATE_SECOND_PATH,
 };
 
-const OUTPUT_BIN_FILE_PATH: &str = "contract.sol:C.pvm";
-const OUTPUT_ASM_FILE_PATH: &str = "contract.sol:C.pvmasm";
+const OUTPUT_BIN_FILE_PATH: &str = "src/tests/data/solidity/contract.sol:C.pvm";
+const OUTPUT_ASM_FILE_PATH: &str = "src/tests/data/solidity/contract.sol:C.pvmasm";
+const OUTPUT_DUPLICATE_FIRST_FILE_PATH: &str =
+    "src/tests/data/solidity/first/Duplicate.sol:Duplicate.pvm";
+const OUTPUT_DUPLICATE_SECOND_FILE_PATH: &str =
+    "src/tests/data/solidity/second/Duplicate.sol:Duplicate.pvm";
 const OUTPUT_LLVM_OPTIMIZED_FILE_PATH: &str = "src_tests_data_solidity_contract.sol.C.optimized.ll";
 const OUTPUT_LLVM_UNOPTIMIZED_FILE_PATH: &str =
     "src_tests_data_solidity_contract.sol.C.unoptimized.ll";
@@ -151,4 +156,24 @@ fn debug_output_file_names_do_not_collide() {
             "{file_name} should be generated from {source_path}"
         );
     }
+}
+
+/// Contracts with the same name in files with the same name get separate output files.
+#[test]
+fn output_file_names_do_not_collide() {
+    let temp_dir = tempdir().unwrap();
+    let arguments = &[
+        "--bin",
+        "-o",
+        temp_dir.path().to_str().unwrap(),
+        SOLIDITY_DUPLICATE_FIRST_PATH,
+        SOLIDITY_DUPLICATE_SECOND_PATH,
+    ];
+    let result = execute_resolc(arguments);
+    assert_valid_output_file(&result, temp_dir.path(), OUTPUT_DUPLICATE_FIRST_FILE_PATH);
+    assert_valid_output_file(&result, temp_dir.path(), OUTPUT_DUPLICATE_SECOND_FILE_PATH);
+
+    let first = std::fs::read(temp_dir.path().join(OUTPUT_DUPLICATE_FIRST_FILE_PATH)).unwrap();
+    let second = std::fs::read(temp_dir.path().join(OUTPUT_DUPLICATE_SECOND_FILE_PATH)).unwrap();
+    assert_ne!(first, second, "Both contracts should keep their own output");
 }

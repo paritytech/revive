@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-42581ec6.js";
+            window.path_to_searchindex_js = "searchindex-d800ae7a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-f74aae8e.js"></script>
@@ -1087,8 +1087,6 @@ can observe it.</p>
 <li><a href="#difficulty"><code>difficulty</code></a></li>
 <li><a href="#gaslimit"><code>gaslimit</code></a></li>
 <li><a href="#basefee"><code>basefee</code></a></li>
-<li><a href="#blobbasefee"><code>blobbasefee</code></a></li>
-<li><a href="#blobhash"><code>blobhash</code></a></li>
 <li><a href="#blockhash"><code>blockhash</code></a></li>
 <li><a href="#selfbalance"><code>selfbalance</code></a></li>
 <li><a href="#gasprice"><code>gasprice</code></a></li>
@@ -2746,18 +2744,27 @@ let v2: i8 := truncate&lt;i8&gt;(v1: i64)
 </div>
 <h4 id="annotations-46"><a class="header" href="#annotations-46">Annotations</a></h4>
 <p>None.</p>
-<h3 id="blobbasefee"><a class="header" href="#blobbasefee"><code>blobbasefee</code></a></h3>
-<p>(<code>Expression::BlobBaseFee</code>)</p>
+<h3 id="blockhash"><a class="header" href="#blockhash"><code>blockhash</code></a></h3>
+<p>(<code>Expression::BlockHash</code>)</p>
 <h4 id="description-47"><a class="header" href="#description-47">Description</a></h4>
-<p>Current block’s EIP-4844 blob base fee per gas.</p>
+<p>Hash of the block with the given number. Per EVM, valid only for the most recent 256 blocks; outside that range the result is <code>0</code>.</p>
 <h4 id="syntax-47"><a class="header" href="#syntax-47">Syntax</a></h4>
-<pre><code class="language-text">blobbasefee()
+<pre><code class="language-text">blockhash($number[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-47"><a class="header" href="#example-47">Example</a></h4>
-<pre><code class="language-text">let v0 := blobbasefee()
+<pre><code class="language-text">let v1 := blockhash(v0)
 </code></pre>
 <h4 id="operands-47"><a class="header" href="#operands-47">Operands</a></h4>
-<p>None.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>number</code></td><td><code>i256</code></td><td>Block number; forward analysis widens to <code>i256</code>.</td></tr>
+</tbody>
+</table>
+</div>
 <h4 id="result-and-purity-47"><a class="header" href="#result-and-purity-47">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -2771,27 +2778,18 @@ let v2: i8 := truncate&lt;i8&gt;(v1: i64)
 </div>
 <h4 id="annotations-47"><a class="header" href="#annotations-47">Annotations</a></h4>
 <p>None.</p>
-<h3 id="blobhash"><a class="header" href="#blobhash"><code>blobhash</code></a></h3>
-<p>(<code>Expression::BlobHash</code>)</p>
+<h3 id="selfbalance"><a class="header" href="#selfbalance"><code>selfbalance</code></a></h3>
+<p>(<code>Expression::SelfBalance</code>)</p>
 <h4 id="description-48"><a class="header" href="#description-48">Description</a></h4>
-<p>Versioned hash of the blob at the given index in the current transaction’s blob list.</p>
+<p>Balance (in wei) of the contract executing the current call frame. Cheaper than <code>balance(address())</code>.</p>
 <h4 id="syntax-48"><a class="header" href="#syntax-48">Syntax</a></h4>
-<pre><code class="language-text">blobhash($index[: &lt;type&gt;])
+<pre><code class="language-text">selfbalance()
 </code></pre>
 <h4 id="example-48"><a class="header" href="#example-48">Example</a></h4>
-<pre><code class="language-text">let v1 := blobhash(v0)
+<pre><code class="language-text">let v0 := selfbalance()
 </code></pre>
 <h4 id="operands-48"><a class="header" href="#operands-48">Operands</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
-</thead>
-<tbody>
-<tr><td><code>index</code></td><td><code>i256</code></td><td>Blob index; forward analysis widens to at least <code>i64</code>.</td></tr>
-</tbody>
-</table>
-</div>
+<p>None.</p>
 <h4 id="result-and-purity-48"><a class="header" href="#result-and-purity-48">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -2805,27 +2803,18 @@ let v2: i8 := truncate&lt;i8&gt;(v1: i64)
 </div>
 <h4 id="annotations-48"><a class="header" href="#annotations-48">Annotations</a></h4>
 <p>None.</p>
-<h3 id="blockhash"><a class="header" href="#blockhash"><code>blockhash</code></a></h3>
-<p>(<code>Expression::BlockHash</code>)</p>
+<h3 id="gasprice"><a class="header" href="#gasprice"><code>gasprice</code></a></h3>
+<p>(<code>Expression::GasPrice</code>)</p>
 <h4 id="description-49"><a class="header" href="#description-49">Description</a></h4>
-<p>Hash of the block with the given number. Per EVM, valid only for the most recent 256 blocks; outside that range the result is <code>0</code>.</p>
+<p>Effective gas price of the current transaction.</p>
 <h4 id="syntax-49"><a class="header" href="#syntax-49">Syntax</a></h4>
-<pre><code class="language-text">blockhash($number[: &lt;type&gt;])
+<pre><code class="language-text">gasprice()
 </code></pre>
 <h4 id="example-49"><a class="header" href="#example-49">Example</a></h4>
-<pre><code class="language-text">let v1 := blockhash(v0)
+<pre><code class="language-text">let v0 := gasprice()
 </code></pre>
 <h4 id="operands-49"><a class="header" href="#operands-49">Operands</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
-</thead>
-<tbody>
-<tr><td><code>number</code></td><td><code>i256</code></td><td>Block number; forward analysis widens to <code>i256</code>.</td></tr>
-</tbody>
-</table>
-</div>
+<p>None.</p>
 <h4 id="result-and-purity-49"><a class="header" href="#result-and-purity-49">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -2839,18 +2828,27 @@ let v2: i8 := truncate&lt;i8&gt;(v1: i64)
 </div>
 <h4 id="annotations-49"><a class="header" href="#annotations-49">Annotations</a></h4>
 <p>None.</p>
-<h3 id="selfbalance"><a class="header" href="#selfbalance"><code>selfbalance</code></a></h3>
-<p>(<code>Expression::SelfBalance</code>)</p>
+<h3 id="calldataload"><a class="header" href="#calldataload"><code>calldataload</code></a></h3>
+<p>(<code>Expression::CallDataLoad</code>)</p>
 <h4 id="description-50"><a class="header" href="#description-50">Description</a></h4>
-<p>Balance (in wei) of the contract executing the current call frame. Cheaper than <code>balance(address())</code>.</p>
+<p>Read 32 bytes from the current call’s calldata at the given offset. Reads past the end of calldata return zero bytes.</p>
 <h4 id="syntax-50"><a class="header" href="#syntax-50">Syntax</a></h4>
-<pre><code class="language-text">selfbalance()
+<pre><code class="language-text">calldataload($offset[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-50"><a class="header" href="#example-50">Example</a></h4>
-<pre><code class="language-text">let v0 := selfbalance()
+<pre><code class="language-text">let v1 := calldataload(v0)
 </code></pre>
 <h4 id="operands-50"><a class="header" href="#operands-50">Operands</a></h4>
-<p>None.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Byte offset into calldata.</td></tr>
+</tbody>
+</table>
+</div>
 <h4 id="result-and-purity-50"><a class="header" href="#result-and-purity-50">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -2864,15 +2862,15 @@ let v2: i8 := truncate&lt;i8&gt;(v1: i64)
 </div>
 <h4 id="annotations-50"><a class="header" href="#annotations-50">Annotations</a></h4>
 <p>None.</p>
-<h3 id="gasprice"><a class="header" href="#gasprice"><code>gasprice</code></a></h3>
-<p>(<code>Expression::GasPrice</code>)</p>
+<h3 id="calldatasize"><a class="header" href="#calldatasize"><code>calldatasize</code></a></h3>
+<p>(<code>Expression::CallDataSize</code>)</p>
 <h4 id="description-51"><a class="header" href="#description-51">Description</a></h4>
-<p>Effective gas price of the current transaction.</p>
+<p>Length of the current call’s calldata, in bytes.</p>
 <h4 id="syntax-51"><a class="header" href="#syntax-51">Syntax</a></h4>
-<pre><code class="language-text">gasprice()
+<pre><code class="language-text">calldatasize()
 </code></pre>
 <h4 id="example-51"><a class="header" href="#example-51">Example</a></h4>
-<pre><code class="language-text">let v0 := gasprice()
+<pre><code class="language-text">let v0: i64 := calldatasize()
 </code></pre>
 <h4 id="operands-51"><a class="header" href="#operands-51">Operands</a></h4>
 <p>None.</p>
@@ -2883,33 +2881,24 @@ let v2: i8 := truncate&lt;i8&gt;(v1: i64)
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td><code>i256</code></td><td>Pure</td></tr>
+<tr><td><code>i64</code></td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
 <h4 id="annotations-51"><a class="header" href="#annotations-51">Annotations</a></h4>
 <p>None.</p>
-<h3 id="calldataload"><a class="header" href="#calldataload"><code>calldataload</code></a></h3>
-<p>(<code>Expression::CallDataLoad</code>)</p>
+<h3 id="returndatasize"><a class="header" href="#returndatasize"><code>returndatasize</code></a></h3>
+<p>(<code>Expression::ReturnDataSize</code>)</p>
 <h4 id="description-52"><a class="header" href="#description-52">Description</a></h4>
-<p>Read 32 bytes from the current call’s calldata at the given offset. Reads past the end of calldata return zero bytes.</p>
+<p>Length of the most recently returned data buffer from a sub-call, in bytes. Modeled as pure per IR but reflects the last <code>ExternalCall</code> / <code>Create</code> result; consumers must respect that ordering.</p>
 <h4 id="syntax-52"><a class="header" href="#syntax-52">Syntax</a></h4>
-<pre><code class="language-text">calldataload($offset[: &lt;type&gt;])
+<pre><code class="language-text">returndatasize()
 </code></pre>
 <h4 id="example-52"><a class="header" href="#example-52">Example</a></h4>
-<pre><code class="language-text">let v1 := calldataload(v0)
+<pre><code class="language-text">let v0: i64 := returndatasize()
 </code></pre>
 <h4 id="operands-52"><a class="header" href="#operands-52">Operands</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
-</thead>
-<tbody>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Byte offset into calldata.</td></tr>
-</tbody>
-</table>
-</div>
+<p>None.</p>
 <h4 id="result-and-purity-52"><a class="header" href="#result-and-purity-52">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -2917,21 +2906,21 @@ let v2: i8 := truncate&lt;i8&gt;(v1: i64)
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td><code>i256</code></td><td>Pure</td></tr>
+<tr><td><code>i64</code></td><td>Pure (per IR; see Description)</td></tr>
 </tbody>
 </table>
 </div>
 <h4 id="annotations-52"><a class="header" href="#annotations-52">Annotations</a></h4>
 <p>None.</p>
-<h3 id="calldatasize"><a class="header" href="#calldatasize"><code>calldatasize</code></a></h3>
-<p>(<code>Expression::CallDataSize</code>)</p>
+<h3 id="codesize"><a class="header" href="#codesize"><code>codesize</code></a></h3>
+<p>(<code>Expression::CodeSize</code>)</p>
 <h4 id="description-53"><a class="header" href="#description-53">Description</a></h4>
-<p>Length of the current call’s calldata, in bytes.</p>
+<p>Size of the currently executing code, in bytes.</p>
 <h4 id="syntax-53"><a class="header" href="#syntax-53">Syntax</a></h4>
-<pre><code class="language-text">calldatasize()
+<pre><code class="language-text">codesize()
 </code></pre>
 <h4 id="example-53"><a class="header" href="#example-53">Example</a></h4>
-<pre><code class="language-text">let v0: i64 := calldatasize()
+<pre><code class="language-text">let v0: i64 := codesize()
 </code></pre>
 <h4 id="operands-53"><a class="header" href="#operands-53">Operands</a></h4>
 <p>None.</p>
@@ -2948,44 +2937,28 @@ let v2: i8 := truncate&lt;i8&gt;(v1: i64)
 </div>
 <h4 id="annotations-53"><a class="header" href="#annotations-53">Annotations</a></h4>
 <p>None.</p>
-<h3 id="returndatasize"><a class="header" href="#returndatasize"><code>returndatasize</code></a></h3>
-<p>(<code>Expression::ReturnDataSize</code>)</p>
+<h3 id="extcodesize"><a class="header" href="#extcodesize"><code>extcodesize</code></a></h3>
+<p>(<code>Expression::ExtCodeSize</code>)</p>
 <h4 id="description-54"><a class="header" href="#description-54">Description</a></h4>
-<p>Length of the most recently returned data buffer from a sub-call, in bytes. Modeled as pure per IR but reflects the last <code>ExternalCall</code> / <code>Create</code> result; consumers must respect that ordering.</p>
+<p>Size of the code deployed at the given address, in bytes. Returns <code>0</code> for accounts with no deployed code.</p>
 <h4 id="syntax-54"><a class="header" href="#syntax-54">Syntax</a></h4>
-<pre><code class="language-text">returndatasize()
+<pre><code class="language-text">extcodesize($address[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-54"><a class="header" href="#example-54">Example</a></h4>
-<pre><code class="language-text">let v0: i64 := returndatasize()
+<pre><code class="language-text">let v1: i64 := extcodesize(v0: i160)
 </code></pre>
 <h4 id="operands-54"><a class="header" href="#operands-54">Operands</a></h4>
-<p>None.</p>
-<h4 id="result-and-purity-54"><a class="header" href="#result-and-purity-54">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Result</th><th>Purity</th></tr>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>i64</code></td><td>Pure (per IR; see Description)</td></tr>
+<tr><td><code>address</code></td><td><code>i256</code></td><td>Account address; forward analysis widens to at least <code>i160</code>.</td></tr>
 </tbody>
 </table>
 </div>
-<h4 id="annotations-54"><a class="header" href="#annotations-54">Annotations</a></h4>
-<p>None.</p>
-<h3 id="codesize"><a class="header" href="#codesize"><code>codesize</code></a></h3>
-<p>(<code>Expression::CodeSize</code>)</p>
-<h4 id="description-55"><a class="header" href="#description-55">Description</a></h4>
-<p>Size of the currently executing code, in bytes.</p>
-<h4 id="syntax-55"><a class="header" href="#syntax-55">Syntax</a></h4>
-<pre><code class="language-text">codesize()
-</code></pre>
-<h4 id="example-55"><a class="header" href="#example-55">Example</a></h4>
-<pre><code class="language-text">let v0: i64 := codesize()
-</code></pre>
-<h4 id="operands-55"><a class="header" href="#operands-55">Operands</a></h4>
-<p>None.</p>
-<h4 id="result-and-purity-55"><a class="header" href="#result-and-purity-55">Result and purity</a></h4>
+<h4 id="result-and-purity-54"><a class="header" href="#result-and-purity-54">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -2996,17 +2969,51 @@ let v2: i8 := truncate&lt;i8&gt;(v1: i64)
 </tbody>
 </table>
 </div>
+<h4 id="annotations-54"><a class="header" href="#annotations-54">Annotations</a></h4>
+<p>None.</p>
+<h3 id="extcodehash"><a class="header" href="#extcodehash"><code>extcodehash</code></a></h3>
+<p>(<code>Expression::ExtCodeHash</code>)</p>
+<h4 id="description-55"><a class="header" href="#description-55">Description</a></h4>
+<p>Keccak-256 hash of the code deployed at the given address. Returns <code>0</code> for non-existent accounts.</p>
+<h4 id="syntax-55"><a class="header" href="#syntax-55">Syntax</a></h4>
+<pre><code class="language-text">extcodehash($address[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-55"><a class="header" href="#example-55">Example</a></h4>
+<pre><code class="language-text">let v1 := extcodehash(v0: i160)
+</code></pre>
+<h4 id="operands-55"><a class="header" href="#operands-55">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>address</code></td><td><code>i256</code></td><td>Account address; forward analysis widens to at least <code>i160</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-55"><a class="header" href="#result-and-purity-55">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i256</code></td><td>Pure</td></tr>
+</tbody>
+</table>
+</div>
 <h4 id="annotations-55"><a class="header" href="#annotations-55">Annotations</a></h4>
 <p>None.</p>
-<h3 id="extcodesize"><a class="header" href="#extcodesize"><code>extcodesize</code></a></h3>
-<p>(<code>Expression::ExtCodeSize</code>)</p>
+<h3 id="balance"><a class="header" href="#balance"><code>balance</code></a></h3>
+<p>(<code>Expression::Balance</code>)</p>
 <h4 id="description-56"><a class="header" href="#description-56">Description</a></h4>
-<p>Size of the code deployed at the given address, in bytes. Returns <code>0</code> for accounts with no deployed code.</p>
+<p>Balance (in wei) of the given account address. Use <a href="#selfbalance"><code>selfbalance</code></a> for the contract executing the current call frame (cheaper).</p>
 <h4 id="syntax-56"><a class="header" href="#syntax-56">Syntax</a></h4>
-<pre><code class="language-text">extcodesize($address[: &lt;type&gt;])
+<pre><code class="language-text">balance($address[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-56"><a class="header" href="#example-56">Example</a></h4>
-<pre><code class="language-text">let v1: i64 := extcodesize(v0: i160)
+<pre><code class="language-text">let v1 := balance(v0: i160)
 </code></pre>
 <h4 id="operands-56"><a class="header" href="#operands-56">Operands</a></h4>
 <div class="table-wrapper">
@@ -3026,92 +3033,24 @@ let v2: i8 := truncate&lt;i8&gt;(v1: i64)
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td><code>i64</code></td><td>Pure</td></tr>
+<tr><td><code>i256</code></td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
 <h4 id="annotations-56"><a class="header" href="#annotations-56">Annotations</a></h4>
 <p>None.</p>
-<h3 id="extcodehash"><a class="header" href="#extcodehash"><code>extcodehash</code></a></h3>
-<p>(<code>Expression::ExtCodeHash</code>)</p>
-<h4 id="description-57"><a class="header" href="#description-57">Description</a></h4>
-<p>Keccak-256 hash of the code deployed at the given address. Returns <code>0</code> for non-existent accounts.</p>
-<h4 id="syntax-57"><a class="header" href="#syntax-57">Syntax</a></h4>
-<pre><code class="language-text">extcodehash($address[: &lt;type&gt;])
-</code></pre>
-<h4 id="example-57"><a class="header" href="#example-57">Example</a></h4>
-<pre><code class="language-text">let v1 := extcodehash(v0: i160)
-</code></pre>
-<h4 id="operands-57"><a class="header" href="#operands-57">Operands</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
-</thead>
-<tbody>
-<tr><td><code>address</code></td><td><code>i256</code></td><td>Account address; forward analysis widens to at least <code>i160</code>.</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="result-and-purity-57"><a class="header" href="#result-and-purity-57">Result and purity</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Result</th><th>Purity</th></tr>
-</thead>
-<tbody>
-<tr><td><code>i256</code></td><td>Pure</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="annotations-57"><a class="header" href="#annotations-57">Annotations</a></h4>
-<p>None.</p>
-<h3 id="balance"><a class="header" href="#balance"><code>balance</code></a></h3>
-<p>(<code>Expression::Balance</code>)</p>
-<h4 id="description-58"><a class="header" href="#description-58">Description</a></h4>
-<p>Balance (in wei) of the given account address. Use <a href="#selfbalance"><code>selfbalance</code></a> for the contract executing the current call frame (cheaper).</p>
-<h4 id="syntax-58"><a class="header" href="#syntax-58">Syntax</a></h4>
-<pre><code class="language-text">balance($address[: &lt;type&gt;])
-</code></pre>
-<h4 id="example-58"><a class="header" href="#example-58">Example</a></h4>
-<pre><code class="language-text">let v1 := balance(v0: i160)
-</code></pre>
-<h4 id="operands-58"><a class="header" href="#operands-58">Operands</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
-</thead>
-<tbody>
-<tr><td><code>address</code></td><td><code>i256</code></td><td>Account address; forward analysis widens to at least <code>i160</code>.</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="result-and-purity-58"><a class="header" href="#result-and-purity-58">Result and purity</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Result</th><th>Purity</th></tr>
-</thead>
-<tbody>
-<tr><td><code>i256</code></td><td>Pure</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="annotations-58"><a class="header" href="#annotations-58">Annotations</a></h4>
-<p>None.</p>
 <h3 id="mload"><a class="header" href="#mload"><code>mload</code></a></h3>
 <p>(<code>Expression::MLoad</code>)</p>
-<h4 id="description-59"><a class="header" href="#description-59">Description</a></h4>
+<h4 id="description-57"><a class="header" href="#description-57">Description</a></h4>
 <p>Read a 32-byte word from emulated EVM linear memory at <code>offset</code>. The word is read big-endian per EVM semantics. Pure per IR, but reads after writes return the new value; the memory passes track read/write dependencies separately.</p>
-<h4 id="syntax-59"><a class="header" href="#syntax-59">Syntax</a></h4>
+<h4 id="syntax-57"><a class="header" href="#syntax-57">Syntax</a></h4>
 <pre><code class="language-text">mload($offset[: &lt;type&gt;]) [/* &lt;region&gt; */]
 </code></pre>
-<h4 id="example-59"><a class="header" href="#example-59">Example</a></h4>
+<h4 id="example-57"><a class="header" href="#example-57">Example</a></h4>
 <pre><code class="language-text">let v1 := mload(v0: i64)
 let v2: i32 := mload(v3: i64) /* free_ptr */
 </code></pre>
-<h4 id="operands-59"><a class="header" href="#operands-59">Operands</a></h4>
+<h4 id="operands-57"><a class="header" href="#operands-57">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3122,7 +3061,7 @@ let v2: i32 := mload(v3: i64) /* free_ptr */
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-59"><a class="header" href="#result-and-purity-59">Result and purity</a></h4>
+<h4 id="result-and-purity-57"><a class="header" href="#result-and-purity-57">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3133,7 +3072,7 @@ let v2: i32 := mload(v3: i64) /* free_ptr */
 </tbody>
 </table>
 </div>
-<h4 id="annotations-59"><a class="header" href="#annotations-59">Annotations</a></h4>
+<h4 id="annotations-57"><a class="header" href="#annotations-57">Annotations</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3147,14 +3086,92 @@ let v2: i32 := mload(v3: i64) /* free_ptr */
 <p>Same tagging rules as <a href="#mstore"><code>mstore</code></a>. The region also determines the result width: a load from <code>FreePointerSlot</code> produces an <code>i32</code> since the FMP fits in a pointer-sized word.</p>
 <h3 id="sload"><a class="header" href="#sload"><code>sload</code></a></h3>
 <p>(<code>Expression::SLoad</code>)</p>
-<h4 id="description-60"><a class="header" href="#description-60">Description</a></h4>
+<h4 id="description-58"><a class="header" href="#description-58">Description</a></h4>
 <p>Read a 32-byte word from persistent contract storage at the given key. Pure per IR; reads after writes to the same slot return the new value.</p>
-<h4 id="syntax-60"><a class="header" href="#syntax-60">Syntax</a></h4>
+<h4 id="syntax-58"><a class="header" href="#syntax-58">Syntax</a></h4>
 <pre><code class="language-text">sload($key[: &lt;type&gt;]) [/* slot: 0x&lt;hex&gt; */]
 </code></pre>
-<h4 id="example-60"><a class="header" href="#example-60">Example</a></h4>
+<h4 id="example-58"><a class="header" href="#example-58">Example</a></h4>
 <pre><code class="language-text">let v1 := sload(v0)
 let v2 := sload(v3) /* slot: 0x0 */
+</code></pre>
+<h4 id="operands-58"><a class="header" href="#operands-58">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>key</code></td><td><code>i256</code></td><td>Storage slot.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-58"><a class="header" href="#result-and-purity-58">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i256</code></td><td>Pure (per IR; see Description)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-58"><a class="header" href="#annotations-58">Annotations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source field</th><th>Printed as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>static_slot: Option&lt;BigUint&gt;</code></td><td><code>/* slot: 0x&lt;hex&gt; */</code> when set; suppressed otherwise</td></tr>
+</tbody>
+</table>
+</div>
+<p>Same tagging rules as <a href="#sstore"><code>sstore</code></a>. The printer renders the annotation whenever the field is <code>Some</code> and the deduplicator’s canonicalizer partitions signatures by slot; no pass currently writes <code>Some(...)</code>, however, so in present-day dumps the annotation is dormant.</p>
+<h3 id="tload"><a class="header" href="#tload"><code>tload</code></a></h3>
+<p>(<code>Expression::TLoad</code>)</p>
+<h4 id="description-59"><a class="header" href="#description-59">Description</a></h4>
+<p>Read a 32-byte word from transient storage at the given key. Transient storage is wiped at the end of the transaction; pair with <a href="#tstore"><code>tstore</code></a>.</p>
+<h4 id="syntax-59"><a class="header" href="#syntax-59">Syntax</a></h4>
+<pre><code class="language-text">tload($key[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-59"><a class="header" href="#example-59">Example</a></h4>
+<pre><code class="language-text">let v1 := tload(v0)
+</code></pre>
+<h4 id="operands-59"><a class="header" href="#operands-59">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>key</code></td><td><code>i256</code></td><td>Transient storage slot.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-59"><a class="header" href="#result-and-purity-59">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td><code>i256</code></td><td>Pure (per IR; see Description)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-59"><a class="header" href="#annotations-59">Annotations</a></h4>
+<p>None. The IR does not track a static slot for <code>tload</code>.</p>
+<h3 id="mapping_sload"><a class="header" href="#mapping_sload"><code>mapping_sload</code></a></h3>
+<p>(<code>Expression::MappingSLoad</code>)</p>
+<h4 id="description-60"><a class="header" href="#description-60">Description</a></h4>
+<p>Compound load for a Solidity mapping element. Equivalent to <code>mstore(0, key); mstore(32, slot); sload(keccak256(0, 64))</code> but emitted as a single outlined call after the <code>mapping_access_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> — itself produced by <code>mem_opt</code>’s keccak fusion — followed by an <code>sload</code> whose key has a single consumer). Only valid when the intermediate hash is used exclusively by this load.</p>
+<h4 id="syntax-60"><a class="header" href="#syntax-60">Syntax</a></h4>
+<pre><code class="language-text">mapping_sload($key[: &lt;type&gt;], $slot[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-60"><a class="header" href="#example-60">Example</a></h4>
+<pre><code class="language-text">let v2 := mapping_sload(v0: i160, v1)
 </code></pre>
 <h4 id="operands-60"><a class="header" href="#operands-60">Operands</a></h4>
 <div class="table-wrapper">
@@ -3163,7 +3180,8 @@ let v2 := sload(v3) /* slot: 0x0 */
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>key</code></td><td><code>i256</code></td><td>Storage slot.</td></tr>
+<tr><td><code>key</code></td><td><code>i256</code></td><td>Mapping key; often narrowed to <code>i160</code> for address keys.</td></tr>
+<tr><td><code>slot</code></td><td><code>i256</code></td><td>The mapping’s declared storage slot.</td></tr>
 </tbody>
 </table>
 </div>
@@ -3179,38 +3197,19 @@ let v2 := sload(v3) /* slot: 0x0 */
 </table>
 </div>
 <h4 id="annotations-60"><a class="header" href="#annotations-60">Annotations</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Source field</th><th>Printed as</th></tr>
-</thead>
-<tbody>
-<tr><td><code>static_slot: Option&lt;BigUint&gt;</code></td><td><code>/* slot: 0x&lt;hex&gt; */</code> when set; suppressed otherwise</td></tr>
-</tbody>
-</table>
-</div>
-<p>Same tagging rules as <a href="#sstore"><code>sstore</code></a>. The printer renders the annotation whenever the field is <code>Some</code> and the deduplicator’s canonicalizer partitions signatures by slot; no pass currently writes <code>Some(...)</code>, however, so in present-day dumps the annotation is dormant.</p>
-<h3 id="tload"><a class="header" href="#tload"><code>tload</code></a></h3>
-<p>(<code>Expression::TLoad</code>)</p>
+<p>None. The fused statement’s effective storage slot is the keccak hash of the key and the declared slot, which is never a compile-time constant; no <code>static_slot</code> hint is surfaced.</p>
+<h3 id="dataoffset-1"><a class="header" href="#dataoffset-1"><code>dataoffset</code></a></h3>
+<p>(<code>Expression::DataOffset</code>)</p>
 <h4 id="description-61"><a class="header" href="#description-61">Description</a></h4>
-<p>Read a 32-byte word from transient storage at the given key. Transient storage is wiped at the end of the transaction; pair with <a href="#tstore"><code>tstore</code></a>.</p>
+<p>Offset of a named data segment within the deployed code. The identifier is a string carried in the IR’s <code>id: String</code> field; the linker resolves it to a concrete offset.</p>
 <h4 id="syntax-61"><a class="header" href="#syntax-61">Syntax</a></h4>
-<pre><code class="language-text">tload($key[: &lt;type&gt;])
+<pre><code class="language-text">dataoffset("&lt;id&gt;")
 </code></pre>
 <h4 id="example-61"><a class="header" href="#example-61">Example</a></h4>
-<pre><code class="language-text">let v1 := tload(v0)
+<pre><code class="language-text">let v0 := dataoffset("MyContract_deployed")
 </code></pre>
 <h4 id="operands-61"><a class="header" href="#operands-61">Operands</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
-</thead>
-<tbody>
-<tr><td><code>key</code></td><td><code>i256</code></td><td>Transient storage slot.</td></tr>
-</tbody>
-</table>
-</div>
+<p>None — the identifier is a quoted string literal in the syntax position, not an operand.</p>
 <h4 id="result-and-purity-61"><a class="header" href="#result-and-purity-61">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -3218,34 +3217,33 @@ let v2 := sload(v3) /* slot: 0x0 */
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td><code>i256</code></td><td>Pure (per IR; see Description)</td></tr>
+<tr><td><code>i256</code></td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
 <h4 id="annotations-61"><a class="header" href="#annotations-61">Annotations</a></h4>
-<p>None. The IR does not track a static slot for <code>tload</code>.</p>
-<h3 id="mapping_sload"><a class="header" href="#mapping_sload"><code>mapping_sload</code></a></h3>
-<p>(<code>Expression::MappingSLoad</code>)</p>
-<h4 id="description-62"><a class="header" href="#description-62">Description</a></h4>
-<p>Compound load for a Solidity mapping element. Equivalent to <code>mstore(0, key); mstore(32, slot); sload(keccak256(0, 64))</code> but emitted as a single outlined call after the <code>mapping_access_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> — itself produced by <code>mem_opt</code>’s keccak fusion — followed by an <code>sload</code> whose key has a single consumer). Only valid when the intermediate hash is used exclusively by this load.</p>
-<h4 id="syntax-62"><a class="header" href="#syntax-62">Syntax</a></h4>
-<pre><code class="language-text">mapping_sload($key[: &lt;type&gt;], $slot[: &lt;type&gt;])
-</code></pre>
-<h4 id="example-62"><a class="header" href="#example-62">Example</a></h4>
-<pre><code class="language-text">let v2 := mapping_sload(v0: i160, v1)
-</code></pre>
-<h4 id="operands-62"><a class="header" href="#operands-62">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+<tr><th>Source field</th><th>Printed as</th></tr>
 </thead>
 <tbody>
-<tr><td><code>key</code></td><td><code>i256</code></td><td>Mapping key; often narrowed to <code>i160</code> for address keys.</td></tr>
-<tr><td><code>slot</code></td><td><code>i256</code></td><td>The mapping’s declared storage slot.</td></tr>
+<tr><td><code>id: String</code></td><td>The quoted identifier in the syntax position (not a comment annotation; it is the expression itself).</td></tr>
 </tbody>
 </table>
 </div>
+<h3 id="datasize-1"><a class="header" href="#datasize-1"><code>datasize</code></a></h3>
+<p>(<code>Expression::DataSize</code>)</p>
+<h4 id="description-62"><a class="header" href="#description-62">Description</a></h4>
+<p>Size of a named data segment within the deployed code, in bytes. The identifier is resolved by the linker.</p>
+<h4 id="syntax-62"><a class="header" href="#syntax-62">Syntax</a></h4>
+<pre><code class="language-text">datasize("&lt;id&gt;")
+</code></pre>
+<h4 id="example-62"><a class="header" href="#example-62">Example</a></h4>
+<pre><code class="language-text">let v0: i64 := datasize("MyContract_deployed")
+</code></pre>
+<h4 id="operands-62"><a class="header" href="#operands-62">Operands</a></h4>
+<p>None — the identifier is a quoted string literal in the syntax position, not an operand.</p>
 <h4 id="result-and-purity-62"><a class="header" href="#result-and-purity-62">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -3253,24 +3251,33 @@ let v2 := sload(v3) /* slot: 0x0 */
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td><code>i256</code></td><td>Pure (per IR; see Description)</td></tr>
+<tr><td><code>i64</code></td><td>Pure</td></tr>
 </tbody>
 </table>
 </div>
 <h4 id="annotations-62"><a class="header" href="#annotations-62">Annotations</a></h4>
-<p>None. The fused statement’s effective storage slot is the keccak hash of the key and the declared slot, which is never a compile-time constant; no <code>static_slot</code> hint is surfaced.</p>
-<h3 id="dataoffset-1"><a class="header" href="#dataoffset-1"><code>dataoffset</code></a></h3>
-<p>(<code>Expression::DataOffset</code>)</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source field</th><th>Printed as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>id: String</code></td><td>The quoted identifier in the syntax position.</td></tr>
+</tbody>
+</table>
+</div>
+<h3 id="loadimmutable"><a class="header" href="#loadimmutable"><code>loadimmutable</code></a></h3>
+<p>(<code>Expression::LoadImmutable</code>)</p>
 <h4 id="description-63"><a class="header" href="#description-63">Description</a></h4>
-<p>Offset of a named data segment within the deployed code. The identifier is a string carried in the IR’s <code>id: String</code> field; the linker resolves it to a concrete offset.</p>
+<p>Read the value of a named immutable variable. Immutables are written once during contract construction by <code>SetImmutable</code> and read afterwards via this expression.</p>
 <h4 id="syntax-63"><a class="header" href="#syntax-63">Syntax</a></h4>
-<pre><code class="language-text">dataoffset("&lt;id&gt;")
+<pre><code class="language-text">loadimmutable("&lt;key&gt;")
 </code></pre>
 <h4 id="example-63"><a class="header" href="#example-63">Example</a></h4>
-<pre><code class="language-text">let v0 := dataoffset("MyContract_deployed")
+<pre><code class="language-text">let v0 := loadimmutable("MyContract.owner")
 </code></pre>
 <h4 id="operands-63"><a class="header" href="#operands-63">Operands</a></h4>
-<p>None — the identifier is a quoted string literal in the syntax position, not an operand.</p>
+<p>None — the key is a quoted string literal in the syntax position.</p>
 <h4 id="result-and-purity-63"><a class="header" href="#result-and-purity-63">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -3289,91 +3296,23 @@ let v2 := sload(v3) /* slot: 0x0 */
 <tr><th>Source field</th><th>Printed as</th></tr>
 </thead>
 <tbody>
-<tr><td><code>id: String</code></td><td>The quoted identifier in the syntax position (not a comment annotation; it is the expression itself).</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="datasize-1"><a class="header" href="#datasize-1"><code>datasize</code></a></h3>
-<p>(<code>Expression::DataSize</code>)</p>
-<h4 id="description-64"><a class="header" href="#description-64">Description</a></h4>
-<p>Size of a named data segment within the deployed code, in bytes. The identifier is resolved by the linker.</p>
-<h4 id="syntax-64"><a class="header" href="#syntax-64">Syntax</a></h4>
-<pre><code class="language-text">datasize("&lt;id&gt;")
-</code></pre>
-<h4 id="example-64"><a class="header" href="#example-64">Example</a></h4>
-<pre><code class="language-text">let v0: i64 := datasize("MyContract_deployed")
-</code></pre>
-<h4 id="operands-64"><a class="header" href="#operands-64">Operands</a></h4>
-<p>None — the identifier is a quoted string literal in the syntax position, not an operand.</p>
-<h4 id="result-and-purity-64"><a class="header" href="#result-and-purity-64">Result and purity</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Result</th><th>Purity</th></tr>
-</thead>
-<tbody>
-<tr><td><code>i64</code></td><td>Pure</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="annotations-64"><a class="header" href="#annotations-64">Annotations</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Source field</th><th>Printed as</th></tr>
-</thead>
-<tbody>
-<tr><td><code>id: String</code></td><td>The quoted identifier in the syntax position.</td></tr>
-</tbody>
-</table>
-</div>
-<h3 id="loadimmutable"><a class="header" href="#loadimmutable"><code>loadimmutable</code></a></h3>
-<p>(<code>Expression::LoadImmutable</code>)</p>
-<h4 id="description-65"><a class="header" href="#description-65">Description</a></h4>
-<p>Read the value of a named immutable variable. Immutables are written once during contract construction by <code>SetImmutable</code> and read afterwards via this expression.</p>
-<h4 id="syntax-65"><a class="header" href="#syntax-65">Syntax</a></h4>
-<pre><code class="language-text">loadimmutable("&lt;key&gt;")
-</code></pre>
-<h4 id="example-65"><a class="header" href="#example-65">Example</a></h4>
-<pre><code class="language-text">let v0 := loadimmutable("MyContract.owner")
-</code></pre>
-<h4 id="operands-65"><a class="header" href="#operands-65">Operands</a></h4>
-<p>None — the key is a quoted string literal in the syntax position.</p>
-<h4 id="result-and-purity-65"><a class="header" href="#result-and-purity-65">Result and purity</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Result</th><th>Purity</th></tr>
-</thead>
-<tbody>
-<tr><td><code>i256</code></td><td>Pure</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="annotations-65"><a class="header" href="#annotations-65">Annotations</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Source field</th><th>Printed as</th></tr>
-</thead>
-<tbody>
 <tr><td><code>key: String</code></td><td>The quoted identifier in the syntax position.</td></tr>
 </tbody>
 </table>
 </div>
 <h3 id="linkersymbol"><a class="header" href="#linkersymbol"><code>linkersymbol</code></a></h3>
 <p>(<code>Expression::LinkerSymbol</code>)</p>
-<h4 id="description-66"><a class="header" href="#description-66">Description</a></h4>
+<h4 id="description-64"><a class="header" href="#description-64">Description</a></h4>
 <p>Address of an external library, resolved by the linker. The path encodes the library’s source location and identifier.</p>
-<h4 id="syntax-66"><a class="header" href="#syntax-66">Syntax</a></h4>
+<h4 id="syntax-64"><a class="header" href="#syntax-64">Syntax</a></h4>
 <pre><code class="language-text">linkersymbol("&lt;path&gt;")
 </code></pre>
-<h4 id="example-66"><a class="header" href="#example-66">Example</a></h4>
+<h4 id="example-64"><a class="header" href="#example-64">Example</a></h4>
 <pre><code class="language-text">let v0: i160 := linkersymbol("contracts/Library.sol:L")
 </code></pre>
-<h4 id="operands-66"><a class="header" href="#operands-66">Operands</a></h4>
+<h4 id="operands-64"><a class="header" href="#operands-64">Operands</a></h4>
 <p>None — the path is a quoted string literal in the syntax position.</p>
-<h4 id="result-and-purity-66"><a class="header" href="#result-and-purity-66">Result and purity</a></h4>
+<h4 id="result-and-purity-64"><a class="header" href="#result-and-purity-64">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3384,7 +3323,7 @@ let v2 := sload(v3) /* slot: 0x0 */
 </tbody>
 </table>
 </div>
-<h4 id="annotations-66"><a class="header" href="#annotations-66">Annotations</a></h4>
+<h4 id="annotations-64"><a class="header" href="#annotations-64">Annotations</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3397,16 +3336,16 @@ let v2 := sload(v3) /* slot: 0x0 */
 </div>
 <h3 id="func_name"><a class="header" href="#func_name"><code>&lt;func_name&gt;</code></a></h3>
 <p>(<code>Expression::Call</code>; the printer emits <code>func_&lt;id&gt;</code> when no function name is registered)</p>
-<h4 id="description-67"><a class="header" href="#description-67">Description</a></h4>
+<h4 id="description-65"><a class="header" href="#description-65">Description</a></h4>
 <p>Internal function call. Invokes a user-defined function declared earlier in the same object; the mnemonic is the function’s Yul-level name, or <code>func_&lt;id&gt;</code> if the printer has no name registered for the <code>FunctionId</code>. Distinct from <a href="#call"><code>call</code></a> and the other EVM call-opcode statements, which cross the contract boundary.</p>
-<h4 id="syntax-67"><a class="header" href="#syntax-67">Syntax</a></h4>
+<h4 id="syntax-65"><a class="header" href="#syntax-65">Syntax</a></h4>
 <pre><code class="language-text">&lt;func_name&gt;([$argument_0[: &lt;type&gt;], $argument_1[: &lt;type&gt;], …])
 </code></pre>
-<h4 id="example-67"><a class="header" href="#example-67">Example</a></h4>
+<h4 id="example-65"><a class="header" href="#example-65">Example</a></h4>
 <pre><code class="language-text">let v3 := abi_decode_uint256(v0, v1, v2)
 let v4, v5 := returns_two(v0)           // multi-return via let multi-binding
 </code></pre>
-<h4 id="operands-67"><a class="header" href="#operands-67">Operands</a></h4>
+<h4 id="operands-65"><a class="header" href="#operands-65">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3417,7 +3356,7 @@ let v4, v5 := returns_two(v0)           // multi-return via let multi-binding
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-67"><a class="header" href="#result-and-purity-67">Result and purity</a></h4>
+<h4 id="result-and-purity-65"><a class="header" href="#result-and-purity-65">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3428,7 +3367,7 @@ let v4, v5 := returns_two(v0)           // multi-return via let multi-binding
 </tbody>
 </table>
 </div>
-<h4 id="annotations-67"><a class="header" href="#annotations-67">Annotations</a></h4>
+<h4 id="annotations-65"><a class="header" href="#annotations-65">Annotations</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3443,17 +3382,17 @@ let v4, v5 := returns_two(v0)           // multi-return via let multi-binding
 <p>The operations in this section all modify external state: emulated EVM linear memory, persistent storage, or transient storage. They are statements (not expressions) and they are never pure. Simplification and deduplication never reorder them with respect to each other or with respect to reverts; the memory passes treat them as the side-effect boundary for their analyses.</p>
 <h3 id="mstore"><a class="header" href="#mstore"><code>mstore</code></a></h3>
 <p>(<code>Statement::MStore</code>)</p>
-<h4 id="description-68"><a class="header" href="#description-68">Description</a></h4>
+<h4 id="description-66"><a class="header" href="#description-66">Description</a></h4>
 <p>Write a 32-byte word to emulated EVM linear memory at <code>offset</code>. The word is stored big-endian, matching EVM semantics; the codegen handles the byte swap on PolkaVM’s little-endian RISC-V target.</p>
-<h4 id="syntax-68"><a class="header" href="#syntax-68">Syntax</a></h4>
+<h4 id="syntax-66"><a class="header" href="#syntax-66">Syntax</a></h4>
 <pre><code class="language-text">mstore($offset[: &lt;type&gt;], $value[: &lt;type&gt;]) [/* &lt;region&gt; */]
 </code></pre>
-<h4 id="example-68"><a class="header" href="#example-68">Example</a></h4>
+<h4 id="example-66"><a class="header" href="#example-66">Example</a></h4>
 <pre><code class="language-text">mstore(v0, v1)                    // Unknown region; no annotation printed
 mstore(v2, v3) /* scratch */      // offset proven to land in 0x00..0x3f
 mstore(v4, v5) /* free_ptr */     // offset is exactly 0x40
 </code></pre>
-<h4 id="operands-68"><a class="header" href="#operands-68">Operands</a></h4>
+<h4 id="operands-66"><a class="header" href="#operands-66">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3462,6 +3401,97 @@ mstore(v4, v5) /* free_ptr */     // offset is exactly 0x40
 <tbody>
 <tr><td><code>offset</code></td><td><code>i256</code></td><td>Byte offset into linear memory; forward analysis widens to at least <code>i64</code>.</td></tr>
 <tr><td><code>value</code></td><td><code>i256</code></td><td>The 32-byte word to store. Narrower values are zero-extended at codegen time.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-66"><a class="header" href="#result-and-purity-66">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-66"><a class="header" href="#annotations-66">Annotations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source field</th><th>Printed as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>region:</code> <a href="#memoryregion"><code>MemoryRegion</code></a></td><td><code>/* scratch */</code> · <code>/* free_ptr */</code> · <code>/* dynamic */</code> (<code>Unknown</code> is suppressed)</td></tr>
+</tbody>
+</table>
+</div>
+<p>Assigned at translation time from the constant offset (if any); consumed by mem_opt, FMP propagation, and byte-swap mode selection.</p>
+<h3 id="mstore8"><a class="header" href="#mstore8"><code>mstore8</code></a></h3>
+<p>(<code>Statement::MStore8</code>)</p>
+<h4 id="description-67"><a class="header" href="#description-67">Description</a></h4>
+<p>Write a single byte to emulated EVM linear memory at <code>offset</code>. The low 8 bits of <code>value</code> are stored; the upper bits are ignored. The operation is otherwise identical to <code>mstore</code>: same operand shape, same region tag, same side-effect classification.</p>
+<h4 id="syntax-67"><a class="header" href="#syntax-67">Syntax</a></h4>
+<pre><code class="language-text">mstore8($offset[: &lt;type&gt;], $value[: &lt;type&gt;]) [/* &lt;region&gt; */]
+</code></pre>
+<h4 id="example-67"><a class="header" href="#example-67">Example</a></h4>
+<pre><code class="language-text">mstore8(v0, v1: i8)
+</code></pre>
+<h4 id="operands-67"><a class="header" href="#operands-67">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Byte offset into linear memory; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>Only the low 8 bits are stored. Often narrowed to <code>i8</code> by type inference.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-67"><a class="header" href="#result-and-purity-67">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-67"><a class="header" href="#annotations-67">Annotations</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Source field</th><th>Printed as</th></tr>
+</thead>
+<tbody>
+<tr><td><code>region:</code> <a href="#memoryregion"><code>MemoryRegion</code></a></td><td><code>/* scratch */</code> · <code>/* free_ptr */</code> · <code>/* dynamic */</code> (<code>Unknown</code> is suppressed)</td></tr>
+</tbody>
+</table>
+</div>
+<p>Same tagging rules as <a href="#mstore"><code>mstore</code></a>. Most <code>mstore8</code>s carry an <code>Unknown</code> region in practice because single-byte writes typically target offsets the translator cannot prove constant.</p>
+<h3 id="mcopy"><a class="header" href="#mcopy"><code>mcopy</code></a></h3>
+<p>(<code>Statement::MCopy</code>)</p>
+<h4 id="description-68"><a class="header" href="#description-68">Description</a></h4>
+<p>Copy <code>length</code> bytes from <code>src</code> to <code>dest</code> within emulated EVM linear memory. The Yul builtin <code>mcopy</code> maps directly onto this statement; unlike <code>mstore</code>, it does not carry a region tag because the source and destination ranges may straddle multiple regions.</p>
+<h4 id="syntax-68"><a class="header" href="#syntax-68">Syntax</a></h4>
+<pre><code class="language-text">mcopy($dest[: &lt;type&gt;], $src[: &lt;type&gt;], $length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-68"><a class="header" href="#example-68">Example</a></h4>
+<pre><code class="language-text">mcopy(v0, v1, v2)
+</code></pre>
+<h4 id="operands-68"><a class="header" href="#operands-68">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
+<tr><td><code>src</code></td><td><code>i256</code></td><td>Source byte offset in linear memory.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy. Overlapping ranges follow EVM-defined memmove semantics.</td></tr>
 </tbody>
 </table>
 </div>
@@ -3477,26 +3507,17 @@ mstore(v4, v5) /* free_ptr */     // offset is exactly 0x40
 </table>
 </div>
 <h4 id="annotations-68"><a class="header" href="#annotations-68">Annotations</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Source field</th><th>Printed as</th></tr>
-</thead>
-<tbody>
-<tr><td><code>region:</code> <a href="#memoryregion"><code>MemoryRegion</code></a></td><td><code>/* scratch */</code> · <code>/* free_ptr */</code> · <code>/* dynamic */</code> (<code>Unknown</code> is suppressed)</td></tr>
-</tbody>
-</table>
-</div>
-<p>Assigned at translation time from the constant offset (if any); consumed by mem_opt, FMP propagation, and byte-swap mode selection.</p>
-<h3 id="mstore8"><a class="header" href="#mstore8"><code>mstore8</code></a></h3>
-<p>(<code>Statement::MStore8</code>)</p>
+<p>None. <code>mcopy</code> carries no region tag because the source and destination ranges may straddle multiple regions, and no static-slot hint because the copy is not storage-bound.</p>
+<h3 id="sstore"><a class="header" href="#sstore"><code>sstore</code></a></h3>
+<p>(<code>Statement::SStore</code>)</p>
 <h4 id="description-69"><a class="header" href="#description-69">Description</a></h4>
-<p>Write a single byte to emulated EVM linear memory at <code>offset</code>. The low 8 bits of <code>value</code> are stored; the upper bits are ignored. The operation is otherwise identical to <code>mstore</code>: same operand shape, same region tag, same side-effect classification.</p>
+<p>Write a 32-byte word to persistent contract storage at <code>key</code>. The operation is the durable counterpart of <code>mstore</code>: the value survives across transactions and is observable to subsequent calls to the contract.</p>
 <h4 id="syntax-69"><a class="header" href="#syntax-69">Syntax</a></h4>
-<pre><code class="language-text">mstore8($offset[: &lt;type&gt;], $value[: &lt;type&gt;]) [/* &lt;region&gt; */]
+<pre><code class="language-text">sstore($key[: &lt;type&gt;], $value[: &lt;type&gt;]) [/* slot: 0x&lt;hex&gt; */]
 </code></pre>
 <h4 id="example-69"><a class="header" href="#example-69">Example</a></h4>
-<pre><code class="language-text">mstore8(v0, v1: i8)
+<pre><code class="language-text">sstore(v0, v1)
+sstore(v2, v3) /* slot: 0x0 */
 </code></pre>
 <h4 id="operands-69"><a class="header" href="#operands-69">Operands</a></h4>
 <div class="table-wrapper">
@@ -3505,8 +3526,8 @@ mstore(v4, v5) /* free_ptr */     // offset is exactly 0x40
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Byte offset into linear memory; forward analysis widens to at least <code>i64</code>.</td></tr>
-<tr><td><code>value</code></td><td><code>i256</code></td><td>Only the low 8 bits are stored. Often narrowed to <code>i8</code> by type inference.</td></tr>
+<tr><td><code>key</code></td><td><code>i256</code></td><td>Storage slot. May be a constant slot, a keccak-derived slot for mappings or dynamic arrays, or an arbitrary expression.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>The 256-bit word to store.</td></tr>
 </tbody>
 </table>
 </div>
@@ -3528,20 +3549,20 @@ mstore(v4, v5) /* free_ptr */     // offset is exactly 0x40
 <tr><th>Source field</th><th>Printed as</th></tr>
 </thead>
 <tbody>
-<tr><td><code>region:</code> <a href="#memoryregion"><code>MemoryRegion</code></a></td><td><code>/* scratch */</code> · <code>/* free_ptr */</code> · <code>/* dynamic */</code> (<code>Unknown</code> is suppressed)</td></tr>
+<tr><td><code>static_slot: Option&lt;BigUint&gt;</code></td><td><code>/* slot: 0x&lt;hex&gt; */</code> when set; suppressed otherwise</td></tr>
 </tbody>
 </table>
 </div>
-<p>Same tagging rules as <a href="#mstore"><code>mstore</code></a>. Most <code>mstore8</code>s carry an <code>Unknown</code> region in practice because single-byte writes typically target offsets the translator cannot prove constant.</p>
-<h3 id="mcopy"><a class="header" href="#mcopy"><code>mcopy</code></a></h3>
-<p>(<code>Statement::MCopy</code>)</p>
+<p>The printer renders the annotation whenever the field is <code>Some</code>, and the deduplicator’s canonicalizer and mapping-fusion analyses consume it as part of the signature. No pass currently writes <code>Some(...)</code>, so the annotation is dormant in present-day dumps; when absent, alias and dedup analyses fall back to the conservative “may alias any slot” assumption.</p>
+<h3 id="tstore"><a class="header" href="#tstore"><code>tstore</code></a></h3>
+<p>(<code>Statement::TStore</code>)</p>
 <h4 id="description-70"><a class="header" href="#description-70">Description</a></h4>
-<p>Copy <code>length</code> bytes from <code>src</code> to <code>dest</code> within emulated EVM linear memory. The Yul builtin <code>mcopy</code> maps directly onto this statement; unlike <code>mstore</code>, it does not carry a region tag because the source and destination ranges may straddle multiple regions.</p>
+<p>Write a 32-byte word to transient storage at <code>key</code>. Transient storage is wiped at the end of the transaction, so <code>tstore</code> is the right primitive for per-transaction bookkeeping (reentrancy guards, cached results) without the gas cost of <code>sstore</code> on EVM. On PolkaVM the transient backing store is provided by pallet-revive.</p>
 <h4 id="syntax-70"><a class="header" href="#syntax-70">Syntax</a></h4>
-<pre><code class="language-text">mcopy($dest[: &lt;type&gt;], $src[: &lt;type&gt;], $length[: &lt;type&gt;])
+<pre><code class="language-text">tstore($key[: &lt;type&gt;], $value[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-70"><a class="header" href="#example-70">Example</a></h4>
-<pre><code class="language-text">mcopy(v0, v1, v2)
+<pre><code class="language-text">tstore(v0, v1)
 </code></pre>
 <h4 id="operands-70"><a class="header" href="#operands-70">Operands</a></h4>
 <div class="table-wrapper">
@@ -3550,9 +3571,8 @@ mstore(v4, v5) /* free_ptr */     // offset is exactly 0x40
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
-<tr><td><code>src</code></td><td><code>i256</code></td><td>Source byte offset in linear memory.</td></tr>
-<tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy. Overlapping ranges follow EVM-defined memmove semantics.</td></tr>
+<tr><td><code>key</code></td><td><code>i256</code></td><td>Transient storage slot.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>The 256-bit word to store.</td></tr>
 </tbody>
 </table>
 </div>
@@ -3568,17 +3588,16 @@ mstore(v4, v5) /* free_ptr */     // offset is exactly 0x40
 </table>
 </div>
 <h4 id="annotations-70"><a class="header" href="#annotations-70">Annotations</a></h4>
-<p>None. <code>mcopy</code> carries no region tag because the source and destination ranges may straddle multiple regions, and no static-slot hint because the copy is not storage-bound.</p>
-<h3 id="sstore"><a class="header" href="#sstore"><code>sstore</code></a></h3>
-<p>(<code>Statement::SStore</code>)</p>
+<p>None. Unlike <code>sstore</code>, the IR does not track a static slot for <code>tstore</code>: transient storage’s short-lived lifetime makes the slot-aware optimizations less valuable, and the translator does not produce the annotation.</p>
+<h3 id="mapping_sstore"><a class="header" href="#mapping_sstore"><code>mapping_sstore</code></a></h3>
+<p>(<code>Statement::MappingSStore</code>)</p>
 <h4 id="description-71"><a class="header" href="#description-71">Description</a></h4>
-<p>Write a 32-byte word to persistent contract storage at <code>key</code>. The operation is the durable counterpart of <code>mstore</code>: the value survives across transactions and is observable to subsequent calls to the contract.</p>
+<p>Compound store for a Solidity mapping element. Equivalent to <code>mstore(0, key); mstore(32, slot); sstore(keccak256(0, 64), value)</code> but emitted as a single outlined statement after the <code>mapping_access_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> followed by an <code>sstore</code> whose key has a single consumer). Only valid when the intermediate hash is not observed by any other statement.</p>
 <h4 id="syntax-71"><a class="header" href="#syntax-71">Syntax</a></h4>
-<pre><code class="language-text">sstore($key[: &lt;type&gt;], $value[: &lt;type&gt;]) [/* slot: 0x&lt;hex&gt; */]
+<pre><code class="language-text">mapping_sstore($key[: &lt;type&gt;], $slot[: &lt;type&gt;], $value[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-71"><a class="header" href="#example-71">Example</a></h4>
-<pre><code class="language-text">sstore(v0, v1)
-sstore(v2, v3) /* slot: 0x0 */
+<pre><code class="language-text">mapping_sstore(v0, v1, v2)
 </code></pre>
 <h4 id="operands-71"><a class="header" href="#operands-71">Operands</a></h4>
 <div class="table-wrapper">
@@ -3587,8 +3606,9 @@ sstore(v2, v3) /* slot: 0x0 */
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>key</code></td><td><code>i256</code></td><td>Storage slot. May be a constant slot, a keccak-derived slot for mappings or dynamic arrays, or an arbitrary expression.</td></tr>
-<tr><td><code>value</code></td><td><code>i256</code></td><td>The 256-bit word to store.</td></tr>
+<tr><td><code>key</code></td><td><code>i256</code></td><td>Mapping key. The outlining pass force-widens it to <code>i256</code>, so it always prints at full width, even for address keys.</td></tr>
+<tr><td><code>slot</code></td><td><code>i256</code></td><td>The mapping’s declared storage slot. Typically a small constant.</td></tr>
+<tr><td><code>value</code></td><td><code>i256</code></td><td>The value to store at the computed storage location.</td></tr>
 </tbody>
 </table>
 </div>
@@ -3604,26 +3624,18 @@ sstore(v2, v3) /* slot: 0x0 */
 </table>
 </div>
 <h4 id="annotations-71"><a class="header" href="#annotations-71">Annotations</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Source field</th><th>Printed as</th></tr>
-</thead>
-<tbody>
-<tr><td><code>static_slot: Option&lt;BigUint&gt;</code></td><td><code>/* slot: 0x&lt;hex&gt; */</code> when set; suppressed otherwise</td></tr>
-</tbody>
-</table>
-</div>
-<p>The printer renders the annotation whenever the field is <code>Some</code>, and the deduplicator’s canonicalizer and mapping-fusion analyses consume it as part of the signature. No pass currently writes <code>Some(...)</code>, so the annotation is dormant in present-day dumps; when absent, alias and dedup analyses fall back to the conservative “may alias any slot” assumption.</p>
-<h3 id="tstore"><a class="header" href="#tstore"><code>tstore</code></a></h3>
-<p>(<code>Statement::TStore</code>)</p>
+<p>None. <code>mapping_sstore</code> deliberately drops the <code>static_slot</code> annotation that the original <code>sstore</code> may have carried, because the fused statement’s effective slot is the keccak hash of the key and the declared slot, which is never a compile-time constant.</p>
+<h2 id="bulk-copies-1"><a class="header" href="#bulk-copies-1">Bulk copies</a></h2>
+<p>Multi-byte memory copies from the EVM-accessible byte sources (code, external code, returndata, embedded data, and calldata) into emulated EVM linear memory. They all take the same shape: a destination memory offset, a source offset, and a length. They are effectful and act as opaque barriers to the memory passes.</p>
+<h3 id="codecopy-1"><a class="header" href="#codecopy-1"><code>codecopy</code></a></h3>
+<p>(<code>Statement::CodeCopy</code>)</p>
 <h4 id="description-72"><a class="header" href="#description-72">Description</a></h4>
-<p>Write a 32-byte word to transient storage at <code>key</code>. Transient storage is wiped at the end of the transaction, so <code>tstore</code> is the right primitive for per-transaction bookkeeping (reentrancy guards, cached results) without the gas cost of <code>sstore</code> on EVM. On PolkaVM the transient backing store is provided by pallet-revive.</p>
+<p>Copy <code>length</code> bytes from the currently executing code at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. Reads past the end of code yield zero bytes.</p>
 <h4 id="syntax-72"><a class="header" href="#syntax-72">Syntax</a></h4>
-<pre><code class="language-text">tstore($key[: &lt;type&gt;], $value[: &lt;type&gt;])
+<pre><code class="language-text">codecopy($dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-72"><a class="header" href="#example-72">Example</a></h4>
-<pre><code class="language-text">tstore(v0, v1)
+<pre><code class="language-text">codecopy(v0, v1, v2)
 </code></pre>
 <h4 id="operands-72"><a class="header" href="#operands-72">Operands</a></h4>
 <div class="table-wrapper">
@@ -3632,8 +3644,9 @@ sstore(v2, v3) /* slot: 0x0 */
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>key</code></td><td><code>i256</code></td><td>Transient storage slot.</td></tr>
-<tr><td><code>value</code></td><td><code>i256</code></td><td>The 256-bit word to store.</td></tr>
+<tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the executing code.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy.</td></tr>
 </tbody>
 </table>
 </div>
@@ -3649,16 +3662,16 @@ sstore(v2, v3) /* slot: 0x0 */
 </table>
 </div>
 <h4 id="annotations-72"><a class="header" href="#annotations-72">Annotations</a></h4>
-<p>None. Unlike <code>sstore</code>, the IR does not track a static slot for <code>tstore</code>: transient storage’s short-lived lifetime makes the slot-aware optimizations less valuable, and the translator does not produce the annotation.</p>
-<h3 id="mapping_sstore"><a class="header" href="#mapping_sstore"><code>mapping_sstore</code></a></h3>
-<p>(<code>Statement::MappingSStore</code>)</p>
+<p>None.</p>
+<h3 id="extcodecopy"><a class="header" href="#extcodecopy"><code>extcodecopy</code></a></h3>
+<p>(<code>Statement::ExtCodeCopy</code>)</p>
 <h4 id="description-73"><a class="header" href="#description-73">Description</a></h4>
-<p>Compound store for a Solidity mapping element. Equivalent to <code>mstore(0, key); mstore(32, slot); sstore(keccak256(0, 64), value)</code> but emitted as a single outlined statement after the <code>mapping_access_outlining</code> pass recognizes the pattern (it fuses a <code>keccak256_pair</code> followed by an <code>sstore</code> whose key has a single consumer). Only valid when the intermediate hash is not observed by any other statement.</p>
+<p>Copy <code>length</code> bytes from the code at <code>address</code> starting at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. Reads beyond the code yield zero bytes; non-existent accounts yield all zeros.</p>
 <h4 id="syntax-73"><a class="header" href="#syntax-73">Syntax</a></h4>
-<pre><code class="language-text">mapping_sstore($key[: &lt;type&gt;], $slot[: &lt;type&gt;], $value[: &lt;type&gt;])
+<pre><code class="language-text">extcodecopy($address[: &lt;type&gt;], $dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-73"><a class="header" href="#example-73">Example</a></h4>
-<pre><code class="language-text">mapping_sstore(v0, v1, v2)
+<pre><code class="language-text">extcodecopy(v0: i160, v1, v2, v3)
 </code></pre>
 <h4 id="operands-73"><a class="header" href="#operands-73">Operands</a></h4>
 <div class="table-wrapper">
@@ -3667,9 +3680,10 @@ sstore(v2, v3) /* slot: 0x0 */
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>key</code></td><td><code>i256</code></td><td>Mapping key. The outlining pass force-widens it to <code>i256</code>, so it always prints at full width, even for address keys.</td></tr>
-<tr><td><code>slot</code></td><td><code>i256</code></td><td>The mapping’s declared storage slot. Typically a small constant.</td></tr>
-<tr><td><code>value</code></td><td><code>i256</code></td><td>The value to store at the computed storage location.</td></tr>
+<tr><td><code>address</code></td><td><code>i256</code></td><td>Account whose code to read; forward analysis widens to at least <code>i160</code>.</td></tr>
+<tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the external code.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy.</td></tr>
 </tbody>
 </table>
 </div>
@@ -3685,18 +3699,16 @@ sstore(v2, v3) /* slot: 0x0 */
 </table>
 </div>
 <h4 id="annotations-73"><a class="header" href="#annotations-73">Annotations</a></h4>
-<p>None. <code>mapping_sstore</code> deliberately drops the <code>static_slot</code> annotation that the original <code>sstore</code> may have carried, because the fused statement’s effective slot is the keccak hash of the key and the declared slot, which is never a compile-time constant.</p>
-<h2 id="bulk-copies-1"><a class="header" href="#bulk-copies-1">Bulk copies</a></h2>
-<p>Multi-byte memory copies from the EVM-accessible byte sources (code, external code, returndata, embedded data, and calldata) into emulated EVM linear memory. They all take the same shape: a destination memory offset, a source offset, and a length. They are effectful and act as opaque barriers to the memory passes.</p>
-<h3 id="codecopy-1"><a class="header" href="#codecopy-1"><code>codecopy</code></a></h3>
-<p>(<code>Statement::CodeCopy</code>)</p>
+<p>None.</p>
+<h3 id="returndatacopy"><a class="header" href="#returndatacopy"><code>returndatacopy</code></a></h3>
+<p>(<code>Statement::ReturnDataCopy</code>)</p>
 <h4 id="description-74"><a class="header" href="#description-74">Description</a></h4>
-<p>Copy <code>length</code> bytes from the currently executing code at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. Reads past the end of code yield zero bytes.</p>
+<p>Copy <code>length</code> bytes from the most recent sub-call’s return data starting at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. Per EVM, reads past the return data’s end revert; the memory passes treat this as a potential trap site.</p>
 <h4 id="syntax-74"><a class="header" href="#syntax-74">Syntax</a></h4>
-<pre><code class="language-text">codecopy($dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
+<pre><code class="language-text">returndatacopy($dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-74"><a class="header" href="#example-74">Example</a></h4>
-<pre><code class="language-text">codecopy(v0, v1, v2)
+<pre><code class="language-text">returndatacopy(v0, v1, v2)
 </code></pre>
 <h4 id="operands-74"><a class="header" href="#operands-74">Operands</a></h4>
 <div class="table-wrapper">
@@ -3706,7 +3718,7 @@ sstore(v2, v3) /* slot: 0x0 */
 </thead>
 <tbody>
 <tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the executing code.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the return-data buffer.</td></tr>
 <tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy.</td></tr>
 </tbody>
 </table>
@@ -3718,21 +3730,21 @@ sstore(v2, v3) /* slot: 0x0 */
 <tr><th>Result</th><th>Purity</th></tr>
 </thead>
 <tbody>
-<tr><td>None</td><td>Effectful</td></tr>
+<tr><td>None</td><td>Effectful (may revert on out-of-range reads, per EVM)</td></tr>
 </tbody>
 </table>
 </div>
 <h4 id="annotations-74"><a class="header" href="#annotations-74">Annotations</a></h4>
 <p>None.</p>
-<h3 id="extcodecopy"><a class="header" href="#extcodecopy"><code>extcodecopy</code></a></h3>
-<p>(<code>Statement::ExtCodeCopy</code>)</p>
+<h3 id="datacopy"><a class="header" href="#datacopy"><code>datacopy</code></a></h3>
+<p>(<code>Statement::DataCopy</code>)</p>
 <h4 id="description-75"><a class="header" href="#description-75">Description</a></h4>
-<p>Copy <code>length</code> bytes from the code at <code>address</code> starting at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. Reads beyond the code yield zero bytes; non-existent accounts yield all zeros.</p>
+<p>Copy <code>length</code> bytes from an embedded data segment starting at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. The source segment is resolved by the linker, typically used to pull constants compiled into the bytecode into runtime memory.</p>
 <h4 id="syntax-75"><a class="header" href="#syntax-75">Syntax</a></h4>
-<pre><code class="language-text">extcodecopy($address[: &lt;type&gt;], $dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
+<pre><code class="language-text">datacopy($dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-75"><a class="header" href="#example-75">Example</a></h4>
-<pre><code class="language-text">extcodecopy(v0: i160, v1, v2, v3)
+<pre><code class="language-text">datacopy(v0, v1, v2)
 </code></pre>
 <h4 id="operands-75"><a class="header" href="#operands-75">Operands</a></h4>
 <div class="table-wrapper">
@@ -3741,9 +3753,8 @@ sstore(v2, v3) /* slot: 0x0 */
 <tr><th>Name</th><th>Type</th><th>Notes</th></tr>
 </thead>
 <tbody>
-<tr><td><code>address</code></td><td><code>i256</code></td><td>Account whose code to read; forward analysis widens to at least <code>i160</code>.</td></tr>
 <tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the external code.</td></tr>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the data segment.</td></tr>
 <tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy.</td></tr>
 </tbody>
 </table>
@@ -3761,89 +3772,17 @@ sstore(v2, v3) /* slot: 0x0 */
 </div>
 <h4 id="annotations-75"><a class="header" href="#annotations-75">Annotations</a></h4>
 <p>None.</p>
-<h3 id="returndatacopy"><a class="header" href="#returndatacopy"><code>returndatacopy</code></a></h3>
-<p>(<code>Statement::ReturnDataCopy</code>)</p>
-<h4 id="description-76"><a class="header" href="#description-76">Description</a></h4>
-<p>Copy <code>length</code> bytes from the most recent sub-call’s return data starting at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. Per EVM, reads past the return data’s end revert; the memory passes treat this as a potential trap site.</p>
-<h4 id="syntax-76"><a class="header" href="#syntax-76">Syntax</a></h4>
-<pre><code class="language-text">returndatacopy($dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
-</code></pre>
-<h4 id="example-76"><a class="header" href="#example-76">Example</a></h4>
-<pre><code class="language-text">returndatacopy(v0, v1, v2)
-</code></pre>
-<h4 id="operands-76"><a class="header" href="#operands-76">Operands</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
-</thead>
-<tbody>
-<tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the return-data buffer.</td></tr>
-<tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy.</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="result-and-purity-76"><a class="header" href="#result-and-purity-76">Result and purity</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Result</th><th>Purity</th></tr>
-</thead>
-<tbody>
-<tr><td>None</td><td>Effectful (may revert on out-of-range reads, per EVM)</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="annotations-76"><a class="header" href="#annotations-76">Annotations</a></h4>
-<p>None.</p>
-<h3 id="datacopy"><a class="header" href="#datacopy"><code>datacopy</code></a></h3>
-<p>(<code>Statement::DataCopy</code>)</p>
-<h4 id="description-77"><a class="header" href="#description-77">Description</a></h4>
-<p>Copy <code>length</code> bytes from an embedded data segment starting at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. The source segment is resolved by the linker, typically used to pull constants compiled into the bytecode into runtime memory.</p>
-<h4 id="syntax-77"><a class="header" href="#syntax-77">Syntax</a></h4>
-<pre><code class="language-text">datacopy($dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
-</code></pre>
-<h4 id="example-77"><a class="header" href="#example-77">Example</a></h4>
-<pre><code class="language-text">datacopy(v0, v1, v2)
-</code></pre>
-<h4 id="operands-77"><a class="header" href="#operands-77">Operands</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
-</thead>
-<tbody>
-<tr><td><code>dest</code></td><td><code>i256</code></td><td>Destination byte offset in linear memory.</td></tr>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Source byte offset in the data segment.</td></tr>
-<tr><td><code>length</code></td><td><code>i256</code></td><td>Number of bytes to copy.</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="result-and-purity-77"><a class="header" href="#result-and-purity-77">Result and purity</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Result</th><th>Purity</th></tr>
-</thead>
-<tbody>
-<tr><td>None</td><td>Effectful</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="annotations-77"><a class="header" href="#annotations-77">Annotations</a></h4>
-<p>None.</p>
 <h3 id="calldatacopy"><a class="header" href="#calldatacopy"><code>calldatacopy</code></a></h3>
 <p>(<code>Statement::CallDataCopy</code>)</p>
-<h4 id="description-78"><a class="header" href="#description-78">Description</a></h4>
+<h4 id="description-76"><a class="header" href="#description-76">Description</a></h4>
 <p>Copy <code>length</code> bytes from the current call’s calldata starting at <code>offset</code> into emulated EVM linear memory at <code>dest</code>. Reads past the end of calldata yield zero bytes.</p>
-<h4 id="syntax-78"><a class="header" href="#syntax-78">Syntax</a></h4>
+<h4 id="syntax-76"><a class="header" href="#syntax-76">Syntax</a></h4>
 <pre><code class="language-text">calldatacopy($dest[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
-<h4 id="example-78"><a class="header" href="#example-78">Example</a></h4>
+<h4 id="example-76"><a class="header" href="#example-76">Example</a></h4>
 <pre><code class="language-text">calldatacopy(v0, v1, v2)
 </code></pre>
-<h4 id="operands-78"><a class="header" href="#operands-78">Operands</a></h4>
+<h4 id="operands-76"><a class="header" href="#operands-76">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3856,7 +3795,7 @@ sstore(v2, v3) /* slot: 0x0 */
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-78"><a class="header" href="#result-and-purity-78">Result and purity</a></h4>
+<h4 id="result-and-purity-76"><a class="header" href="#result-and-purity-76">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3867,22 +3806,22 @@ sstore(v2, v3) /* slot: 0x0 */
 </tbody>
 </table>
 </div>
-<h4 id="annotations-78"><a class="header" href="#annotations-78">Annotations</a></h4>
+<h4 id="annotations-76"><a class="header" href="#annotations-76">Annotations</a></h4>
 <p>None.</p>
 <h2 id="bindings-and-wrappers-1"><a class="header" href="#bindings-and-wrappers-1">Bindings and wrappers</a></h2>
 <p>The statements that bind SSA values, hold loose expressions evaluated for their side effects, and write to immutable storage. Every pure expression in this reference’s earlier sections appears on the right-hand side of one of these statements (almost always <code>let</code>).</p>
 <h3 id="let"><a class="header" href="#let"><code>let</code></a></h3>
 <p>(<code>Statement::Let</code>)</p>
-<h4 id="description-79"><a class="header" href="#description-79">Description</a></h4>
+<h4 id="description-77"><a class="header" href="#description-77">Description</a></h4>
 <p>SSA binding: evaluate an expression and bind its result(s) to a list of fresh value ids. The <code>let</code> statement is the only mechanism by which pure expressions enter the value namespace; every <code>v&lt;id&gt;</code> in a dump was produced by a <code>let</code> (or by a value-yielding control-flow statement or by a parameter at function entry).</p>
-<h4 id="syntax-79"><a class="header" href="#syntax-79">Syntax</a></h4>
+<h4 id="syntax-77"><a class="header" href="#syntax-77">Syntax</a></h4>
 <pre><code class="language-text">let $binding_0[, $binding_1, …] := $expression
 </code></pre>
-<h4 id="example-79"><a class="header" href="#example-79">Example</a></h4>
+<h4 id="example-77"><a class="header" href="#example-77">Example</a></h4>
 <pre><code class="language-text">let v3 := add(v0, v1)
 let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a value-yielding If
 </code></pre>
-<h4 id="operands-79"><a class="header" href="#operands-79">Operands</a></h4>
+<h4 id="operands-77"><a class="header" href="#operands-77">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3894,7 +3833,7 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-79"><a class="header" href="#result-and-purity-79">Result and purity</a></h4>
+<h4 id="result-and-purity-77"><a class="header" href="#result-and-purity-77">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3905,19 +3844,19 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 </tbody>
 </table>
 </div>
-<h4 id="annotations-79"><a class="header" href="#annotations-79">Annotations</a></h4>
+<h4 id="annotations-77"><a class="header" href="#annotations-77">Annotations</a></h4>
 <p>None.</p>
 <h3 id="expression-statement"><a class="header" href="#expression-statement">Expression statement</a></h3>
 <p>(<code>Statement::Expression</code>)</p>
-<h4 id="description-80"><a class="header" href="#description-80">Description</a></h4>
+<h4 id="description-78"><a class="header" href="#description-78">Description</a></h4>
 <p>Wraps an expression evaluated for its observable consequences but whose value is not bound. Typically a zero-return (void) user-defined function call (<code>Expression::Call</code>) evaluated for its side effects, or the discarded void result of a Yul builtin used as a statement (a value-producing expression is bound by a <code>let</code> instead). EVM external calls (<code>call</code>, <code>delegatecall</code>, etc.) and contract creation (<code>create</code>, <code>create2</code>) translate to dedicated <code>Statement::ExternalCall</code> and <code>Statement::Create</code> variants, not through this wrapper.</p>
-<h4 id="syntax-80"><a class="header" href="#syntax-80">Syntax</a></h4>
+<h4 id="syntax-78"><a class="header" href="#syntax-78">Syntax</a></h4>
 <pre><code class="language-text">$expression
 </code></pre>
-<h4 id="example-80"><a class="header" href="#example-80">Example</a></h4>
+<h4 id="example-78"><a class="header" href="#example-78">Example</a></h4>
 <pre><code class="language-text">update_balance(v0)          // void function called for its side effects
 </code></pre>
-<h4 id="operands-80"><a class="header" href="#operands-80">Operands</a></h4>
+<h4 id="operands-78"><a class="header" href="#operands-78">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3928,7 +3867,7 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-80"><a class="header" href="#result-and-purity-80">Result and purity</a></h4>
+<h4 id="result-and-purity-78"><a class="header" href="#result-and-purity-78">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3939,19 +3878,19 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 </tbody>
 </table>
 </div>
-<h4 id="annotations-80"><a class="header" href="#annotations-80">Annotations</a></h4>
+<h4 id="annotations-78"><a class="header" href="#annotations-78">Annotations</a></h4>
 <p>None.</p>
 <h3 id="setimmutable"><a class="header" href="#setimmutable"><code>setimmutable</code></a></h3>
 <p>(<code>Statement::SetImmutable</code>)</p>
-<h4 id="description-81"><a class="header" href="#description-81">Description</a></h4>
+<h4 id="description-79"><a class="header" href="#description-79">Description</a></h4>
 <p>Write an immutable variable during contract construction. Immutables are written once in the constructor and read later via <a href="#loadimmutable"><code>loadimmutable</code></a>. The key is a string identifier resolved by the linker.</p>
-<h4 id="syntax-81"><a class="header" href="#syntax-81">Syntax</a></h4>
+<h4 id="syntax-79"><a class="header" href="#syntax-79">Syntax</a></h4>
 <pre><code class="language-text">setimmutable("&lt;key&gt;", $value[: &lt;type&gt;])
 </code></pre>
-<h4 id="example-81"><a class="header" href="#example-81">Example</a></h4>
+<h4 id="example-79"><a class="header" href="#example-79">Example</a></h4>
 <pre><code class="language-text">setimmutable("MyContract.owner", v0)
 </code></pre>
-<h4 id="operands-81"><a class="header" href="#operands-81">Operands</a></h4>
+<h4 id="operands-79"><a class="header" href="#operands-79">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3962,7 +3901,7 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-81"><a class="header" href="#result-and-purity-81">Result and purity</a></h4>
+<h4 id="result-and-purity-79"><a class="header" href="#result-and-purity-79">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3973,7 +3912,7 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 </tbody>
 </table>
 </div>
-<h4 id="annotations-81"><a class="header" href="#annotations-81">Annotations</a></h4>
+<h4 id="annotations-79"><a class="header" href="#annotations-79">Annotations</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -3988,12 +3927,12 @@ let v4, v5 := if v2 [v0, v1] { … } else { … }   // multi-binding from a valu
 <p>The IR’s control flow is structured: <code>if</code>, <code>switch</code>, and <code>for</code> are statements with explicit nested regions, each carrying input values and yielding output values. The jump-like statements (<code>break</code>, <code>continue</code>, <code>leave</code>) are scoped to their nearest enclosing construct. Nested blocks create lexical scope without otherwise changing control flow.</p>
 <h3 id="if"><a class="header" href="#if"><code>if</code></a></h3>
 <p>(<code>Statement::If</code>)</p>
-<h4 id="description-82"><a class="header" href="#description-82">Description</a></h4>
+<h4 id="description-80"><a class="header" href="#description-80">Description</a></h4>
 <p>Conditional execution with optional value yields. The <code>then</code> region runs when <code>condition</code> is non-zero; the <code>else</code> region runs otherwise. If <code>outputs</code> is non-empty, both regions must yield the same number of values and the statement is bound by a <code>let</code>.</p>
-<h4 id="syntax-82"><a class="header" href="#syntax-82">Syntax</a></h4>
+<h4 id="syntax-80"><a class="header" href="#syntax-80">Syntax</a></h4>
 <pre><code class="language-text">if $condition[: &lt;type&gt;] [[$input_0, $input_1, …]] { … } [else { … }]
 </code></pre>
-<h4 id="example-82"><a class="header" href="#example-82">Example</a></h4>
+<h4 id="example-80"><a class="header" href="#example-80">Example</a></h4>
 <pre><code class="language-text">if v0: i1 {
     sstore(v1, v2)
 }
@@ -4006,7 +3945,7 @@ let v5, v6 := if v3: i1 [v1, v2] {
     yield v1, v2
 }
 </code></pre>
-<h4 id="operands-82"><a class="header" href="#operands-82">Operands</a></h4>
+<h4 id="operands-80"><a class="header" href="#operands-80">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4019,7 +3958,7 @@ let v5, v6 := if v3: i1 [v1, v2] {
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-82"><a class="header" href="#result-and-purity-82">Result and purity</a></h4>
+<h4 id="result-and-purity-80"><a class="header" href="#result-and-purity-80">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4030,13 +3969,13 @@ let v5, v6 := if v3: i1 [v1, v2] {
 </tbody>
 </table>
 </div>
-<h4 id="annotations-82"><a class="header" href="#annotations-82">Annotations</a></h4>
+<h4 id="annotations-80"><a class="header" href="#annotations-80">Annotations</a></h4>
 <p>None.</p>
 <h3 id="switch"><a class="header" href="#switch"><code>switch</code></a></h3>
 <p>(<code>Statement::Switch</code>)</p>
-<h4 id="description-83"><a class="header" href="#description-83">Description</a></h4>
+<h4 id="description-81"><a class="header" href="#description-81">Description</a></h4>
 <p>Multi-way dispatch on a scrutinee value. Each case matches a specific constant and runs its region; an optional <code>default</code> region catches non-matching values. Like <code>if</code>, switch may yield values via <code>outputs</code> and accept thread-through values via <code>inputs</code>.</p>
-<h4 id="syntax-83"><a class="header" href="#syntax-83">Syntax</a></h4>
+<h4 id="syntax-81"><a class="header" href="#syntax-81">Syntax</a></h4>
 <pre><code class="language-text">switch $scrutinee[: &lt;type&gt;] [[$input_0, …]]
 case 0x&lt;hex&gt; {
     …
@@ -4048,7 +3987,7 @@ case 0x&lt;hex&gt; {
     …
 }]
 </code></pre>
-<h4 id="example-83"><a class="header" href="#example-83">Example</a></h4>
+<h4 id="example-81"><a class="header" href="#example-81">Example</a></h4>
 <pre><code class="language-text">switch v0
 case 0x0 {
     sstore(v1, v2)
@@ -4060,7 +3999,7 @@ default {
     invalid()
 }
 </code></pre>
-<h4 id="operands-83"><a class="header" href="#operands-83">Operands</a></h4>
+<h4 id="operands-81"><a class="header" href="#operands-81">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4074,7 +4013,7 @@ default {
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-83"><a class="header" href="#result-and-purity-83">Result and purity</a></h4>
+<h4 id="result-and-purity-81"><a class="header" href="#result-and-purity-81">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4085,14 +4024,14 @@ default {
 </tbody>
 </table>
 </div>
-<h4 id="annotations-83"><a class="header" href="#annotations-83">Annotations</a></h4>
+<h4 id="annotations-81"><a class="header" href="#annotations-81">Annotations</a></h4>
 <p>None.</p>
 <h3 id="for"><a class="header" href="#for"><code>for</code></a></h3>
 <p>(<code>Statement::For</code>)</p>
-<h4 id="description-84"><a class="header" href="#description-84">Description</a></h4>
+<h4 id="description-82"><a class="header" href="#description-82">Description</a></h4>
 <p>Structured loop with explicit loop-carried variables. Each iteration evaluates <code>condition_statements</code> followed by <code>condition</code>; if the condition is non-zero, the <code>body</code> region runs, then the <code>post</code> region runs, and the loop iterates. Loop-carried variables are passed as SSA values through each region. <code>break</code> exits the loop and <code>continue</code> jumps to the post region.</p>
 <p>Type inference widens each loop-carried variable from every edge that reaches it: a loop variable from its initial value and the post yield, a post input from the body yield and every <code>continue</code>, an output from the loop variable and every <code>break</code>. It repeats this until nothing changes, so a counter incremented with <code>add</code> saturates at <code>i256</code>, while a variable that starts narrow and is masked back to that width every iteration stays narrow.</p>
-<h4 id="syntax-84"><a class="header" href="#syntax-84">Syntax</a></h4>
+<h4 id="syntax-82"><a class="header" href="#syntax-82">Syntax</a></h4>
 <pre><code class="language-text">for { $variable_0[: &lt;type&gt;] := $initial_0[: &lt;type&gt;][, …] }
     [// condition statements:
         …]
@@ -4104,7 +4043,7 @@ default {
         … body …
     }
 </code></pre>
-<h4 id="example-84"><a class="header" href="#example-84">Example</a></h4>
+<h4 id="example-82"><a class="header" href="#example-82">Example</a></h4>
 <pre><code class="language-text">let v0: i1 := 0x0
 let v6 := for { v1 := v0: i1 }
     // condition statements:
@@ -4121,7 +4060,7 @@ let v6 := for { v1 := v0: i1 }
         yield v1
     }
 </code></pre>
-<h4 id="operands-84"><a class="header" href="#operands-84">Operands</a></h4>
+<h4 id="operands-82"><a class="header" href="#operands-82">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4139,7 +4078,7 @@ let v6 := for { v1 := v0: i1 }
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-84"><a class="header" href="#result-and-purity-84">Result and purity</a></h4>
+<h4 id="result-and-purity-82"><a class="header" href="#result-and-purity-82">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4150,20 +4089,80 @@ let v6 := for { v1 := v0: i1 }
 </tbody>
 </table>
 </div>
-<h4 id="annotations-84"><a class="header" href="#annotations-84">Annotations</a></h4>
+<h4 id="annotations-82"><a class="header" href="#annotations-82">Annotations</a></h4>
 <p>None.</p>
 <h3 id="break"><a class="header" href="#break"><code>break</code></a></h3>
 <p>(<code>Statement::Break</code>)</p>
-<h4 id="description-85"><a class="header" href="#description-85">Description</a></h4>
+<h4 id="description-83"><a class="header" href="#description-83">Description</a></h4>
 <p>Exit the innermost enclosing <code>for</code> loop. Carries the current values of loop-carried variables at the break point; these become the loop’s outputs.</p>
-<h4 id="syntax-85"><a class="header" href="#syntax-85">Syntax</a></h4>
+<h4 id="syntax-83"><a class="header" href="#syntax-83">Syntax</a></h4>
 <pre><code class="language-text">break
 </code></pre>
-<h4 id="example-85"><a class="header" href="#example-85">Example</a></h4>
+<h4 id="example-83"><a class="header" href="#example-83">Example</a></h4>
 <pre><code class="language-text">if v0 { break [v1, v2] }
 </code></pre>
-<h4 id="operands-85"><a class="header" href="#operands-85">Operands</a></h4>
+<h4 id="operands-83"><a class="header" href="#operands-83">Operands</a></h4>
 <p>The loop-carried <code>values: Vec&lt;Value&gt;</code> print in brackets when non-empty (e.g. <code>break [v1, v2]</code>).</p>
+<h4 id="result-and-purity-83"><a class="header" href="#result-and-purity-83">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful (control flow)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-83"><a class="header" href="#annotations-83">Annotations</a></h4>
+<p>None.</p>
+<h3 id="continue"><a class="header" href="#continue"><code>continue</code></a></h3>
+<p>(<code>Statement::Continue</code>)</p>
+<h4 id="description-84"><a class="header" href="#description-84">Description</a></h4>
+<p>Skip to the post region of the innermost enclosing <code>for</code> loop. Like <code>break</code>, carries the current values of loop-carried variables internally.</p>
+<h4 id="syntax-84"><a class="header" href="#syntax-84">Syntax</a></h4>
+<pre><code class="language-text">continue
+</code></pre>
+<h4 id="example-84"><a class="header" href="#example-84">Example</a></h4>
+<pre><code class="language-text">if v0 { continue [v1, v2] }
+</code></pre>
+<h4 id="operands-84"><a class="header" href="#operands-84">Operands</a></h4>
+<p>The loop-carried <code>values</code> print in brackets when non-empty (e.g. <code>continue [v1, v2]</code>).</p>
+<h4 id="result-and-purity-84"><a class="header" href="#result-and-purity-84">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None</td><td>Effectful (control flow)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-84"><a class="header" href="#annotations-84">Annotations</a></h4>
+<p>None.</p>
+<h3 id="leave"><a class="header" href="#leave"><code>leave</code></a></h3>
+<p>(<code>Statement::Leave</code>)</p>
+<h4 id="description-85"><a class="header" href="#description-85">Description</a></h4>
+<p>Exit the current function, returning the listed values as the function’s return values. The Yul-level <code>leave</code> keyword translates directly to this statement; the inlining pass eliminates intra-function <code>leave</code>s where possible via the exit-flag transformation.</p>
+<h4 id="syntax-85"><a class="header" href="#syntax-85">Syntax</a></h4>
+<pre><code class="language-text">leave [[$value_0[: &lt;type&gt;], $value_1[: &lt;type&gt;], …]]
+</code></pre>
+<h4 id="example-85"><a class="header" href="#example-85">Example</a></h4>
+<pre><code class="language-text">leave [v0, v1]              // returns v0 and v1 from the function
+leave                       // returns nothing (void function)
+</code></pre>
+<h4 id="operands-85"><a class="header" href="#operands-85">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>return_values</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Empty for void functions; otherwise one entry per declared return.</td></tr>
+</tbody>
+</table>
+</div>
 <h4 id="result-and-purity-85"><a class="header" href="#result-and-purity-85">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -4177,84 +4176,24 @@ let v6 := for { v1 := v0: i1 }
 </div>
 <h4 id="annotations-85"><a class="header" href="#annotations-85">Annotations</a></h4>
 <p>None.</p>
-<h3 id="continue"><a class="header" href="#continue"><code>continue</code></a></h3>
-<p>(<code>Statement::Continue</code>)</p>
-<h4 id="description-86"><a class="header" href="#description-86">Description</a></h4>
-<p>Skip to the post region of the innermost enclosing <code>for</code> loop. Like <code>break</code>, carries the current values of loop-carried variables internally.</p>
-<h4 id="syntax-86"><a class="header" href="#syntax-86">Syntax</a></h4>
-<pre><code class="language-text">continue
-</code></pre>
-<h4 id="example-86"><a class="header" href="#example-86">Example</a></h4>
-<pre><code class="language-text">if v0 { continue [v1, v2] }
-</code></pre>
-<h4 id="operands-86"><a class="header" href="#operands-86">Operands</a></h4>
-<p>The loop-carried <code>values</code> print in brackets when non-empty (e.g. <code>continue [v1, v2]</code>).</p>
-<h4 id="result-and-purity-86"><a class="header" href="#result-and-purity-86">Result and purity</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Result</th><th>Purity</th></tr>
-</thead>
-<tbody>
-<tr><td>None</td><td>Effectful (control flow)</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="annotations-86"><a class="header" href="#annotations-86">Annotations</a></h4>
-<p>None.</p>
-<h3 id="leave"><a class="header" href="#leave"><code>leave</code></a></h3>
-<p>(<code>Statement::Leave</code>)</p>
-<h4 id="description-87"><a class="header" href="#description-87">Description</a></h4>
-<p>Exit the current function, returning the listed values as the function’s return values. The Yul-level <code>leave</code> keyword translates directly to this statement; the inlining pass eliminates intra-function <code>leave</code>s where possible via the exit-flag transformation.</p>
-<h4 id="syntax-87"><a class="header" href="#syntax-87">Syntax</a></h4>
-<pre><code class="language-text">leave [[$value_0[: &lt;type&gt;], $value_1[: &lt;type&gt;], …]]
-</code></pre>
-<h4 id="example-87"><a class="header" href="#example-87">Example</a></h4>
-<pre><code class="language-text">leave [v0, v1]              // returns v0 and v1 from the function
-leave                       // returns nothing (void function)
-</code></pre>
-<h4 id="operands-87"><a class="header" href="#operands-87">Operands</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
-</thead>
-<tbody>
-<tr><td><code>return_values</code></td><td><code>Vec&lt;Value&gt;</code></td><td>Empty for void functions; otherwise one entry per declared return.</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="result-and-purity-87"><a class="header" href="#result-and-purity-87">Result and purity</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Result</th><th>Purity</th></tr>
-</thead>
-<tbody>
-<tr><td>None</td><td>Effectful (control flow)</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="annotations-87"><a class="header" href="#annotations-87">Annotations</a></h4>
-<p>None.</p>
 <h3 id="nested-block"><a class="header" href="#nested-block">Nested block</a></h3>
 <p>(<code>Statement::Block</code>)</p>
-<h4 id="description-88"><a class="header" href="#description-88">Description</a></h4>
+<h4 id="description-86"><a class="header" href="#description-86">Description</a></h4>
 <p>A lexical scope without conditional or iterative behavior. The body is a region; control falls through after the region’s statements complete. Used to bound the visibility of inner bindings.</p>
-<h4 id="syntax-88"><a class="header" href="#syntax-88">Syntax</a></h4>
+<h4 id="syntax-86"><a class="header" href="#syntax-86">Syntax</a></h4>
 <pre><code class="language-text">{
     …
 }
 </code></pre>
-<h4 id="example-88"><a class="header" href="#example-88">Example</a></h4>
+<h4 id="example-86"><a class="header" href="#example-86">Example</a></h4>
 <pre><code class="language-text">{
     let v0 := add(v1, v2)
     sstore(v3, v0)
 }                           // v0 is no longer in scope here
 </code></pre>
-<h4 id="operands-88"><a class="header" href="#operands-88">Operands</a></h4>
+<h4 id="operands-86"><a class="header" href="#operands-86">Operands</a></h4>
 <p>None — the body is a region, not an operand.</p>
-<h4 id="result-and-purity-88"><a class="header" href="#result-and-purity-88">Result and purity</a></h4>
+<h4 id="result-and-purity-86"><a class="header" href="#result-and-purity-86">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4265,21 +4204,21 @@ leave                       // returns nothing (void function)
 </tbody>
 </table>
 </div>
-<h4 id="annotations-88"><a class="header" href="#annotations-88">Annotations</a></h4>
+<h4 id="annotations-86"><a class="header" href="#annotations-86">Annotations</a></h4>
 <p>None.</p>
 <h2 id="external-interaction-1"><a class="header" href="#external-interaction-1">External interaction</a></h2>
 <p>Statements that cross the contract boundary: external calls, contract creation, and event log emission. All produce or rely on external state and act as barriers to memory and storage analyses.</p>
 <h3 id="call"><a class="header" href="#call"><code>call</code></a></h3>
 <p>(<code>Statement::ExternalCall</code> with <code>CallKind::Call</code>)</p>
-<h4 id="description-89"><a class="header" href="#description-89">Description</a></h4>
+<h4 id="description-87"><a class="header" href="#description-87">Description</a></h4>
 <p>Standard external call that may transfer value. Reads <code>args_length</code> bytes from emulated EVM linear memory at <code>args_offset</code> as calldata, executes the target, and writes up to <code>ret_length</code> bytes of return data into linear memory at <code>ret_offset</code>. The boolean result indicates success.</p>
-<h4 id="syntax-89"><a class="header" href="#syntax-89">Syntax</a></h4>
+<h4 id="syntax-87"><a class="header" href="#syntax-87">Syntax</a></h4>
 <pre><code class="language-text">let $result := call($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $value[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
 </code></pre>
-<h4 id="example-89"><a class="header" href="#example-89">Example</a></h4>
+<h4 id="example-87"><a class="header" href="#example-87">Example</a></h4>
 <pre><code class="language-text">let v8 := call(v0: i64, v1: i160, v2, v3: i64, v4: i64, v5: i64, v6: i64)
 </code></pre>
-<h4 id="operands-89"><a class="header" href="#operands-89">Operands</a></h4>
+<h4 id="operands-87"><a class="header" href="#operands-87">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4296,7 +4235,7 @@ leave                       // returns nothing (void function)
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-89"><a class="header" href="#result-and-purity-89">Result and purity</a></h4>
+<h4 id="result-and-purity-87"><a class="header" href="#result-and-purity-87">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4307,21 +4246,21 @@ leave                       // returns nothing (void function)
 </tbody>
 </table>
 </div>
-<h4 id="annotations-89"><a class="header" href="#annotations-89">Annotations</a></h4>
+<h4 id="annotations-87"><a class="header" href="#annotations-87">Annotations</a></h4>
 <p>None.</p>
 <h3 id="callcode"><a class="header" href="#callcode"><code>callcode</code></a></h3>
 <p>(<code>Statement::ExternalCall</code> with <code>CallKind::CallCode</code>)</p>
-<h4 id="description-90"><a class="header" href="#description-90">Description</a></h4>
+<h4 id="description-88"><a class="header" href="#description-88">Description</a></h4>
 <p>Deprecated EVM opcode that executes the callee’s code in the caller’s context but with the callee’s storage. Not supported by the newyork backend (codegen rejects it); use <a href="#delegatecall"><code>delegatecall</code></a> instead.</p>
-<h4 id="syntax-90"><a class="header" href="#syntax-90">Syntax</a></h4>
+<h4 id="syntax-88"><a class="header" href="#syntax-88">Syntax</a></h4>
 <pre><code class="language-text">let $result := callcode($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $value[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
 </code></pre>
-<h4 id="example-90"><a class="header" href="#example-90">Example</a></h4>
+<h4 id="example-88"><a class="header" href="#example-88">Example</a></h4>
 <pre><code class="language-text">let v8 := callcode(v0: i64, v1: i160, v2, v3: i64, v4: i64, v5: i64, v6: i64)
 </code></pre>
-<h4 id="operands-90"><a class="header" href="#operands-90">Operands</a></h4>
+<h4 id="operands-88"><a class="header" href="#operands-88">Operands</a></h4>
 <p>Same shape as <a href="#call"><code>call</code></a>.</p>
-<h4 id="result-and-purity-90"><a class="header" href="#result-and-purity-90">Result and purity</a></h4>
+<h4 id="result-and-purity-88"><a class="header" href="#result-and-purity-88">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4332,21 +4271,21 @@ leave                       // returns nothing (void function)
 </tbody>
 </table>
 </div>
-<h4 id="annotations-90"><a class="header" href="#annotations-90">Annotations</a></h4>
+<h4 id="annotations-88"><a class="header" href="#annotations-88">Annotations</a></h4>
 <p>None.</p>
 <h3 id="delegatecall"><a class="header" href="#delegatecall"><code>delegatecall</code></a></h3>
 <p>(<code>Statement::ExternalCall</code> with <code>CallKind::DelegateCall</code>)</p>
-<h4 id="description-91"><a class="header" href="#description-91">Description</a></h4>
+<h4 id="description-89"><a class="header" href="#description-89">Description</a></h4>
 <p>Execute the callee’s code in the caller’s context: same storage, same sender, same call value. The standard mechanism for library calls and proxy patterns. No <code>value</code> operand (the caller’s call value is inherited).</p>
-<h4 id="syntax-91"><a class="header" href="#syntax-91">Syntax</a></h4>
+<h4 id="syntax-89"><a class="header" href="#syntax-89">Syntax</a></h4>
 <pre><code class="language-text">let $result := delegatecall($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
 </code></pre>
-<h4 id="example-91"><a class="header" href="#example-91">Example</a></h4>
+<h4 id="example-89"><a class="header" href="#example-89">Example</a></h4>
 <pre><code class="language-text">let v7 := delegatecall(v0: i64, v1: i160, v2: i64, v3: i64, v4: i64, v5: i64)
 </code></pre>
-<h4 id="operands-91"><a class="header" href="#operands-91">Operands</a></h4>
+<h4 id="operands-89"><a class="header" href="#operands-89">Operands</a></h4>
 <p>Same shape as <a href="#call"><code>call</code></a> minus the <code>value</code> operand.</p>
-<h4 id="result-and-purity-91"><a class="header" href="#result-and-purity-91">Result and purity</a></h4>
+<h4 id="result-and-purity-89"><a class="header" href="#result-and-purity-89">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4357,21 +4296,21 @@ leave                       // returns nothing (void function)
 </tbody>
 </table>
 </div>
-<h4 id="annotations-91"><a class="header" href="#annotations-91">Annotations</a></h4>
+<h4 id="annotations-89"><a class="header" href="#annotations-89">Annotations</a></h4>
 <p>None.</p>
 <h3 id="staticcall"><a class="header" href="#staticcall"><code>staticcall</code></a></h3>
 <p>(<code>Statement::ExternalCall</code> with <code>CallKind::StaticCall</code>)</p>
-<h4 id="description-92"><a class="header" href="#description-92">Description</a></h4>
+<h4 id="description-90"><a class="header" href="#description-90">Description</a></h4>
 <p>Read-only external call. Any state modification in the callee (including nested calls) causes the call to revert. No <code>value</code> operand.</p>
-<h4 id="syntax-92"><a class="header" href="#syntax-92">Syntax</a></h4>
+<h4 id="syntax-90"><a class="header" href="#syntax-90">Syntax</a></h4>
 <pre><code class="language-text">let $result := staticcall($gas[: &lt;type&gt;], $address[: &lt;type&gt;], $args_offset[: &lt;type&gt;], $args_length[: &lt;type&gt;], $ret_offset[: &lt;type&gt;], $ret_length[: &lt;type&gt;])
 </code></pre>
-<h4 id="example-92"><a class="header" href="#example-92">Example</a></h4>
+<h4 id="example-90"><a class="header" href="#example-90">Example</a></h4>
 <pre><code class="language-text">let v7 := staticcall(v0: i64, v1: i160, v2: i64, v3: i64, v4: i64, v5: i64)
 </code></pre>
-<h4 id="operands-92"><a class="header" href="#operands-92">Operands</a></h4>
+<h4 id="operands-90"><a class="header" href="#operands-90">Operands</a></h4>
 <p>Same shape as <a href="#call"><code>call</code></a> minus the <code>value</code> operand.</p>
-<h4 id="result-and-purity-92"><a class="header" href="#result-and-purity-92">Result and purity</a></h4>
+<h4 id="result-and-purity-90"><a class="header" href="#result-and-purity-90">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4382,19 +4321,19 @@ leave                       // returns nothing (void function)
 </tbody>
 </table>
 </div>
-<h4 id="annotations-92"><a class="header" href="#annotations-92">Annotations</a></h4>
+<h4 id="annotations-90"><a class="header" href="#annotations-90">Annotations</a></h4>
 <p>None.</p>
 <h3 id="create"><a class="header" href="#create"><code>create</code></a></h3>
 <p>(<code>Statement::Create</code> with <code>CreateKind::Create</code>)</p>
-<h4 id="description-93"><a class="header" href="#description-93">Description</a></h4>
+<h4 id="description-91"><a class="header" href="#description-91">Description</a></h4>
 <p>Deploy a new contract with the given init-code bytes, transferring <code>value</code> wei from the caller. The new contract’s address is derived from the caller’s address and nonce; on failure the result is <code>0</code>.</p>
-<h4 id="syntax-93"><a class="header" href="#syntax-93">Syntax</a></h4>
+<h4 id="syntax-91"><a class="header" href="#syntax-91">Syntax</a></h4>
 <pre><code class="language-text">let $result := create($value[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
-<h4 id="example-93"><a class="header" href="#example-93">Example</a></h4>
+<h4 id="example-91"><a class="header" href="#example-91">Example</a></h4>
 <pre><code class="language-text">let v4 := create(v0, v1: i64, v2: i64)
 </code></pre>
-<h4 id="operands-93"><a class="header" href="#operands-93">Operands</a></h4>
+<h4 id="operands-91"><a class="header" href="#operands-91">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4407,7 +4346,7 @@ leave                       // returns nothing (void function)
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-93"><a class="header" href="#result-and-purity-93">Result and purity</a></h4>
+<h4 id="result-and-purity-91"><a class="header" href="#result-and-purity-91">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4418,21 +4357,21 @@ leave                       // returns nothing (void function)
 </tbody>
 </table>
 </div>
-<h4 id="annotations-93"><a class="header" href="#annotations-93">Annotations</a></h4>
+<h4 id="annotations-91"><a class="header" href="#annotations-91">Annotations</a></h4>
 <p>None.</p>
 <h3 id="create2"><a class="header" href="#create2"><code>create2</code></a></h3>
 <p>(<code>Statement::Create</code> with <code>CreateKind::Create2</code>)</p>
-<h4 id="description-94"><a class="header" href="#description-94">Description</a></h4>
+<h4 id="description-92"><a class="header" href="#description-92">Description</a></h4>
 <p>Deploy a new contract with a deterministic address derived from the caller’s address, the salt, and the init-code hash. Same operand shape as <a href="#create"><code>create</code></a> plus an additional <code>salt</code>.</p>
-<h4 id="syntax-94"><a class="header" href="#syntax-94">Syntax</a></h4>
+<h4 id="syntax-92"><a class="header" href="#syntax-92">Syntax</a></h4>
 <pre><code class="language-text">let $result := create2($value[: &lt;type&gt;], $offset[: &lt;type&gt;], $length[: &lt;type&gt;], $salt[: &lt;type&gt;])
 </code></pre>
-<h4 id="example-94"><a class="header" href="#example-94">Example</a></h4>
+<h4 id="example-92"><a class="header" href="#example-92">Example</a></h4>
 <pre><code class="language-text">let v5 := create2(v0, v1: i64, v2: i64, v3)
 </code></pre>
-<h4 id="operands-94"><a class="header" href="#operands-94">Operands</a></h4>
+<h4 id="operands-92"><a class="header" href="#operands-92">Operands</a></h4>
 <p>Same as <a href="#create"><code>create</code></a> plus <code>salt: i256</code>.</p>
-<h4 id="result-and-purity-94"><a class="header" href="#result-and-purity-94">Result and purity</a></h4>
+<h4 id="result-and-purity-92"><a class="header" href="#result-and-purity-92">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4443,20 +4382,20 @@ leave                       // returns nothing (void function)
 </tbody>
 </table>
 </div>
-<h4 id="annotations-94"><a class="header" href="#annotations-94">Annotations</a></h4>
+<h4 id="annotations-92"><a class="header" href="#annotations-92">Annotations</a></h4>
 <p>None.</p>
 <h3 id="logn"><a class="header" href="#logn"><code>log&lt;N&gt;</code></a></h3>
 <p>(<code>Statement::Log</code>)</p>
-<h4 id="description-95"><a class="header" href="#description-95">Description</a></h4>
+<h4 id="description-93"><a class="header" href="#description-93">Description</a></h4>
 <p>Emit an event log entry. The mnemonic suffix <code>&lt;N&gt;</code> is the number of indexed topics (<code>0</code> through <code>4</code>), determined by the length of the IR’s <code>topics</code> field. The data portion is read from <code>length</code> bytes of emulated EVM linear memory at <code>offset</code>.</p>
-<h4 id="syntax-95"><a class="header" href="#syntax-95">Syntax</a></h4>
+<h4 id="syntax-93"><a class="header" href="#syntax-93">Syntax</a></h4>
 <pre><code class="language-text">log&lt;N&gt;($offset[: &lt;type&gt;], $length[: &lt;type&gt;][, $topic_0[: &lt;type&gt;], …])
 </code></pre>
-<h4 id="example-95"><a class="header" href="#example-95">Example</a></h4>
+<h4 id="example-93"><a class="header" href="#example-93">Example</a></h4>
 <pre><code class="language-text">log0(v0: i64, v1: i64)                    // no topics
 log2(v0: i64, v1: i64, v2, v3)            // two topics
 </code></pre>
-<h4 id="operands-95"><a class="header" href="#operands-95">Operands</a></h4>
+<h4 id="operands-93"><a class="header" href="#operands-93">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4469,7 +4408,7 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-95"><a class="header" href="#result-and-purity-95">Result and purity</a></h4>
+<h4 id="result-and-purity-93"><a class="header" href="#result-and-purity-93">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4480,21 +4419,21 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 </tbody>
 </table>
 </div>
-<h4 id="annotations-95"><a class="header" href="#annotations-95">Annotations</a></h4>
+<h4 id="annotations-93"><a class="header" href="#annotations-93">Annotations</a></h4>
 <p>None.</p>
 <h2 id="termination-1"><a class="header" href="#termination-1">Termination</a></h2>
 <p>Statements that end the current call frame. Plain forms (<code>return</code>, <code>revert</code>, <code>stop</code>), unconditional traps (<code>invalid</code>, <code>selfdestruct</code>), and outlined revert variants (<code>panic_revert</code>, <code>error_string_revert</code>, <code>custom_error_revert</code>) that encode common Solidity error patterns into single nodes that can be deduplicated across call sites.</p>
 <h3 id="return"><a class="header" href="#return"><code>return</code></a></h3>
 <p>(<code>Statement::Return</code>)</p>
-<h4 id="description-96"><a class="header" href="#description-96">Description</a></h4>
+<h4 id="description-94"><a class="header" href="#description-94">Description</a></h4>
 <p>End the current call frame successfully, returning <code>length</code> bytes from emulated EVM linear memory at <code>offset</code> as the return data.</p>
-<h4 id="syntax-96"><a class="header" href="#syntax-96">Syntax</a></h4>
+<h4 id="syntax-94"><a class="header" href="#syntax-94">Syntax</a></h4>
 <pre><code class="language-text">return($offset[: &lt;type&gt;], $length[: &lt;type&gt;])
 </code></pre>
-<h4 id="example-96"><a class="header" href="#example-96">Example</a></h4>
+<h4 id="example-94"><a class="header" href="#example-94">Example</a></h4>
 <pre><code class="language-text">return(v0: i64, v1: i64)
 </code></pre>
-<h4 id="operands-96"><a class="header" href="#operands-96">Operands</a></h4>
+<h4 id="operands-94"><a class="header" href="#operands-94">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4506,6 +4445,66 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 </tbody>
 </table>
 </div>
+<h4 id="result-and-purity-94"><a class="header" href="#result-and-purity-94">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None — terminates the call frame</td><td>Effectful (terminator)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-94"><a class="header" href="#annotations-94">Annotations</a></h4>
+<p>None.</p>
+<h3 id="revert"><a class="header" href="#revert"><code>revert</code></a></h3>
+<p>(<code>Statement::Revert</code>)</p>
+<h4 id="description-95"><a class="header" href="#description-95">Description</a></h4>
+<p>End the current call frame with a revert, undoing all state changes made during the call, and returning <code>length</code> bytes of revert data from emulated EVM linear memory at <code>offset</code>.</p>
+<h4 id="syntax-95"><a class="header" href="#syntax-95">Syntax</a></h4>
+<pre><code class="language-text">revert($offset[: &lt;type&gt;], $length[: &lt;type&gt;])
+</code></pre>
+<h4 id="example-95"><a class="header" href="#example-95">Example</a></h4>
+<pre><code class="language-text">revert(v0: i64, v1: i64)
+</code></pre>
+<h4 id="operands-95"><a class="header" href="#operands-95">Operands</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>offset</code></td><td><code>i256</code></td><td>Revert-data source offset; forward analysis widens to at least <code>i64</code>.</td></tr>
+<tr><td><code>length</code></td><td><code>i256</code></td><td>Revert-data length; forward analysis widens to at least <code>i64</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="result-and-purity-95"><a class="header" href="#result-and-purity-95">Result and purity</a></h4>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Result</th><th>Purity</th></tr>
+</thead>
+<tbody>
+<tr><td>None — terminates the call frame</td><td>Effectful (terminator)</td></tr>
+</tbody>
+</table>
+</div>
+<h4 id="annotations-95"><a class="header" href="#annotations-95">Annotations</a></h4>
+<p>None.</p>
+<h3 id="stop"><a class="header" href="#stop"><code>stop</code></a></h3>
+<p>(<code>Statement::Stop</code>)</p>
+<h4 id="description-96"><a class="header" href="#description-96">Description</a></h4>
+<p>End the current call frame successfully with empty return data.</p>
+<h4 id="syntax-96"><a class="header" href="#syntax-96">Syntax</a></h4>
+<pre><code class="language-text">stop()
+</code></pre>
+<h4 id="example-96"><a class="header" href="#example-96">Example</a></h4>
+<pre><code class="language-text">stop()
+</code></pre>
+<h4 id="operands-96"><a class="header" href="#operands-96">Operands</a></h4>
+<p>None.</p>
 <h4 id="result-and-purity-96"><a class="header" href="#result-and-purity-96">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -4519,28 +4518,18 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 </div>
 <h4 id="annotations-96"><a class="header" href="#annotations-96">Annotations</a></h4>
 <p>None.</p>
-<h3 id="revert"><a class="header" href="#revert"><code>revert</code></a></h3>
-<p>(<code>Statement::Revert</code>)</p>
+<h3 id="invalid"><a class="header" href="#invalid"><code>invalid</code></a></h3>
+<p>(<code>Statement::Invalid</code>)</p>
 <h4 id="description-97"><a class="header" href="#description-97">Description</a></h4>
-<p>End the current call frame with a revert, undoing all state changes made during the call, and returning <code>length</code> bytes of revert data from emulated EVM linear memory at <code>offset</code>.</p>
+<p>Unconditional invalid-opcode trap. Consumes all remaining gas and reverts. Used for unreachable branches and assertion failures.</p>
 <h4 id="syntax-97"><a class="header" href="#syntax-97">Syntax</a></h4>
-<pre><code class="language-text">revert($offset[: &lt;type&gt;], $length[: &lt;type&gt;])
+<pre><code class="language-text">invalid()
 </code></pre>
 <h4 id="example-97"><a class="header" href="#example-97">Example</a></h4>
-<pre><code class="language-text">revert(v0: i64, v1: i64)
+<pre><code class="language-text">invalid()
 </code></pre>
 <h4 id="operands-97"><a class="header" href="#operands-97">Operands</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
-</thead>
-<tbody>
-<tr><td><code>offset</code></td><td><code>i256</code></td><td>Revert-data source offset; forward analysis widens to at least <code>i64</code>.</td></tr>
-<tr><td><code>length</code></td><td><code>i256</code></td><td>Revert-data length; forward analysis widens to at least <code>i64</code>.</td></tr>
-</tbody>
-</table>
-</div>
+<p>None.</p>
 <h4 id="result-and-purity-97"><a class="header" href="#result-and-purity-97">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -4554,18 +4543,27 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 </div>
 <h4 id="annotations-97"><a class="header" href="#annotations-97">Annotations</a></h4>
 <p>None.</p>
-<h3 id="stop"><a class="header" href="#stop"><code>stop</code></a></h3>
-<p>(<code>Statement::Stop</code>)</p>
+<h3 id="selfdestruct"><a class="header" href="#selfdestruct"><code>selfdestruct</code></a></h3>
+<p>(<code>Statement::SelfDestruct</code>)</p>
 <h4 id="description-98"><a class="header" href="#description-98">Description</a></h4>
-<p>End the current call frame successfully with empty return data.</p>
+<p>End the current call frame and transfer the contract’s remaining balance to <code>address</code>. Post-Cancun, the contract storage is not deleted (selfdestruct is effectively deprecated; the opcode still exists for legacy compatibility).</p>
 <h4 id="syntax-98"><a class="header" href="#syntax-98">Syntax</a></h4>
-<pre><code class="language-text">stop()
+<pre><code class="language-text">selfdestruct($address[: &lt;type&gt;])
 </code></pre>
 <h4 id="example-98"><a class="header" href="#example-98">Example</a></h4>
-<pre><code class="language-text">stop()
+<pre><code class="language-text">selfdestruct(v0: i160)
 </code></pre>
 <h4 id="operands-98"><a class="header" href="#operands-98">Operands</a></h4>
-<p>None.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
+</thead>
+<tbody>
+<tr><td><code>address</code></td><td><code>i256</code></td><td>Recipient of the contract’s balance; forward analysis widens to at least <code>i160</code>.</td></tr>
+</tbody>
+</table>
+</div>
 <h4 id="result-and-purity-98"><a class="header" href="#result-and-purity-98">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -4579,18 +4577,18 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 </div>
 <h4 id="annotations-98"><a class="header" href="#annotations-98">Annotations</a></h4>
 <p>None.</p>
-<h3 id="invalid"><a class="header" href="#invalid"><code>invalid</code></a></h3>
-<p>(<code>Statement::Invalid</code>)</p>
+<h3 id="panic_revert"><a class="header" href="#panic_revert"><code>panic_revert</code></a></h3>
+<p>(<code>Statement::PanicRevert</code>)</p>
 <h4 id="description-99"><a class="header" href="#description-99">Description</a></h4>
-<p>Unconditional invalid-opcode trap. Consumes all remaining gas and reverts. Used for unreachable branches and assertion failures.</p>
+<p>Outlined Solidity panic revert. Equivalent to writing the <code>Panic(uint256)</code> ABI encoding (selector <code>0x4e487b71</code> plus the panic code) into emulated EVM linear memory and reverting, but emitted as a single statement that lowers to one outlined helper call. Common panic codes: <code>0x01</code> assertion failure, <code>0x11</code> arithmetic overflow, <code>0x12</code> division by zero, <code>0x32</code> array-out-of-bounds, <code>0x41</code> memory overflow.</p>
 <h4 id="syntax-99"><a class="header" href="#syntax-99">Syntax</a></h4>
-<pre><code class="language-text">invalid()
+<pre><code class="language-text">panic_revert(0x&lt;hex&gt;)
 </code></pre>
 <h4 id="example-99"><a class="header" href="#example-99">Example</a></h4>
-<pre><code class="language-text">invalid()
+<pre><code class="language-text">panic_revert(0x11)              // arithmetic overflow
 </code></pre>
 <h4 id="operands-99"><a class="header" href="#operands-99">Operands</a></h4>
-<p>None.</p>
+<p>None — the panic code is stored as a <code>u8</code> field on the IR, not an SSA operand.</p>
 <h4 id="result-and-purity-99"><a class="header" href="#result-and-purity-99">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
@@ -4603,65 +4601,6 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 </table>
 </div>
 <h4 id="annotations-99"><a class="header" href="#annotations-99">Annotations</a></h4>
-<p>None.</p>
-<h3 id="selfdestruct"><a class="header" href="#selfdestruct"><code>selfdestruct</code></a></h3>
-<p>(<code>Statement::SelfDestruct</code>)</p>
-<h4 id="description-100"><a class="header" href="#description-100">Description</a></h4>
-<p>End the current call frame and transfer the contract’s remaining balance to <code>address</code>. Post-Cancun, the contract storage is not deleted (selfdestruct is effectively deprecated; the opcode still exists for legacy compatibility).</p>
-<h4 id="syntax-100"><a class="header" href="#syntax-100">Syntax</a></h4>
-<pre><code class="language-text">selfdestruct($address[: &lt;type&gt;])
-</code></pre>
-<h4 id="example-100"><a class="header" href="#example-100">Example</a></h4>
-<pre><code class="language-text">selfdestruct(v0: i160)
-</code></pre>
-<h4 id="operands-100"><a class="header" href="#operands-100">Operands</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Name</th><th>Type</th><th>Notes</th></tr>
-</thead>
-<tbody>
-<tr><td><code>address</code></td><td><code>i256</code></td><td>Recipient of the contract’s balance; forward analysis widens to at least <code>i160</code>.</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="result-and-purity-100"><a class="header" href="#result-and-purity-100">Result and purity</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Result</th><th>Purity</th></tr>
-</thead>
-<tbody>
-<tr><td>None — terminates the call frame</td><td>Effectful (terminator)</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="annotations-100"><a class="header" href="#annotations-100">Annotations</a></h4>
-<p>None.</p>
-<h3 id="panic_revert"><a class="header" href="#panic_revert"><code>panic_revert</code></a></h3>
-<p>(<code>Statement::PanicRevert</code>)</p>
-<h4 id="description-101"><a class="header" href="#description-101">Description</a></h4>
-<p>Outlined Solidity panic revert. Equivalent to writing the <code>Panic(uint256)</code> ABI encoding (selector <code>0x4e487b71</code> plus the panic code) into emulated EVM linear memory and reverting, but emitted as a single statement that lowers to one outlined helper call. Common panic codes: <code>0x01</code> assertion failure, <code>0x11</code> arithmetic overflow, <code>0x12</code> division by zero, <code>0x32</code> array-out-of-bounds, <code>0x41</code> memory overflow.</p>
-<h4 id="syntax-101"><a class="header" href="#syntax-101">Syntax</a></h4>
-<pre><code class="language-text">panic_revert(0x&lt;hex&gt;)
-</code></pre>
-<h4 id="example-101"><a class="header" href="#example-101">Example</a></h4>
-<pre><code class="language-text">panic_revert(0x11)              // arithmetic overflow
-</code></pre>
-<h4 id="operands-101"><a class="header" href="#operands-101">Operands</a></h4>
-<p>None — the panic code is stored as a <code>u8</code> field on the IR, not an SSA operand.</p>
-<h4 id="result-and-purity-101"><a class="header" href="#result-and-purity-101">Result and purity</a></h4>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Result</th><th>Purity</th></tr>
-</thead>
-<tbody>
-<tr><td>None — terminates the call frame</td><td>Effectful (terminator)</td></tr>
-</tbody>
-</table>
-</div>
-<h4 id="annotations-101"><a class="header" href="#annotations-101">Annotations</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4674,17 +4613,17 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 </div>
 <h3 id="error_string_revert"><a class="header" href="#error_string_revert"><code>error_string_revert</code></a></h3>
 <p>(<code>Statement::ErrorStringRevert</code>)</p>
-<h4 id="description-102"><a class="header" href="#description-102">Description</a></h4>
+<h4 id="description-100"><a class="header" href="#description-100">Description</a></h4>
 <p>Outlined Solidity <code>Error(string)</code> revert. Equivalent to writing the <code>Error</code> selector (<code>0x08c379a0</code>), the string offset and length, and up to four 32-byte data words into emulated EVM linear memory and reverting. The string length and the data words are stored as compile-time fields; no SSA operands.</p>
-<h4 id="syntax-102"><a class="header" href="#syntax-102">Syntax</a></h4>
+<h4 id="syntax-100"><a class="header" href="#syntax-100">Syntax</a></h4>
 <pre><code class="language-text">error_string_revert(&lt;length&gt;, &lt;N&gt;_words)
 </code></pre>
-<h4 id="example-102"><a class="header" href="#example-102">Example</a></h4>
+<h4 id="example-100"><a class="header" href="#example-100">Example</a></h4>
 <pre><code class="language-text">error_string_revert(12, 1_words)        // 12-byte string in one 32-byte word
 </code></pre>
-<h4 id="operands-102"><a class="header" href="#operands-102">Operands</a></h4>
+<h4 id="operands-100"><a class="header" href="#operands-100">Operands</a></h4>
 <p>None — the string length and data are compile-time fields, not SSA operands.</p>
-<h4 id="result-and-purity-102"><a class="header" href="#result-and-purity-102">Result and purity</a></h4>
+<h4 id="result-and-purity-100"><a class="header" href="#result-and-purity-100">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4695,7 +4634,7 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 </tbody>
 </table>
 </div>
-<h4 id="annotations-102"><a class="header" href="#annotations-102">Annotations</a></h4>
+<h4 id="annotations-100"><a class="header" href="#annotations-100">Annotations</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4709,15 +4648,15 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 </div>
 <h3 id="custom_error_revert"><a class="header" href="#custom_error_revert"><code>custom_error_revert</code></a></h3>
 <p>(<code>Statement::CustomErrorRevert</code>)</p>
-<h4 id="description-103"><a class="header" href="#description-103">Description</a></h4>
+<h4 id="description-101"><a class="header" href="#description-101">Description</a></h4>
 <p>Outlined Solidity custom-error revert. Encodes the error selector (left-shifted by 224 bits) and zero or more argument values into scratch memory and reverts. No FMP load is needed; the encoding uses the scratch region at offset <code>0</code>.</p>
-<h4 id="syntax-103"><a class="header" href="#syntax-103">Syntax</a></h4>
+<h4 id="syntax-101"><a class="header" href="#syntax-101">Syntax</a></h4>
 <pre><code class="language-text">custom_error_revert(0x&lt;hex&gt;, [$arg_0, $arg_1, …])
 </code></pre>
-<h4 id="example-103"><a class="header" href="#example-103">Example</a></h4>
+<h4 id="example-101"><a class="header" href="#example-101">Example</a></h4>
 <pre><code class="language-text">custom_error_revert(0xa28c4c11, [v0, v1])
 </code></pre>
-<h4 id="operands-103"><a class="header" href="#operands-103">Operands</a></h4>
+<h4 id="operands-101"><a class="header" href="#operands-101">Operands</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4728,7 +4667,7 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 </tbody>
 </table>
 </div>
-<h4 id="result-and-purity-103"><a class="header" href="#result-and-purity-103">Result and purity</a></h4>
+<h4 id="result-and-purity-101"><a class="header" href="#result-and-purity-101">Result and purity</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>
@@ -4739,7 +4678,7 @@ log2(v0: i64, v1: i64, v2, v3)            // two topics
 </tbody>
 </table>
 </div>
-<h4 id="annotations-103"><a class="header" href="#annotations-103">Annotations</a></h4>
+<h4 id="annotations-101"><a class="header" href="#annotations-101">Annotations</a></h4>
 <div class="table-wrapper">
 <table>
 <thead>

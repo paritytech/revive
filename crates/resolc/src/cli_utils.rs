@@ -41,6 +41,8 @@ pub const SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH: &str =
 /// The reproducer from paritytech/revive#624 with 128 immutables, exactly at the limit.
 pub const SOLIDITY_IMMUTABLES_AT_LIMIT_PATH: &str =
     "src/tests/data/solidity/immutables_at_limit.sol";
+/// A contract using `blobhash` and `blobbasefee`
+pub const SOLIDITY_BLOB_OPCODES_PATH: &str = "src/tests/data/solidity/blob_opcodes.sol";
 /// The verbatim reproducer from paritytech/revive#625: a contract calling an external library.
 pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/library_call.sol";
 /// The paritytech/revive#622 reproducer contract at `a/c.sol`.

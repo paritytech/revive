@@ -81,7 +81,9 @@ impl Project {
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<Build> {
-        let deployed_libraries = self.libraries.as_paths();
+        let missing_libraries = self
+            .get_missing_libraries(&self.libraries.as_paths())
+            .contract_libraries;
 
         #[cfg(feature = "parallel")]
         let iter = self.contracts.into_par_iter();
@@ -119,7 +121,10 @@ impl Project {
                             .expect("checked above")
                     })
                     .collect();
-                let missing_libraries = contract.get_missing_libraries(&deployed_libraries);
+                let missing_libraries = missing_libraries
+                    .get(path.as_str())
+                    .cloned()
+                    .expect("Always exists");
                 let input = ProcessInput::new(
                     contract,
                     self.version.clone(),
@@ -150,15 +155,32 @@ impl Project {
     }
 
     /// Get the list of missing deployable libraries.
+    ///
+    /// The libraries of the factory dependencies are included transitively.
     pub fn get_missing_libraries(&self, deployed_libraries: &BTreeSet<String>) -> MissingLibraries {
         let missing_libraries = self
             .contracts
-            .iter()
-            .map(|(path, contract)| {
-                (
-                    path.to_owned(),
-                    contract.get_missing_libraries(deployed_libraries),
-                )
+            .keys()
+            .map(|path| {
+                let mut libraries = BTreeSet::new();
+                let mut visited = BTreeSet::new();
+                let mut pending = vec![path.as_str()];
+                while let Some(path) = pending.pop() {
+                    if !visited.insert(path) {
+                        continue;
+                    }
+                    let contract = self.contracts.get(path).expect("Always exists");
+                    libraries.extend(contract.get_missing_libraries(deployed_libraries));
+                    pending.extend(
+                        contract
+                            .ir
+                            .factory_dependencies()
+                            .iter()
+                            .filter_map(|identifier| self.identifier_paths.get(identifier))
+                            .map(String::as_str),
+                    );
+                }
+                (path.to_owned(), libraries)
             })
             .collect();
         MissingLibraries::new(missing_libraries)

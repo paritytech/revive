@@ -20,6 +20,8 @@ use crate::standard_json::input::settings::optimizer::Optimizer as SolcStandardJ
 #[cfg(feature = "resolc")]
 use crate::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
 #[cfg(feature = "resolc")]
+use crate::SolcStandardJsonInputSettingsDebug;
+#[cfg(feature = "resolc")]
 use crate::SolcStandardJsonInputSettingsLibraries;
 #[cfg(feature = "resolc")]
 use crate::SolcStandardJsonInputSettingsPolkaVM;
@@ -75,6 +77,7 @@ impl Input {
         output_selection: SolcStandardJsonInputSettingsSelection,
         optimizer: SolcStandardJsonInputSettingsOptimizer,
         metadata: SolcStandardJsonInputSettingsMetadata,
+        debug: Option<SolcStandardJsonInputSettingsDebug>,
         suppressed_warnings: Vec<Warning>,
         polkavm: SolcStandardJsonInputSettingsPolkaVM,
         llvm_arguments: Vec<String>,
@@ -106,6 +109,7 @@ impl Input {
             output_selection,
             optimizer,
             metadata,
+            debug,
             suppressed_warnings,
             polkavm,
             llvm_arguments,
@@ -123,6 +127,7 @@ impl Input {
         output_selection: SolcStandardJsonInputSettingsSelection,
         optimizer: SolcStandardJsonInputSettingsOptimizer,
         metadata: SolcStandardJsonInputSettingsMetadata,
+        debug: Option<SolcStandardJsonInputSettingsDebug>,
         suppressed_warnings: Vec<Warning>,
         polkavm: SolcStandardJsonInputSettingsPolkaVM,
         llvm_arguments: Vec<String>,
@@ -138,6 +143,7 @@ impl Input {
                 output_selection,
                 optimizer,
                 metadata,
+                debug,
                 polkavm,
                 suppressed_warnings.clone(),
                 llvm_arguments,
@@ -185,6 +191,7 @@ impl Input {
                 output_selection,
                 optimizer,
                 Default::default(),
+                None,
                 Default::default(),
                 vec![],
                 llvm_arguments,

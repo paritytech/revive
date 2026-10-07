@@ -114,3 +114,70 @@ fn tx_origin_suppressed() {
     .unwrap();
     assert!(!contains_warning(build, ResolcWarning::TxOrigin))
 }
+
+pub const TX_ORIGIN_MID_LINE_TEST_SOURCE: &str = r#"contract C {
+    function f() external view returns (address) {
+        return tx.origin;
+    }
+}
+"#;
+
+pub const TX_ORIGIN_LINE_START_TEST_SOURCE: &str = r#"contract C {
+    function f() external view returns (address a) {
+        a =
+tx.origin;
+    }
+}
+"#;
+
+fn warning_message(path: &str, source: &str, warning: ResolcWarning) -> String {
+    build_solidity(sources(&[(path, source)]))
+        .unwrap()
+        .errors
+        .into_iter()
+        .find(|error| error.is_warning() && error.message.contains(warning.as_message()))
+        .unwrap()
+        .formatted_message
+}
+
+/// The warning location points at `tx.origin` in the middle of a line.
+#[test]
+fn tx_origin_location_mid_line() {
+    let message = warning_message(
+        "mid.sol",
+        TX_ORIGIN_MID_LINE_TEST_SOURCE,
+        ResolcWarning::TxOrigin,
+    );
+    assert!(message.contains("mid.sol:3:16\n"), "{message}");
+    assert!(
+        message.contains("\n 3 |         return tx.origin;\n   |                ^^^^^^^^^\n"),
+        "{message}"
+    );
+}
+
+/// The warning location points at `tx.origin` at the start of a line.
+#[test]
+fn tx_origin_location_line_start() {
+    let message = warning_message(
+        "bol.sol",
+        TX_ORIGIN_LINE_START_TEST_SOURCE,
+        ResolcWarning::TxOrigin,
+    );
+    assert!(message.contains("bol.sol:4:1\n"), "{message}");
+    assert!(
+        message.contains("\n 4 | tx.origin;\n   | ^^^^^^^^^\n"),
+        "{message}"
+    );
+}
+
+/// The warning location points at `tx.origin` at the start of a line with CRLF line endings.
+#[test]
+fn tx_origin_location_line_start_crlf() {
+    let source = TX_ORIGIN_LINE_START_TEST_SOURCE.replace('\n', "\r\n");
+    let message = warning_message("crlf.sol", &source, ResolcWarning::TxOrigin);
+    assert!(message.contains("crlf.sol:4:1\n"), "{message}");
+    assert!(
+        message.contains("\n 4 | tx.origin;\n   | ^^^^^^^^^\n"),
+        "{message}"
+    );
+}

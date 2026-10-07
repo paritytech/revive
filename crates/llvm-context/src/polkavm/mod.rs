@@ -1,6 +1,6 @@
 //! The LLVM context library.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroU32;
 
 use crate::debug_config::DebugConfig;
@@ -80,26 +80,36 @@ pub fn link(
     Ok(match ObjectFormat::try_from(bytecode) {
         Ok(format @ ObjectFormat::PVM) => (bytecode.to_vec(), format),
         Ok(ObjectFormat::ELF) => {
-            let symbols = build_symbols(linker_symbols, factory_dependencies)?;
+            let symbol_names = symbol_names(bytecode)?;
+            let factory_dependencies = factory_dependencies
+                .iter()
+                .filter(|(name, _)| symbol_names.contains(name.as_str()))
+                .map(|(name, hash)| (name.to_owned(), *hash))
+                .collect();
+            let symbols = build_symbols(linker_symbols, &factory_dependencies)?;
             let bytecode_linked = ElfLinker::setup()?.link(bytecode, &symbols)?;
-            polkavm_linker(&bytecode_linked, strip_binary)
-                .map(|pvm| (pvm, ObjectFormat::PVM))
-                .unwrap_or_else(|error| {
-                    if !error
+            match polkavm_linker(&bytecode_linked, strip_binary) {
+                Ok(pvm) => (pvm, ObjectFormat::PVM),
+                Err(error)
+                    if error
                         .to_string()
                         .lines()
                         .map(|line| line.trim())
                         .filter(|line| !line.is_empty())
-                        .all(|line| line.contains("found undefined symbol"))
-                    {
-                        panic!("ICE: linker: {error}");
-                    }
-
+                        .all(|line| line.contains("found undefined symbol")) =>
+                {
                     (bytecode.to_vec(), ObjectFormat::ELF)
-                })
+                }
+                Err(error) => return Err(error),
+            }
         }
         Err(error) => panic!("ICE: linker: {error}"),
     })
+}
+
+/// Returns the linker symbol name of the library address at `path`.
+pub fn library_address_symbol(path: &str) -> String {
+    format!("{GLOBAL_LIBRARY_ADDRESS_PREFIX}{path}")
 }
 
 /// The returned module defines given `linker_symbols` and `factory_dependencies` global values.
@@ -119,7 +129,11 @@ pub fn build_symbols(
         .expect("valid integer width");
 
     for (name, value) in linker_symbols {
-        let global_value = module.add_global(address_type, Default::default(), name);
+        let global_value = module.add_global(
+            address_type,
+            Default::default(),
+            &library_address_symbol(name),
+        );
         global_value.set_linkage(inkwell::module::Linkage::External);
         global_value.set_initializer(
             &address_type
@@ -171,4 +185,26 @@ impl WriteLLVM for DummyLLVMWritable {
     fn into_llvm(self, _context: &mut Context) -> anyhow::Result<()> {
         Ok(())
     }
+}
+
+/// Returns the names of all symbols in the ELF object `bytecode`.
+fn symbol_names(bytecode: &[u8]) -> anyhow::Result<BTreeSet<String>> {
+    let mut buffer = bytecode.to_vec();
+    buffer.push(0);
+    let memory_buffer =
+        inkwell::memory_buffer::MemoryBuffer::create_from_memory_range_copy(&buffer, "object");
+    let binary_file = memory_buffer
+        .create_binary_file(None)
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    let mut symbols = binary_file
+        .get_symbols()
+        .context("the ELF object should have a symbol table")?;
+
+    let mut names = BTreeSet::new();
+    while let Some(symbol) = symbols.next_symbol() {
+        if let Some(name) = symbol.get_name() {
+            names.insert(name.to_string_lossy().into_owned());
+        }
+    }
+    Ok(names)
 }

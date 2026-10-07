@@ -144,6 +144,12 @@ pub const STANDARD_JSON_YUL_PVM_CODEGEN_PATH: &str =
 /// PVM bytecode generation and only validate the Yul.
 pub const STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/yul_no_pvm_codegen.json";
+/// The standard JSON input from paritytech/revive#623 with a heap size outside the PVM memory map.
+pub const STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH: &str =
+    "src/tests/data/standard_json/heap_size_out_of_range.json";
+/// A standard JSON input with a heap size the polkavm linker fails to link.
+pub const STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH: &str =
+    "src/tests/data/standard_json/heap_size_linker_failure.json";
 /// A standard JSON fixture with `settings.debug.revertStrings` set to `"default"`,
 /// so solc keeps the `require` reason string of its contract.
 pub const STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH: &str =

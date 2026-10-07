@@ -10,7 +10,8 @@ use crate::cli_utils::{
     execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
     STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH, STANDARD_JSON_DEBUG_INFO_EMPTY_PATH,
     STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH, STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH,
-    STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
+    STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
+    STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
     STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
     STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH,
@@ -487,6 +488,52 @@ fn yul_no_pvm_codegen_requested() {
     let expected = ExpectedOutput {
         contracts: vec![],
         sources: vec![],
+    };
+    assert_output_matches(&output, &expected);
+}
+
+#[test]
+fn mixes_all_wildcard_and_individual_file_selection() {
+    let file = STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH;
+    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], file);
+    assert_command_success(&result, &format!("the `{file}` input fixture"));
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+
+    let expected_contract_fields_all = &["evm", "evm.bytecode"];
+    let expected = ExpectedOutput {
+        contracts: vec![
+            ExpectedContract {
+                path: "a.sol",
+                name: "A",
+                fields: [&expected_contract_fields_all[..], &["abi"]].concat(),
+            },
+            ExpectedContract {
+                path: "b.sol",
+                name: "B",
+                fields: expected_contract_fields_all.into(),
+            },
+            ExpectedContract {
+                path: "c.sol",
+                name: "C",
+                fields: [&expected_contract_fields_all[..], &["metadata"]].concat(),
+            },
+        ],
+        sources: vec![
+            ExpectedSource {
+                path: "a.sol",
+                fields: vec!["id", "ast"],
+            },
+            ExpectedSource {
+                path: "b.sol",
+                fields: vec!["id", "ast"],
+            },
+            ExpectedSource {
+                path: "c.sol",
+                fields: vec!["id", "ast"],
+            },
+        ],
     };
     assert_output_matches(&output, &expected);
 }

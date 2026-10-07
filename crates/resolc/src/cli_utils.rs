@@ -114,6 +114,12 @@ pub const STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH: &str =
 /// `settings.polkavm.newyork` field, so it compiles through the stock pipeline.
 pub const STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH: &str =
     "src/tests/data/standard_json/yul_newyork_disabled.json";
+/// A contract creating a contract that calls a library, compiled normally.
+pub const STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH: &str =
+    "src/tests/data/standard_json/factory_dependency_libraries.json";
+/// The same input as [`STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH`] with `detectMissingLibraries` set.
+pub const STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH: &str =
+    "src/tests/data/standard_json/factory_dependency_libraries_detect.json";
 /// The standard JSON PVM codegen for all files on a per-file basis test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.
@@ -144,6 +150,12 @@ pub const STANDARD_JSON_YUL_PVM_CODEGEN_PATH: &str =
 /// PVM bytecode generation and only validate the Yul.
 pub const STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/yul_no_pvm_codegen.json";
+/// The standard JSON input from paritytech/revive#623 with a heap size outside the PVM memory map.
+pub const STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH: &str =
+    "src/tests/data/standard_json/heap_size_out_of_range.json";
+/// A standard JSON input with a heap size the polkavm linker fails to link.
+pub const STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH: &str =
+    "src/tests/data/standard_json/heap_size_linker_failure.json";
 /// A standard JSON fixture with `settings.debug.revertStrings` set to `"default"`,
 /// so solc keeps the `require` reason string of its contract.
 pub const STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH: &str =
@@ -167,6 +179,10 @@ pub const STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH: &str =
 /// source location annotations from the Yul IR.
 pub const STANDARD_JSON_DEBUG_INFO_EMPTY_PATH: &str =
     "src/tests/data/standard_json/debug_info_empty.json";
+/// A standard JSON fixture requesting codegen for all contracts in all files
+/// via the "all" (`*`) wildcard, but only additional fields for specific files.
+pub const STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH: &str =
+    "src/tests/data/standard_json/mix_all_wildcard_and_file_selection.json";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";

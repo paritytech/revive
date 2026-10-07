@@ -522,15 +522,15 @@ fn mixes_all_wildcard_and_individual_file_selection() {
         sources: vec![
             ExpectedSource {
                 path: "a.sol",
-                fields: vec!["id"],
+                fields: vec!["id", "ast"],
             },
             ExpectedSource {
                 path: "b.sol",
-                fields: vec!["id"],
+                fields: vec!["id", "ast"],
             },
             ExpectedSource {
                 path: "c.sol",
-                fields: vec!["id"],
+                fields: vec!["id", "ast"],
             },
         ],
     };

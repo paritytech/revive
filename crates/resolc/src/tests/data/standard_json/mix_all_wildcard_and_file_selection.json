@@ -17,7 +17,8 @@
     },
     "outputSelection": {
       "*": {
-        "*": ["evm.bytecode"]
+        "*": ["evm.bytecode"],
+        "": ["ast"]
       },
       "a.sol": {
         "*": ["abi"]

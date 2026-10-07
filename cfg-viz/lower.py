@@ -15,6 +15,7 @@ builds one, so the result can be checked against the `.unoptimized.ll` dump.
 import json
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 
 SCHEMA = 1
@@ -46,14 +47,28 @@ def render_type(node):
     return str(node)
 
 
-def render_value(node):
+def render_value(node, functions=None):
     """A use site: `{"id": 3, "value_type": …}` -> `v3`."""
     if isinstance(node, dict) and "id" in node:
         return f"v{node['id']}"
-    return render_expression(node)
+    return render_expression(node, functions)
 
 
-def render_expression(node):
+def render_call(index, arguments, functions):
+    """A call head carrying both spellings of the callee.
+
+    The IR names a callee by index, and that index is what the function's
+    graph id (`…/fn:3`) and the call overlay are keyed on. The Yul name is
+    what the source and the pretty printer say. Neither alone lets a reader
+    match a call site to its function graph, so a resolved call prints both.
+    """
+    name = (functions or {}).get(index)
+    if name is None:
+        return f"fn{index}({arguments})"
+    return f"{name}({arguments}) /* fn{index} */"
+
+
+def render_expression(node, functions=None):
     """An expression in the pretty printer's Yul-like syntax."""
     if node is None:
         return "_"
@@ -72,11 +87,11 @@ def render_expression(node):
     if variant == "Var":
         return f"v{payload}"
     if variant == "Call":
-        arguments = ", ".join(render_value(a) for a in payload["arguments"])
-        return f"fn{payload['function']}({arguments})"
+        arguments = ", ".join(render_value(a, functions) for a in payload["arguments"])
+        return render_call(payload["function"], arguments, functions)
 
     if not isinstance(payload, dict):
-        return f"{snake(variant)}({render_expression(payload)})"
+        return f"{snake(variant)}({render_expression(payload, functions)})"
 
     arguments, annotations = [], []
     for field, value in payload.items():
@@ -86,9 +101,9 @@ def render_expression(node):
         elif field in ("value_type", "to"):
             annotations.append(render_type(value))
         elif isinstance(value, list):
-            arguments.append("[" + ", ".join(render_value(v) for v in value) + "]")
+            arguments.append("[" + ", ".join(render_value(v, functions) for v in value) + "]")
         else:
-            arguments.append(render_value(value))
+            arguments.append(render_value(value, functions))
 
     text = f"{snake(variant)}({', '.join(arguments)})"
     if annotations:
@@ -96,21 +111,21 @@ def render_expression(node):
     return text
 
 
-def render_statement(statement):
+def render_statement(statement, functions=None):
     """One non-control-flow statement as a single line."""
     if isinstance(statement, str):
         return f"{snake(statement)}()"
     (variant, payload), = statement.items()
     if variant == "Let":
         bindings = ", ".join(f"v{b}" for b in payload["bindings"])
-        return f"let {bindings} := {render_expression(payload['value'])}"
+        return f"let {bindings} := {render_expression(payload['value'], functions)}"
     if variant == "Expression":
-        return render_expression(payload)
+        return render_expression(payload, functions)
     if variant in ("ExternalCall", "Create"):
         rest = {k: v for k, v in payload.items() if k != "result"}
-        call = render_expression({variant: rest})
+        call = render_expression({variant: rest}, functions)
         return f"let v{payload['result']} := {call}"
-    return render_expression(statement)
+    return render_expression(statement, functions)
 
 
 def collect_uses(node, out):
@@ -124,6 +139,21 @@ def collect_uses(node, out):
     elif isinstance(node, list):
         for value in node:
             collect_uses(value, out)
+
+
+def statement_call(statement):
+    """The callee index of a `let v := fn(…)`, or None for anything else.
+
+    A call is not its own statement variant in the IR — it is the value of a
+    `Let` — so this is the only place that distinction is made.
+    """
+    if isinstance(statement, str):
+        return None
+    (variant, payload), = statement.items()
+    if variant != "Let" or not isinstance(payload.get("value"), dict):
+        return None
+    call = payload["value"].get("Call")
+    return call["function"] if call else None
 
 
 def statement_defs(statement):
@@ -140,10 +170,15 @@ def statement_defs(statement):
 class GraphBuilder:
     """Lowers one Block (an object's code, or a function body) to blocks and edges."""
 
-    def __init__(self, graph_id, kind, name):
+    def __init__(self, graph_id, kind, name, object_prefix=None, functions=None):
         self.graph_id = graph_id
         self.kind = kind
         self.name = name
+        # Function indices are scoped to the enclosing object, so resolving a
+        # callee to a name and to a graph id needs that object's table and its
+        # id prefix, not this graph's.
+        self.object_prefix = graph_id if object_prefix is None else object_prefix
+        self.functions = functions or {}
         self.blocks = {}
         self.block_order = []
         self.edges = []
@@ -182,16 +217,33 @@ class GraphBuilder:
         self.sinks[identifier]["merged"] += 1
         return identifier
 
+    def callee(self, index):
+        """Both spellings of a callee, plus the graph id a call links to."""
+        if index is None:
+            return None
+        return {
+            "function": index,
+            "name": self.functions.get(index),
+            "graph": f"{self.object_prefix}/fn:{index}",
+        }
+
     def emit(self, block, statement):
         uses = []
         collect_uses(statement, uses)
         variant = statement if isinstance(statement, str) else next(iter(statement))
-        self.blocks[block]["statements"].append({
-            "text": render_statement(statement),
-            "kind": variant,
+        callee = self.callee(statement_call(statement))
+        entry = {
+            "text": render_statement(statement, self.functions),
+            # A call is spelled as a `Let` in the IR, but it is the one
+            # statement whose effect lives in another graph, so the view needs
+            # to tell it apart from an ordinary binding.
+            "kind": "Call" if callee else variant,
             "defs": statement_defs(statement),
             "uses": uses,
-        })
+        }
+        if callee:
+            entry["callee"] = callee
+        self.blocks[block]["statements"].append(entry)
 
     def phi(self, block, defines, sources):
         self.blocks[block]["phis"].append({"defines": defines, "sources": sources})
@@ -230,7 +282,8 @@ class GraphBuilder:
         (variant, payload), = statement.items()
 
         if variant in TERMINATORS:
-            self.blocks[block]["terminator"] = {"kind": variant, "text": render_statement(statement)}
+            self.blocks[block]["terminator"] = {
+                "kind": variant, "text": render_statement(statement, self.functions)}
             self.edge(block, self.sink(variant), "Terminate")
             return None
 
@@ -265,8 +318,9 @@ class GraphBuilder:
             return None
 
         # A call inside a Let is an edge to another graph, drawn as an overlay.
-        if variant == "Let" and isinstance(payload.get("value"), dict) and "Call" in payload["value"]:
-            self.calls.append({"from": block, "function": payload["value"]["Call"]["function"]})
+        callee = self.callee(statement_call(statement))
+        if callee:
+            self.calls.append({"from": block, **callee})
 
         self.emit(block, statement)
         return block
@@ -361,7 +415,7 @@ class GraphBuilder:
 
         header_tail = self.lower_statements(payload["condition_statements"], header, loop_region)
         self.blocks[header_tail]["terminator"] = {
-            "kind": "CondBr", "text": render_expression(payload["condition"]),
+            "kind": "CondBr", "text": render_expression(payload["condition"], self.functions),
         }
 
         frame = {"post": post, "exit": exit_block, "break_sources": [], "continue_sources": []}
@@ -440,18 +494,36 @@ class GraphBuilder:
 
 def lower_object(obj, path, graphs):
     prefix = "/".join(path + [obj["name"]])
-    graphs.append(GraphBuilder(f"{prefix}/code", "ObjectCode", f"{obj['name']} code")
-                  .build(obj["code"]))
+    # Shared by every graph in this object: a call names its callee by an index
+    # into this table, and subobjects have tables of their own.
+    functions = {int(i): f["name"] for i, f in obj["functions"].items()}
+
+    local = [GraphBuilder(f"{prefix}/code", "ObjectCode", f"{obj['name']} code",
+                          prefix, functions).build(obj["code"])]
     for identifier, function in sorted(obj["functions"].items(), key=lambda kv: int(kv[0])):
-        builder = GraphBuilder(f"{prefix}/fn:{identifier}", "Function", function["name"])
+        builder = GraphBuilder(f"{prefix}/fn:{identifier}", "Function", function["name"],
+                               prefix, functions)
         graph = builder.build(function["body"], function.get("return_values", []))
+        graph["function"] = int(identifier)
         graph["signature"] = {
             "parameters": [f"v{p[0]}: {render_type(p[1])}" for p in function["parameters"]],
             "returns": [render_type(t) for t in function["returns"]],
             "call_count": function.get("call_count"),
             "size_estimate": function.get("size_estimate"),
         }
-        graphs.append(graph)
+        local.append(graph)
+
+    # `call_count` is IR metadata that only the inline pass recomputes, so it
+    # reads 0 on every stage before the first inline — which makes a function
+    # with live callers look dead. Counting the call sites this lowering
+    # actually walked is true at every stage, so the viewer leads with that and
+    # keeps the metadata beside it rather than silently preferring one.
+    observed = Counter(call["function"] for graph in local for call in graph["calls"])
+    for graph in local:
+        if "signature" in graph:
+            graph["signature"]["observed_call_sites"] = observed[graph["function"]]
+    graphs.extend(local)
+
     for subobject in obj["subobjects"]:
         lower_object(subobject, path + [obj["name"]], graphs)
 

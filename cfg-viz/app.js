@@ -21,11 +21,15 @@ const EDGE_STYLE = {
   Continue:    { color: "var(--edge-nonlocal)",  label: "continue", dash: "5 3" },
   Leave:       { color: "var(--edge-nonlocal)",  label: "leave",    dash: "5 3" },
   Terminate:   { color: "var(--edge-terminate)", dash: "2 3" },
+  // Not a CFG edge: a call leaves this graph entirely, and the overlay that
+  // draws it is built from `graph.calls` rather than from `graph.edges`.
+  Call:        { color: "var(--edge-call)",      label: "call",     dash: "1 3.5" },
 };
 
 const LEGEND = [
   ["True", "true"], ["False", "false"], ["Back", "back edge"],
   ["Break", "break / continue / leave"], ["Terminate", "terminate"],
+  ["Call", "call"],
 ];
 
 const REGION_COLOR = {
@@ -54,6 +58,7 @@ const PAD_X = 9;
 const PAD_Y = 7;
 const MAX_W = 560;
 const MAX_LINES = 14;
+const CALL_H = 36;
 
 const state = {
   index: null, chain: null, chainData: null,
@@ -104,7 +109,9 @@ function terminatorText(terminator) {
 function blockLines(block, detail) {
   const lines = block.phis.map((p) => ({ text: phiText(p), cls: "phi" }));
   if (detail) {
-    for (const statement of block.statements) lines.push({ text: statement.text, cls: "" });
+    for (const statement of block.statements) {
+      lines.push({ text: statement.text, cls: statement.kind === "Call" ? "call" : "" });
+    }
   } else if (block.statements.length) {
     lines.push({ text: `${block.statements.length} statements`, cls: "more" });
   }
@@ -131,6 +138,60 @@ function measure(block, detail) {
 function truncate(text, width) {
   const limit = Math.floor((width - PAD_X * 2) / CHAR_W);
   return text.length > limit ? text.slice(0, Math.max(1, limit - 1)) + "…" : text;
+}
+
+// ---------------------------------------------------------------------------
+// Calls
+// ---------------------------------------------------------------------------
+
+// A function is named two ways: by the index the IR calls it with (`fn0`,
+// which is also the tail of its graph id) and by the Yul name the source
+// wrote. The viewer shows both everywhere a callee appears, because a reader
+// holding only one of them cannot match a call site to a function graph.
+
+function functionTag(graph) {
+  if (!graph || graph.kind !== "Function") return null;
+  const index = graph.function ?? Number(String(graph.id).split("fn:").pop());
+  return Number.isFinite(index) ? `fn${index}` : null;
+}
+
+function calleeGraphId(graph, call) {
+  // The lowering writes the target id; derive it for data bundled before that.
+  if (call.graph) return call.graph;
+  return graph.id.split("/").slice(0, -1).concat(`fn:${call.function}`).join("/");
+}
+
+// One call-out per distinct callee, carrying the blocks that call it.
+function callOverlay(graph) {
+  const stage = state.chainData?.[state.stageId];
+  const byTarget = new Map();
+  for (const call of graph.calls || []) {
+    const target = calleeGraphId(graph, call);
+    if (!byTarget.has(target)) {
+      const resolved = stage?.graphs.find((g) => g.id === target);
+      byTarget.set(target, {
+        id: `call.fn${call.function}`,
+        target,
+        name: call.name || resolved?.name || null,
+        tag: `fn${call.function}`,
+        present: Boolean(resolved),
+        sites: new Map(),
+      });
+    }
+    const callout = byTarget.get(target);
+    callout.sites.set(call.from, (callout.sites.get(call.from) || 0) + 1);
+  }
+  const callouts = [...byTarget.values()];
+  for (const callout of callouts) {
+    const total = [...callout.sites.values()].reduce((n, c) => n + c, 0);
+    callout.label = callout.name || callout.tag;
+    callout.meta = `${callout.name ? callout.tag + " · " : ""}`
+      + `${total} call site${total === 1 ? "" : "s"}`
+      + (callout.present ? "" : " · not in this stage");
+    callout.width = Math.max(
+      140, Math.max(callout.label.length * 7.1, callout.meta.length * 6.1) + 22);
+  }
+  return callouts;
 }
 
 // ---------------------------------------------------------------------------
@@ -176,7 +237,24 @@ function render() {
     const width = Math.max(96, sink.kind.length * 8 + 44);
     layout.setNode(sink.id, { width, height: 28 });
   }
-  graph.edges.forEach((edge, index) => {
+
+  // The call overlay rides along in the same layout so callees land below the
+  // blocks that reach them, but it stays out of `graph.edges`: a call is not a
+  // control-flow edge, and the stats and the validator both count on that.
+  const callouts = callOverlay(graph);
+  const overlayEdges = [];
+  for (const callout of callouts) {
+    layout.setNode(callout.id, { width: callout.width, height: CALL_H });
+    for (const [from, count] of callout.sites) {
+      overlayEdges.push({
+        from, to: callout.id, kind: "Call",
+        label: count > 1 ? `call ×${count}` : "call",
+      });
+    }
+  }
+  const drawnEdges = graph.edges.concat(overlayEdges);
+
+  drawnEdges.forEach((edge, index) => {
     if (layout.hasNode(edge.from) && layout.hasNode(edge.to)) {
       layout.setEdge(edge.from, edge.to, { kind: edge.kind }, `e${index}`);
     }
@@ -206,7 +284,7 @@ function render() {
   const dimming = query && hits.size > 0;
 
   // -- edges
-  graph.edges.forEach((edge, index) => {
+  drawnEdges.forEach((edge, index) => {
     const laid = layout.edge({ v: edge.from, w: edge.to, name: `e${index}` });
     if (!laid || !laid.points) return;
     const style = EDGE_STYLE[edge.kind] || EDGE_STYLE.Fallthrough;
@@ -239,6 +317,27 @@ function render() {
     group.appendChild(el("text", {
       x: node.width / 2, y: node.height / 2 + 4, class: "sink-label", "text-anchor": "middle",
     }, `${sink.kind.toLowerCase()} ×${sink.merged}`));
+    nodeLayer.appendChild(group);
+  }
+
+  // -- call-outs
+  for (const callout of callouts) {
+    const node = layout.node(callout.id);
+    if (!node) continue;
+    const group = el("g", {
+      transform: `translate(${node.x - node.width / 2},${node.y - node.height / 2})`,
+      style: callout.present ? "cursor:pointer" : "cursor:default",
+    });
+    group.appendChild(el("rect", {
+      class: "call-box" + (callout.present ? "" : " missing") + (dimming ? " dim" : ""),
+      width: node.width, height: CALL_H, rx: 6,
+    }));
+    group.appendChild(el("text", { x: 11, y: 16, class: "call-label" }, callout.label));
+    group.appendChild(el("text", { x: 11, y: 28, class: "call-meta" }, callout.meta));
+    group.appendChild(el("title", {}, callout.present
+      ? `${callout.label} (${callout.tag}) — open ${callout.target}`
+      : `${callout.label} (${callout.tag}) — no graph for it in this stage`));
+    if (callout.present) group.addEventListener("click", () => showGraph(callout.target));
     nodeLayer.appendChild(group);
   }
 
@@ -294,6 +393,7 @@ function render() {
     `${graph.blocks.length} blocks · ${graph.edges.length} edges · ` +
     `${graph.blocks.reduce((n, b) => n + b.phis.length, 0)} phis · ` +
     `${graph.edges.filter((e) => e.kind === "Back").length} loops` +
+    (graph.calls?.length ? ` · ${graph.calls.length} calls` : "") +
     (hits.size ? ` · ${hits.size} matching` : "");
 
   applyView();
@@ -334,6 +434,15 @@ function select(blockId) {
   renderInspector();
 }
 
+function showGraph(graphId) {
+  state.graphId = graphId;
+  state.selected = null;
+  renderGraphs();
+  render();
+  fit();
+  renderInspector();
+}
+
 function renderInspector() {
   const panel = document.getElementById("inspector");
   const graph = currentGraph();
@@ -344,19 +453,37 @@ function renderInspector() {
   if (!block) {
     const head = document.createElement("div");
     head.className = "insp-head";
-    head.innerHTML = `<p class="insp-title">${graph.name}</p>`
-      + `<p class="insp-sub">${graph.kind === "Function" ? "Function" : "Object code"} ·`
+    const tag = functionTag(graph);
+    head.innerHTML = `<p class="insp-title">${escapeHtml(graph.name)}</p>`
+      + `<p class="insp-sub">${tag ? `Function · called as <b>${tag}</b>` : "Object code"} ·`
       + ` ${graph.blocks.length} blocks</p>`;
     panel.appendChild(head);
 
     if (graph.signature) {
+      // Two different numbers, and they disagree on purpose. `observed` is
+      // counted from the call sites in this stage's graphs; `call_count` is IR
+      // metadata that only the inline pass recomputes, so it reads 0 on every
+      // stage before the first inline — which used to make a live function
+      // look dead. Lead with the observed count and say when the field is
+      // behind it rather than quietly showing either one alone.
+      const observed = graph.signature.observed_call_sites;
+      const declared = graph.signature.call_count;
+      const behind = observed !== undefined && declared !== undefined
+        && declared !== observed;
       const group = document.createElement("div");
       group.className = "insp-group";
       group.innerHTML = `<h3>Signature</h3><dl class="kv">`
-        + `<dt>parameters</dt><dd>${graph.signature.parameters.join(", ") || "none"}</dd>`
-        + `<dt>returns</dt><dd>${graph.signature.returns.join(", ") || "none"}</dd>`
-        + `<dt>call sites</dt><dd>${graph.signature.call_count ?? "—"}</dd>`
-        + `<dt>size estimate</dt><dd>${graph.signature.size_estimate ?? "—"}</dd></dl>`;
+        + `<dt>parameters</dt><dd>${escapeHtml(graph.signature.parameters.join(", ")) || "none"}</dd>`
+        + `<dt>returns</dt><dd>${escapeHtml(graph.signature.returns.join(", ")) || "none"}</dd>`
+        + `<dt>call sites</dt><dd>${observed ?? "—"}</dd>`
+        + `<dt>call_count</dt><dd>${declared ?? "—"}`
+        + `${behind ? ` <span class="note">not recomputed yet</span>` : ""}</dd>`
+        + `<dt>size estimate</dt><dd>${graph.signature.size_estimate ?? "—"}</dd></dl>`
+        + (behind
+          ? `<p class="footnote">The IR carries <code>call_count</code> as metadata and `
+            + `only the inline pass refreshes it, so it lags the call sites actually `
+            + `present in this stage.</p>`
+          : "");
       panel.appendChild(group);
     }
     const hint = document.createElement("div");
@@ -397,11 +524,44 @@ function renderInspector() {
   body.innerHTML = `<h3>Statements <span class="count">${block.statements.length}</span></h3>`
     + (block.statements.length || terminator
       ? `<pre class="code">`
-        + block.statements.map((s) => `<span class="ln">${escapeHtml(s.text)}</span>`).join("")
+        + block.statements.map((s) =>
+          `<span class="ln${s.kind === "Call" ? " call" : ""}">${escapeHtml(s.text)}</span>`).join("")
         + (terminator ? `<span class="ln term">${escapeHtml(terminator)}</span>` : "")
         + `</pre>`
       : `<p class="empty">No statements — control only.</p>`);
   panel.appendChild(body);
+
+  const callees = block.statements.filter((s) => s.callee).map((s) => s.callee);
+  if (callees.length) {
+    const group = document.createElement("div");
+    group.className = "insp-group";
+    group.innerHTML = `<h3>Calls <span class="count">${callees.length}</span></h3>`;
+    const chips = document.createElement("div");
+    chips.className = "chips";
+    // One chip per callee, not per call site, so two calls to the same
+    // function read as one destination called twice.
+    const distinct = new Map();
+    for (const callee of callees) {
+      if (!distinct.has(callee.graph)) distinct.set(callee.graph, { callee, count: 0 });
+      distinct.get(callee.graph).count += 1;
+    }
+    for (const { callee, count } of distinct.values()) {
+      const target = state.chainData?.[state.stageId]?.graphs
+        .find((g) => g.id === callee.graph);
+      const chip = document.createElement("button");
+      chip.className = "chip call";
+      chip.innerHTML = `${escapeHtml(callee.name || `fn${callee.function}`)}`
+        + `<span class="idx">fn${callee.function}${count > 1 ? ` ×${count}` : ""}</span>`;
+      chip.title = target
+        ? `Open ${callee.graph}`
+        : `${callee.graph} is not a graph in this stage`;
+      chip.disabled = !target;
+      if (target) chip.addEventListener("click", () => showGraph(callee.graph));
+      chips.appendChild(chip);
+    }
+    group.appendChild(chips);
+    panel.appendChild(group);
+  }
 
   const defs = new Set();
   const uses = new Set();
@@ -505,18 +665,13 @@ function renderGraphs() {
     const row = document.createElement("button");
     row.className = "row changed";
     row.setAttribute("aria-selected", String(graph.id === state.graphId));
+    const tag = functionTag(graph);
     const name = graph.kind === "Function" ? graph.name : graph.id.split("/").slice(-2, -1)[0] + " code";
     row.innerHTML = `<span class="name">${escapeHtml(name)}</span>`
+      + (tag ? `<span class="tag">${tag}</span>` : "")
       + `<span class="tag">${graph.blocks.length}b</span>`;
     row.title = graph.id;
-    row.addEventListener("click", () => {
-      state.graphId = graph.id;
-      state.selected = null;
-      renderGraphs();
-      render();
-      fit();
-      renderInspector();
-    });
+    row.addEventListener("click", () => showGraph(graph.id));
     list.appendChild(row);
   }
 }
@@ -659,4 +814,7 @@ boot().catch((error) => {
   console.error(error);
 });
 
-window.cfgviz = { state, render, fit, select, loadChain, currentGraph, measure, blockLines };
+window.cfgviz = {
+  state, render, fit, select, showGraph, loadChain, currentGraph,
+  measure, blockLines, callOverlay,
+};

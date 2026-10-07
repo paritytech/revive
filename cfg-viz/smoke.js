@@ -120,6 +120,8 @@ async function main() {
   let stages = 0;
   let graphs = 0;
   let blocks = 0;
+  let calls = 0;
+  let callouts = 0;
 
   for (const chain of api.state.index.chains) {
     await api.loadChain(chain.id);
@@ -140,6 +142,35 @@ async function main() {
         api.state.query = "v23";
         api.render();
         api.state.query = "";
+
+        // The call overlay is the one part of the view built from data other
+        // than blocks and edges, and the one that can navigate away from the
+        // current graph. Check that every call-out resolves to a graph that
+        // exists, that it names the callee both ways, and that following it
+        // lands somewhere renderable.
+        for (const callout of api.callOverlay(graph)) {
+          callouts += 1;
+          if (!callout.tag || !/^fn\d+$/.test(callout.tag)) {
+            throw new Error(`${graph.id}: call-out without an fn index`);
+          }
+          if (!callout.present) {
+            throw new Error(`${graph.id}: call to ${callout.target}, which is not in ${stage.id}`);
+          }
+          if (!callout.name) {
+            throw new Error(`${graph.id}: ${callout.tag} resolved to no name`);
+          }
+          api.showGraph(callout.target);
+          if (api.currentGraph().id !== callout.target) {
+            throw new Error(`${graph.id}: following ${callout.tag} did not open ${callout.target}`);
+          }
+          api.state.graphId = graph.id;
+          api.render();
+        }
+        // A call site has to be reachable from the block inspector too.
+        const caller = graph.blocks.find((b) => b.statements.some((s) => s.kind === "Call"));
+        if (caller) api.select(caller.id);
+
+        calls += (graph.calls || []).length;
         graphs += 1;
         blocks += graph.blocks.length;
       }
@@ -148,7 +179,8 @@ async function main() {
     console.log(`  ${chain.contract.padEnd(18)} ${chain.stages.length} stages rendered`);
   }
 
-  console.log(`\nok — ${stages} stages, ${graphs} graphs, ${blocks} blocks rendered without error`);
+  console.log(`\nok — ${stages} stages, ${graphs} graphs, ${blocks} blocks rendered `
+    + `without error; ${calls} call sites across ${callouts} call-outs followed`);
 }
 
 main().catch((error) => {

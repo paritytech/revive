@@ -22,6 +22,7 @@ img { max-width: 100%; }
   --edge-back: #7149bd;
   --edge-nonlocal: #a8701a;
   --edge-plain: #96a0b4;
+  --edge-call: #0d7c8a;
   --edge-terminate: #b0b8c6;
 
   --region-root: #94a0b5;
@@ -54,6 +55,7 @@ img { max-width: 100%; }
     --edge-back: #a183e0;
     --edge-nonlocal: #d6a04a;
     --edge-plain: #5d6879;
+    --edge-call: #3fb6c4;
     --edge-terminate: #4a5464;
 
     --region-root: #5d6879;
@@ -81,6 +83,7 @@ img { max-width: 100%; }
   --edge-back: #a183e0;
   --edge-nonlocal: #d6a04a;
   --edge-plain: #5d6879;
+  --edge-call: #3fb6c4;
   --edge-terminate: #4a5464;
 
   --region-root: #5d6879;
@@ -222,9 +225,20 @@ button.on { background: var(--accent-soft); border-color: var(--accent); color: 
 .node-line.term { font-weight: 600; }
 .node-line.more { fill: var(--faint); font-style: italic; }
 .node-line.hit { fill: var(--accent); font-weight: 600; }
+.node-line.call { fill: var(--edge-call); }
 .stripe { stroke-width: 3; stroke-linecap: round; }
 .sink-box { fill: var(--raised); stroke: var(--edge-terminate); stroke-width: 1; }
 .sink-label { font: 600 11px var(--mono); fill: var(--muted); }
+/* A callee lives in another graph, so it is drawn as a destination rather
+   than as a block: clicking one follows the call. */
+.call-box {
+  fill: var(--surface); stroke: var(--edge-call); stroke-width: 1.3;
+}
+.call-box:hover { fill: var(--accent-soft); }
+.call-box.missing { stroke: var(--edge-terminate); stroke-dasharray: 3 2.5; }
+.call-label { font: 600 11.5px var(--mono); fill: var(--edge-call); pointer-events: none; }
+.call-meta { font: 400 10px var(--mono); fill: var(--faint); pointer-events: none; }
+.call-box.missing + .call-label { fill: var(--muted); }
 .edge { fill: none; stroke-width: 1.4; }
 .edge.dim { opacity: 0.15; }
 .edge-label {
@@ -258,6 +272,7 @@ button.on { background: var(--accent-soft); border-color: var(--accent); color: 
 .code .ln { display: block; }
 .code .ln.phi { color: var(--edge-back); }
 .code .ln.term { font-weight: 600; }
+.code .ln.call { color: var(--edge-call); }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 .chip {
   font: 500 11px var(--mono); padding: 2px 7px; border-radius: 10px;
@@ -266,9 +281,14 @@ button.on { background: var(--accent-soft); border-color: var(--accent); color: 
 }
 .chip:hover { border-color: var(--accent); color: var(--accent); }
 .chip.on { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+.chip.call { color: var(--edge-call); border-color: color-mix(in srgb, var(--edge-call) 40%, transparent); }
+.chip.call:hover { border-color: var(--edge-call); background: var(--raised); }
+.chip.call .idx { color: var(--faint); font-weight: 400; margin-left: 5px; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12px; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; font: 500 12px var(--mono); font-variant-numeric: tabular-nums; }
+.kv dd .note { color: var(--faint); font-weight: 400; font-size: 11px; }
+.footnote { color: var(--faint); font-size: 11px; margin: 7px 0 0; line-height: 1.45; }
 .empty { color: var(--faint); font-size: 12px; font-style: italic; }
 #loading {
   position: absolute; inset: 0; display: grid; place-items: center;

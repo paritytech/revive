@@ -72,6 +72,7 @@ impl Process for NativeProcess {
         command.stdout(std::process::Stdio::piped());
         command.stderr(std::process::Stdio::inherit());
         command.arg("--recursive-process");
+        command.arg("--");
         command.arg(path);
 
         let mut process = command
@@ -82,9 +83,7 @@ impl Process for NativeProcess {
             .as_mut()
             .unwrap_or_else(|| panic!("{executable:?} subprocess stdin getting error"));
         let stdin_input = serde_json::to_vec(&input).expect("Always valid");
-        stdin
-            .write_all(stdin_input.as_slice())
-            .unwrap_or_else(|error| panic!("{executable:?} subprocess stdin writing: {error:?}"));
+        let stdin_writing = stdin.write_all(stdin_input.as_slice());
 
         let result = process
             .wait_with_output()
@@ -103,14 +102,24 @@ impl Process for NativeProcess {
             ));
         }
 
+        if let Err(error) = stdin_writing {
+            return Err(SolcStandardJsonOutputError::new_error(
+                format!("{executable:?} subprocess stdin writing: {error:?}"),
+                Some(SourceLocation::new(path.to_owned())),
+                None,
+            ));
+        }
+
         match deserialize_from_slice(result.stdout.as_slice()) {
             Ok(output) => output,
-            Err(error) => {
-                panic!(
+            Err(error) => Err(SolcStandardJsonOutputError::new_error(
+                format!(
                     "{executable:?} subprocess stdout parsing error: {error:?}\n{}",
                     String::from_utf8_lossy(result.stdout.as_slice()),
-                );
-            }
+                ),
+                Some(SourceLocation::new(path.to_owned())),
+                None,
+            )),
         }
     }
 }

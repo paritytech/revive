@@ -6,6 +6,12 @@ use std::path::PathBuf;
 use serde::Deserialize;
 use serde::Serialize;
 
+/// The input path that selects the standard input.
+pub const STDIN_PATH: &str = "-";
+
+/// The source unit name `solc` gives to the standard input.
+pub const STDIN_SOURCE_NAME: &str = "<stdin>";
+
 /// The `solc --standard-json` input source.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,9 +27,9 @@ pub struct Source {
 impl Source {
     /// Reads the source from the file system.
     pub fn try_read(path: &Path) -> anyhow::Result<Self> {
-        let content = if path.to_string_lossy() == "-" {
+        let content = if path.to_string_lossy() == STDIN_PATH {
             std::io::read_to_string(std::io::stdin())
-                .map_err(|error| anyhow::anyhow!("<stdin> reading: {error}"))
+                .map_err(|error| anyhow::anyhow!("{STDIN_SOURCE_NAME} reading: {error}"))
         } else {
             std::fs::read_to_string(path)
                 .map_err(|error| anyhow::anyhow!("File {path:?} reading: {error}"))

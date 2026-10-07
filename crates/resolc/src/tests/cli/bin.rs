@@ -3,10 +3,11 @@
 use crate::{
     cli_utils::{
         absolute_path, assert_command_failure, assert_command_success, execute_command,
-        execute_resolc, CommandResult, ResolcOptSettings, SolcOptSettings, PVM_BLOB_START,
-        SOLIDITY_CONTRACT_PATH, SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH,
-        SOLIDITY_IMMUTABLES_AT_LIMIT_PATH, SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH,
-        STANDARD_JSON_CONTRACTS_PATH, YUL_EMPTY_RUNTIME_OBJECT_PATH, YUL_MEMSET_CONTRACT_PATH,
+        execute_resolc, execute_resolc_in_directory, execute_resolc_with_stdin_input,
+        CommandResult, ResolcOptSettings, SolcOptSettings, PVM_BLOB_START, SOLIDITY_CONTRACT_PATH,
+        SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH, SOLIDITY_IMMUTABLES_AT_LIMIT_PATH,
+        SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_CONTRACTS_PATH,
+        YUL_EMPTY_RUNTIME_OBJECT_PATH, YUL_MEMSET_CONTRACT_PATH,
     },
     SolcCompiler,
 };
@@ -17,6 +18,12 @@ const EVM_BLOB_START_FROM_SOLIDITY: &str = "6080";
 /// The starting hex value of an EVM blob compiled from Yul.
 /// (Blobs compiled from Yul do not have consistent starting hex values.)
 const EVM_BLOB_START_FROM_YUL: &str = "";
+
+/// Source file names that start with a dash.
+const DASH_SOURCE_NAMES: [&str; 2] = ["-dash.sol", "-h"];
+
+/// The output header of the fixture contract read from the standard input.
+const STDIN_CONTRACT_HEADER: &str = "======= <stdin>:C =======";
 
 /// Asserts that the `resolc` output contains a PVM blob.
 fn assert_pvm_blob(result: &CommandResult) {
@@ -240,4 +247,33 @@ fn compiles_json_to_binary_blob() {
         Some(&path),
     );
     assert_evm_blob_from_json(&solc_result, "src/Counter.sol", "Counter");
+}
+
+/// Sources whose names start with a dash compile.
+#[test]
+fn compiles_dash_source_names() {
+    let directory = tempfile::tempdir().unwrap();
+    for name in DASH_SOURCE_NAMES {
+        std::fs::copy(
+            absolute_path(SOLIDITY_CONTRACT_PATH),
+            directory.path().join(name),
+        )
+        .unwrap();
+
+        let result = execute_resolc_in_directory(&["--bin", "--", name], directory.path());
+        assert_pvm_blob(&result);
+    }
+}
+
+/// A source read from the standard input compiles under the `<stdin>` name.
+#[test]
+fn compiles_stdin_source() {
+    let path = absolute_path(SOLIDITY_CONTRACT_PATH);
+    let result = execute_resolc_with_stdin_input(&["-", "--bin"], &path);
+    assert_pvm_blob(&result);
+    assert!(
+        result.stdout.contains(STDIN_CONTRACT_HEADER),
+        "expected `{STDIN_CONTRACT_HEADER}` in the output: {}",
+        result.stdout
+    );
 }

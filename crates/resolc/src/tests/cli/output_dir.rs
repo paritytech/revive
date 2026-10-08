@@ -13,13 +13,13 @@ use crate::cli_utils::{
 const OUTPUT_BIN_FILE_PATH: &str = "src/tests/data/solidity/contract.sol:C.pvm";
 const OUTPUT_ASM_FILE_PATH: &str = "src/tests/data/solidity/contract.sol:C.pvmasm";
 const OUTPUT_DUPLICATE_FIRST_FILE_PATH: &str =
-    "src/tests/data/solidity/first/Duplicate.sol:Duplicate.pvm";
+    "src/tests/data/solidity/duplicate/first/Duplicate.sol:Duplicate.pvm";
 const OUTPUT_DUPLICATE_SECOND_FILE_PATH: &str =
-    "src/tests/data/solidity/second/Duplicate.sol:Duplicate.pvm";
+    "src/tests/data/solidity/duplicate/second/Duplicate.sol:Duplicate.pvm";
 const OUTPUT_DUPLICATE_FIRST_METADATA_FILE_PATH: &str =
-    "src/tests/data/solidity/first/Duplicate.sol:Duplicate.json";
+    "src/tests/data/solidity/duplicate/first/Duplicate.sol:Duplicate.json";
 const OUTPUT_DUPLICATE_SECOND_METADATA_FILE_PATH: &str =
-    "src/tests/data/solidity/second/Duplicate.sol:Duplicate.json";
+    "src/tests/data/solidity/duplicate/second/Duplicate.sol:Duplicate.json";
 const OUTPUT_DUPLICATE_FILE_NAME: &str = "Duplicate.sol:Duplicate.pvm";
 const OUTPUT_DUPLICATE_PARENT_FILE_PATH: &str = "%2E%2E/contracts/Duplicate.sol:Duplicate.pvm";
 const OUTPUT_DUPLICATE_NESTED_FILE_PATH: &str = "contracts/Duplicate.sol:Duplicate.pvm";

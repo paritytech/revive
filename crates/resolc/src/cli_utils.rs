@@ -101,7 +101,7 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
 /// The verbatim reproducer from paritytech/revive#627: a library address used only in a switch expression.
 pub const STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH: &str =
     "src/tests/data/standard_json/switch_missing_libraries.json";
-/// The standard JSON fixture remapping `target/` to `second/` and then to `first/`.
+/// The standard JSON fixture remapping `target/` to `b_first/` and then to `a_second/`.
 pub const STANDARD_JSON_REMAPPINGS_ORDER_PATH: &str =
     "src/tests/data/standard_json/remappings_order.json";
 /// The standard JSON PVM codegen all wildcard test fixture path.

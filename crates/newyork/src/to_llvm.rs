@@ -6319,10 +6319,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 Self::apply_range_proof(context, value, 128, "basefee")
             }
 
-            Expression::BlobHash { .. } | Expression::BlobBaseFee => {
-                Ok(context.word_const(0).as_basic_value_enum())
-            }
-
             Expression::Gas => Ok(revive_llvm_context::polkavm_evm_ether_gas::gas(context)?),
 
             Expression::MSize => Ok(revive_llvm_context::polkavm_evm_memory::msize(context)?),

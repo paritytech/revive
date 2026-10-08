@@ -47,6 +47,54 @@ fn deploy_time_linking_works() {
     assert!(!output.stdout.contains("still unresolved"));
 }
 
+/// Test deploy time linking from the output directory, with the factory dependency in a
+/// subdirectory, as the output files follow the directories of their sources.
+#[test]
+fn deploy_time_linking_works_from_nested_output_directory() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let source_directory = temp_dir.path().join("sub");
+    let output_directory = temp_dir.path().join("out");
+    std::fs::create_dir(&source_directory).unwrap();
+    std::fs::copy(
+        SOLIDITY_DEPENDENCY_CONTRACT_PATH,
+        source_directory.join("dependency.sol"),
+    )
+    .unwrap();
+
+    assert_command_success(
+        &execute_resolc_in_directory(
+            &["sub/dependency.sol", "--bin", "-o", "out"],
+            temp_dir.path(),
+        ),
+        "Missing libraries should compile fine",
+    );
+
+    let blob_path = "sub/dependency.sol:TestAssert.pvm";
+    let output = execute_resolc_in_directory(
+        &[
+            "--link",
+            "--libraries",
+            "sub/dependency.sol:Assert=0x0000000000000000000000000000000000000001",
+            "--libraries",
+            "sub/dependency.sol:AssertNe=0x0000000000000000000000000000000000000002",
+            blob_path,
+            "sub/dependency.sol:Dependency.pvm",
+        ],
+        &output_directory,
+    );
+    assert_command_success(&output, "The linker mode with all libraries");
+    assert!(!output.stdout.contains("still unresolved"));
+    assert_eq!(
+        ObjectFormat::try_from(
+            std::fs::read(output_directory.join(blob_path))
+                .unwrap()
+                .as_slice()
+        )
+        .unwrap(),
+        ObjectFormat::PVM
+    );
+}
+
 #[test]
 fn emits_unlinked_binary_warning() {
     let output = execute_resolc(&[SOLIDITY_DEPENDENCY_CONTRACT_PATH, "--bin"]);

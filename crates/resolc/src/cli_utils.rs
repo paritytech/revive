@@ -218,26 +218,14 @@ pub fn execute_resolc(arguments: &[&str]) -> CommandResult {
     execute_command("resolc", arguments, None)
 }
 
-/// Executes the `resolc` command with the given `arguments` inside the working `directory`.
-pub fn execute_resolc_in_directory(arguments: &[&str], directory: &Path) -> CommandResult {
-    let result = Command::new("resolc")
-        .args(arguments)
-        .current_dir(directory)
-        .stdin(Stdio::null())
-        .output()
-        .unwrap();
-
-    CommandResult {
-        stdout: String::from_utf8_lossy(&result.stdout).to_string(),
-        stderr: String::from_utf8_lossy(&result.stderr).to_string(),
-        success: result.status.success(),
-        code: result.status.code().unwrap(),
-    }
-}
-
 /// Executes the `resolc` command with the given `arguments` and file path passed to `stdin`.
 pub fn execute_resolc_with_stdin_input(arguments: &[&str], stdin_file_path: &str) -> CommandResult {
     execute_command("resolc", arguments, Some(stdin_file_path))
+}
+
+/// Executes the `resolc` command with the given `arguments` inside `directory`.
+pub fn execute_resolc_in_directory(arguments: &[&str], directory: &Path) -> CommandResult {
+    execute_command_in_directory("resolc", arguments, None, Some(directory))
 }
 
 /// Executes the `solc` command with the given `arguments`.
@@ -260,6 +248,16 @@ pub fn execute_command(
     arguments: &[&str],
     stdin_file_path: Option<&str>,
 ) -> CommandResult {
+    execute_command_in_directory(command, arguments, stdin_file_path, None)
+}
+
+/// Executes the `command` like [`execute_command`], inside `directory` if given.
+pub fn execute_command_in_directory(
+    command: &str,
+    arguments: &[&str],
+    stdin_file_path: Option<&str>,
+    directory: Option<&Path>,
+) -> CommandResult {
     log::trace!(
         "executing command: '{command} {}{}'",
         arguments.join(" "),
@@ -272,7 +270,11 @@ pub fn execute_command(
         Some(path) => Stdio::from(File::open(path).unwrap()),
         None => Stdio::null(),
     };
-    let result = Command::new(command)
+    let mut command = Command::new(command);
+    if let Some(directory) = directory {
+        command.current_dir(directory);
+    }
+    let result = command
         .args(arguments)
         .stdin(stdin_config)
         .stdout(Stdio::piped())

@@ -26,12 +26,23 @@ pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
 pub const SOLIDITY_REMAPPED_IMPORT_PATH: &str = "src/tests/data/solidity/remapped_import.sol";
 /// The Solidity contract importing the simple contract through an include path.
 pub const SOLIDITY_INCLUDED_IMPORT_PATH: &str = "src/tests/data/solidity/included_import.sol";
+/// The Solidity contract importing `target/Target.sol`, to be remapped to one of two directories.
+pub const SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH: &str =
+    "src/tests/data/solidity/remappings_order/main.sol";
+/// The directory with the `Target` contract defining `first`.
+pub const SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY: &str =
+    "src/tests/data/solidity/remappings_order/b_first/";
+/// The directory with the `Target` contract defining `second`.
+pub const SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY: &str =
+    "src/tests/data/solidity/remappings_order/a_second/";
 /// The reproducer from paritytech/revive#624 with 129 immutables, one more than the limit allows.
 pub const SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH: &str =
     "src/tests/data/solidity/immutables_over_limit.sol";
 /// The reproducer from paritytech/revive#624 with 128 immutables, exactly at the limit.
 pub const SOLIDITY_IMMUTABLES_AT_LIMIT_PATH: &str =
     "src/tests/data/solidity/immutables_at_limit.sol";
+/// A contract using `blobhash` and `blobbasefee`
+pub const SOLIDITY_BLOB_OPCODES_PATH: &str = "src/tests/data/solidity/blob_opcodes.sol";
 /// The verbatim reproducer from paritytech/revive#625: a contract calling an external library.
 pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/library_call.sol";
 /// The paritytech/revive#622 reproducer contract at `a/c.sol`.
@@ -90,6 +101,9 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
 /// The verbatim reproducer from paritytech/revive#627: a library address used only in a switch expression.
 pub const STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH: &str =
     "src/tests/data/standard_json/switch_missing_libraries.json";
+/// The standard JSON fixture remapping `target/` to `b_first/` and then to `a_second/`.
+pub const STANDARD_JSON_REMAPPINGS_ORDER_PATH: &str =
+    "src/tests/data/standard_json/remappings_order.json";
 /// The standard JSON PVM codegen all wildcard test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.

@@ -16,11 +16,12 @@ use crate::cli_utils::{
     STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
     STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH,
-    STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH,
-    STANDARD_JSON_REVERT_STRINGS_STRIP_PATH, STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH,
-    STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH, STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH,
-    STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH, STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH,
-    STANDARD_JSON_YUL_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH,
+    STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_REMAPPINGS_ORDER_PATH,
+    STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH, STANDARD_JSON_REVERT_STRINGS_STRIP_PATH,
+    STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH, STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH,
+    STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH, STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH,
+    STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
+    STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH,
 };
 use crate::{pipeline_name, ResolcVersion};
 
@@ -843,6 +844,21 @@ fn switch_expression_missing_libraries() {
             "the library `sw.sol:L` should be reported as missing with arguments {arguments:?}"
         );
     }
+}
+
+/// The last of two remappings for the same prefix wins, as in solc.
+#[test]
+fn remappings_last_one_wins() {
+    let result =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_REMAPPINGS_ORDER_PATH);
+    assert_command_success(&result, "the remappings order input fixture");
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    assert_eq!(
+        output["contracts"]["main.sol"]["Main"]["abi"][0]["name"],
+        "second"
+    );
 }
 
 #[test]

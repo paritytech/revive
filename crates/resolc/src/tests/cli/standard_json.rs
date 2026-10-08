@@ -10,8 +10,12 @@ use crate::cli_utils::{
     execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
     STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH, STANDARD_JSON_DEBUG_INFO_EMPTY_PATH,
     STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH,
-    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH, STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH,
-    STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH, STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_LIBRARIES_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_PATH_COLLISION_PATH,
+    STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH, STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH,
+    STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
     STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
     STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
@@ -844,6 +848,77 @@ fn switch_expression_missing_libraries() {
             "the library `sw.sol:L` should be reported as missing with arguments {arguments:?}"
         );
     }
+}
+
+/// A factory dependency outside the output selection is compiled too.
+#[test]
+fn factory_dependency_outside_output_selection() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH,
+    );
+    assert_command_success(
+        &result,
+        "the factory dependency outside output selection fixture",
+    );
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    let factory_dependencies = output["contracts"]["A.sol"]["P"]["factoryDependencies"]
+        .as_object()
+        .expect("the contract `A.sol:P` should have factory dependencies");
+    assert_eq!(factory_dependencies.len(), 1);
+    for dependency in factory_dependencies.values() {
+        let (path, name) = dependency.as_str().unwrap().split_once(':').unwrap();
+        assert!(
+            output["contracts"][path][name]["evm"]["bytecode"]["object"]
+                .as_str()
+                .is_some_and(|bytecode| !bytecode.is_empty()),
+            "the dependency `{dependency}` should be compiled"
+        );
+    }
+}
+
+/// Missing libraries of a created contract outside the output selection are reported for its creator.
+#[test]
+fn factory_dependency_outside_output_selection_missing_libraries() {
+    for arguments in [
+        vec![JSON_OPTION],
+        vec![JSON_OPTION, "--detect-missing-libraries"],
+    ] {
+        let result = execute_resolc_with_stdin_input(
+            &arguments,
+            STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_LIBRARIES_PATH,
+        );
+        assert_command_success(
+            &result,
+            "the factory dependency outside output selection libraries fixture",
+        );
+        assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+        let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+        assert_eq!(
+            output["contracts"]["A.sol"]["P"]["missingLibraries"],
+            serde_json::json!(["B.sol:L"]),
+            "`A.sol:P` should miss the library `B.sol:L` with arguments {arguments:?}"
+        );
+    }
+}
+
+/// A factory dependency outside the output selection must not replace a contract of the same path.
+#[test]
+fn factory_dependency_path_collision() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_FACTORY_DEPENDENCY_PATH_COLLISION_PATH,
+    );
+    assert_command_success(&result, "the factory dependency path collision fixture");
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_standard_json_errors_contain(
+        &output,
+        "`B.sol:K_4`, which is the path of another contract",
+    );
 }
 
 /// The last of two remappings for the same prefix wins, as in solc.

@@ -2,7 +2,7 @@
 
 use std::{
     fs::File,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -49,6 +49,8 @@ pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/l
 pub const SOLIDITY_COLLISION_NESTED_PATH: &str = "src/tests/data/solidity/collision/a/c.sol";
 /// The paritytech/revive#622 reproducer contract at `a_c.sol`.
 pub const SOLIDITY_COLLISION_UNDERSCORE_PATH: &str = "src/tests/data/solidity/collision/a_c.sol";
+/// Two contracts named `First` and `Second` returning `1` and `2`.
+pub const SOLIDITY_TWO_CONTRACTS_PATH: &str = "src/tests/data/solidity/two_contracts.sol";
 /// The verbatim reproducer from paritytech/revive#632: two contracts calling the same library.
 pub const SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH: &str =
     "src/tests/data/solidity/link_independent_objects.sol";
@@ -247,6 +249,11 @@ pub fn execute_resolc_with_stdin_input(arguments: &[&str], stdin_file_path: &str
     execute_command("resolc", arguments, Some(stdin_file_path))
 }
 
+/// Executes the `resolc` command with the given `arguments` inside `directory`.
+pub fn execute_resolc_in_directory(arguments: &[&str], directory: &Path) -> CommandResult {
+    execute_command_in_directory("resolc", arguments, None, Some(directory))
+}
+
 /// Executes the `solc` command with the given `arguments`.
 pub fn execute_solc(arguments: &[&str]) -> CommandResult {
     execute_command(SolcCompiler::DEFAULT_EXECUTABLE_NAME, arguments, None)
@@ -267,6 +274,16 @@ pub fn execute_command(
     arguments: &[&str],
     stdin_file_path: Option<&str>,
 ) -> CommandResult {
+    execute_command_in_directory(command, arguments, stdin_file_path, None)
+}
+
+/// Executes the `command` like [`execute_command`], inside `directory` if given.
+pub fn execute_command_in_directory(
+    command: &str,
+    arguments: &[&str],
+    stdin_file_path: Option<&str>,
+    directory: Option<&Path>,
+) -> CommandResult {
     log::trace!(
         "executing command: '{command} {}{}'",
         arguments.join(" "),
@@ -279,7 +296,11 @@ pub fn execute_command(
         Some(path) => Stdio::from(File::open(path).unwrap()),
         None => Stdio::null(),
     };
-    let result = Command::new(command)
+    let mut command = Command::new(command);
+    if let Some(directory) = directory {
+        command.current_dir(directory);
+    }
+    let result = command
         .args(arguments)
         .stdin(stdin_config)
         .stdout(Stdio::piped())

@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8;
+
 contract Im {
     uint256 immutable i1 = 1;
     uint256 immutable i2 = 2;

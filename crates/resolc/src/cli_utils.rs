@@ -26,12 +26,23 @@ pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
 pub const SOLIDITY_REMAPPED_IMPORT_PATH: &str = "src/tests/data/solidity/remapped_import.sol";
 /// The Solidity contract importing the simple contract through an include path.
 pub const SOLIDITY_INCLUDED_IMPORT_PATH: &str = "src/tests/data/solidity/included_import.sol";
+/// The Solidity contract importing `target/Target.sol`, to be remapped to one of two directories.
+pub const SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH: &str =
+    "src/tests/data/solidity/remappings_order/main.sol";
+/// The directory with the `Target` contract defining `first`.
+pub const SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY: &str =
+    "src/tests/data/solidity/remappings_order/b_first/";
+/// The directory with the `Target` contract defining `second`.
+pub const SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY: &str =
+    "src/tests/data/solidity/remappings_order/a_second/";
 /// The reproducer from paritytech/revive#624 with 129 immutables, one more than the limit allows.
 pub const SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH: &str =
     "src/tests/data/solidity/immutables_over_limit.sol";
 /// The reproducer from paritytech/revive#624 with 128 immutables, exactly at the limit.
 pub const SOLIDITY_IMMUTABLES_AT_LIMIT_PATH: &str =
     "src/tests/data/solidity/immutables_at_limit.sol";
+/// A contract using `blobhash` and `blobbasefee`
+pub const SOLIDITY_BLOB_OPCODES_PATH: &str = "src/tests/data/solidity/blob_opcodes.sol";
 /// The verbatim reproducer from paritytech/revive#625: a contract calling an external library.
 pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/library_call.sol";
 /// The paritytech/revive#622 reproducer contract at `a/c.sol`.
@@ -96,6 +107,9 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
 /// The verbatim reproducer from paritytech/revive#627: a library address used only in a switch expression.
 pub const STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH: &str =
     "src/tests/data/standard_json/switch_missing_libraries.json";
+/// The standard JSON fixture remapping `target/` to `b_first/` and then to `a_second/`.
+pub const STANDARD_JSON_REMAPPINGS_ORDER_PATH: &str =
+    "src/tests/data/standard_json/remappings_order.json";
 /// The standard JSON PVM codegen all wildcard test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.
@@ -118,6 +132,12 @@ pub const STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH: &str =
 /// `settings.polkavm.newyork` field, so it compiles through the stock pipeline.
 pub const STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH: &str =
     "src/tests/data/standard_json/yul_newyork_disabled.json";
+/// A contract creating a contract that calls a library, compiled normally.
+pub const STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH: &str =
+    "src/tests/data/standard_json/factory_dependency_libraries.json";
+/// The same input as [`STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH`] with `detectMissingLibraries` set.
+pub const STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH: &str =
+    "src/tests/data/standard_json/factory_dependency_libraries_detect.json";
 /// The standard JSON PVM codegen for all files on a per-file basis test fixture path.
 ///
 /// These contracts are similar to ones used in an example project.
@@ -148,6 +168,12 @@ pub const STANDARD_JSON_YUL_PVM_CODEGEN_PATH: &str =
 /// PVM bytecode generation and only validate the Yul.
 pub const STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/yul_no_pvm_codegen.json";
+/// The standard JSON input from paritytech/revive#623 with a heap size outside the PVM memory map.
+pub const STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH: &str =
+    "src/tests/data/standard_json/heap_size_out_of_range.json";
+/// A standard JSON input with a heap size the polkavm linker fails to link.
+pub const STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH: &str =
+    "src/tests/data/standard_json/heap_size_linker_failure.json";
 /// A standard JSON fixture with `settings.debug.revertStrings` set to `"default"`,
 /// so solc keeps the `require` reason string of its contract.
 pub const STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH: &str =
@@ -171,6 +197,10 @@ pub const STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH: &str =
 /// source location annotations from the Yul IR.
 pub const STANDARD_JSON_DEBUG_INFO_EMPTY_PATH: &str =
     "src/tests/data/standard_json/debug_info_empty.json";
+/// A standard JSON fixture requesting codegen for all contracts in all files
+/// via the "all" (`*`) wildcard, but only additional fields for specific files.
+pub const STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH: &str =
+    "src/tests/data/standard_json/mix_all_wildcard_and_file_selection.json";
 
 /// The `resolc` YUL mode flag.
 pub const RESOLC_YUL_FLAG: &str = "--yul";

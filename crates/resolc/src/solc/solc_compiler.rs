@@ -1,6 +1,5 @@
 //! The Solidity compiler solc interface.
 
-use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
@@ -131,7 +130,7 @@ impl Compiler for SolcCompiler {
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,
-        remappings: BTreeSet<String>,
+        remappings: Vec<String>,
     ) -> anyhow::Result<CombinedJson> {
         selectors.retain(|selector| selector.is_source_solc());
         if selectors.is_empty() {

@@ -1393,10 +1393,6 @@ impl TypeInference {
             Expression::BlockHash { number } => {
                 self.record_use(number.id, UseContext::ExternalCall);
             }
-            Expression::BlobHash { index: number } => {
-                self.record_use(number.id, UseContext::MemoryOffset);
-                self.narrow_from_use(number.id, BitWidth::I64);
-            }
             _ => {}
         }
     }
@@ -1845,11 +1841,7 @@ impl TypeInference {
                 BitWidth::I64
             }
             Expression::Difficulty | Expression::ChainId | Expression::BaseFee => BitWidth::I256,
-            Expression::SelfBalance | Expression::BlobBaseFee => BitWidth::I256,
-            Expression::BlobHash { index } => {
-                self.widen(index.id, BitWidth::I64);
-                BitWidth::I256
-            }
+            Expression::SelfBalance => BitWidth::I256,
             Expression::Balance { address } => {
                 self.widen(address.id, BitWidth::I160);
                 BitWidth::I256

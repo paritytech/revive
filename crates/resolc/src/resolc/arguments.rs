@@ -1,6 +1,5 @@
 //! Solidity to PolkaVM compiler arguments.
 
-use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -462,11 +461,9 @@ impl Arguments {
     }
 
     /// Returns remappings from input paths.
-    pub fn split_input_files_and_remappings(
-        &self,
-    ) -> anyhow::Result<(Vec<PathBuf>, BTreeSet<String>)> {
+    pub fn split_input_files_and_remappings(&self) -> anyhow::Result<(Vec<PathBuf>, Vec<String>)> {
         let mut input_files = Vec::with_capacity(self.inputs.len());
-        let mut remappings = BTreeSet::new();
+        let mut remappings = Vec::new();
 
         for input in self.inputs.iter() {
             if input.contains('=') {
@@ -485,7 +482,7 @@ impl Arguments {
                         input
                     );
                 }
-                remappings.insert(parts.join("="));
+                remappings.push(parts.join("="));
             } else {
                 let path = PathBuf::from(input.trim());
                 let path = Self::path_to_posix(path.as_path())?;

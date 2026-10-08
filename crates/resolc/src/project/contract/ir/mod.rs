@@ -1,6 +1,7 @@
 //! The contract source code.
 
 use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use serde::Deserialize;
 use serde::Serialize;
@@ -34,6 +35,14 @@ impl IR {
             IR::NewYork(ref mut newyork) => {
                 newyork.yul_object.factory_dependencies.drain().collect()
             }
+        }
+    }
+
+    /// Returns the identifiers of the factory dependencies.
+    pub fn factory_dependencies(&self) -> &HashSet<String> {
+        match self {
+            IR::Yul(yul) => &yul.object.factory_dependencies,
+            IR::NewYork(newyork) => &newyork.yul_object.factory_dependencies,
         }
     }
 

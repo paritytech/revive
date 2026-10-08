@@ -560,6 +560,7 @@ impl Simplifier {
 
                 let saved_constants = self.constants.clone();
                 let saved_copies = self.copies.clone();
+                let saved_env_reads = self.env_reads.clone();
 
                 let condition_statements = self.simplify_statements(condition_statements);
                 let condition = self.simplify_expression(condition);
@@ -568,6 +569,7 @@ impl Simplifier {
 
                 self.constants = saved_constants;
                 self.copies = saved_copies;
+                self.env_reads = saved_env_reads;
 
                 vec![Statement::For {
                     initial_values,

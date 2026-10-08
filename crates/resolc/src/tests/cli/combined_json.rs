@@ -4,10 +4,10 @@ use revive_solc_json_interface::{combined_json::CombinedJson, CombinedJsonInvali
 
 use crate::cli_utils::{
     assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
-    execute_solc, SOLIDITY_CONTRACT_PATH, SOLIDITY_INCLUDED_IMPORT_PATH,
-    SOLIDITY_REMAPPED_IMPORT_PATH, SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY,
-    SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH, SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY,
-    YUL_CONTRACT_PATH,
+    execute_resolc_in_directory, execute_solc, SOLIDITY_CONTRACT_PATH,
+    SOLIDITY_INCLUDED_IMPORT_PATH, SOLIDITY_REMAPPED_IMPORT_PATH,
+    SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY, SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH,
+    SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY, SOLIDITY_TWO_CONTRACTS_PATH, YUL_CONTRACT_PATH,
 };
 use crate::ResolcVersion;
 
@@ -216,4 +216,36 @@ fn resolves_imports_with_base_and_include_paths() {
             "src/tests/data/solidity/included_import.sol:U",
         ],
     );
+}
+
+/// Contracts in a source whose path contains a colon keep their own entries.
+#[test]
+fn keeps_contracts_of_source_path_with_colon_apart() {
+    const SOURCE_PATH_WITH_COLON: &str = "directory:file.sol";
+
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::copy(
+        SOLIDITY_TWO_CONTRACTS_PATH,
+        directory.path().join(SOURCE_PATH_WITH_COLON),
+    )
+    .unwrap();
+
+    let result = execute_resolc_in_directory(
+        &[SOURCE_PATH_WITH_COLON, JSON_OPTION, "bin"],
+        directory.path(),
+    );
+    assert_command_success(&result, "Compiling a source path with a colon");
+
+    let combined_json: serde_json::Value =
+        serde_json::from_str(&result.stdout).expect("Combined JSON output should deserialize");
+    let bytecode = |name: &str| {
+        combined_json["contracts"][format!("{SOURCE_PATH_WITH_COLON}:{name}")]["bin"]
+            .as_str()
+            .unwrap_or_else(|| panic!("Combined JSON output should contain `{name}` bytecode"))
+            .to_owned()
+    };
+    let first = bytecode("First");
+    let second = bytecode("Second");
+    assert!(!first.is_empty() && !second.is_empty());
+    assert_ne!(first, second);
 }

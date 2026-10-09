@@ -1,6 +1,7 @@
 //! The Solidity contract metadata.
 
 use revive_llvm_context::OptimizerSettings;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Serialize;
 
 use crate::ResolcVersion;
@@ -19,6 +20,12 @@ pub struct Metadata {
     pub optimizer_settings: OptimizerSettings,
     /// The extra LLVM arguments give used for manual control.
     pub llvm_arguments: Vec<String>,
+    /// The PolkaVM memory configuration.
+    pub memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+    /// Whether the newyork pipeline was used.
+    pub newyork: bool,
+    /// Whether debug information was emitted.
+    pub debug_information: bool,
 }
 
 impl Metadata {
@@ -28,6 +35,9 @@ impl Metadata {
         solc_version: Option<semver::Version>,
         optimizer_settings: OptimizerSettings,
         llvm_arguments: Vec<String>,
+        memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
+        newyork: bool,
+        debug_information: bool,
     ) -> Self {
         Self {
             solc_metadata,
@@ -35,6 +45,9 @@ impl Metadata {
             revive_version: ResolcVersion::default().long,
             optimizer_settings,
             llvm_arguments,
+            memory_config,
+            newyork,
+            debug_information,
         }
     }
 }

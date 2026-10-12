@@ -43,7 +43,7 @@ serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 regex = "1.12"
 num = "0.4.3"
 sha1 = "0.11"
-sha3 = "0.11"
+sha3 = "0.12"
 thiserror = "2.0"
 which = "8.0"
 path-slash = "0.2"

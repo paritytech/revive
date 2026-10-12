@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-Supported `polkadot-sdk` rev: `2604.2.0`
+Supported `polkadot-sdk` rev: `2609.0.0`
 
 ### Added
 
@@ -11,6 +11,7 @@ Supported `polkadot-sdk` rev: `2604.2.0`
 ### Changed
 
 - `--newyork`: Loop-carried variables are typed as the join of the widths flowing into them instead of being forced to `I256`, and constant shifts are bounded by the operand width and emitted at 64 bits when the result fits, so masked 32-bit loop variables such as those of a SHA-256 round loop stay narrow through the loop. [#615](https://github.com/paritytech/revive/pull/615)
+- The latest supported `polkadot-sdk` version is now `2609.0.0`
 
 ### Fixed
 - `--newyork`: A bug in dead call value analysis. [#589](https://github.com/paritytech/revive/pull/589)

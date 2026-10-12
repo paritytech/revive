@@ -189,10 +189,8 @@ impl WriteLLVM for DummyLLVMWritable {
 
 /// Returns the names of all symbols in the ELF object `bytecode`.
 fn symbol_names(bytecode: &[u8]) -> anyhow::Result<BTreeSet<String>> {
-    let mut buffer = bytecode.to_vec();
-    buffer.push(0);
     let memory_buffer =
-        inkwell::memory_buffer::MemoryBuffer::create_from_memory_range_copy(&buffer, "object");
+        inkwell::memory_buffer::MemoryBuffer::create_from_memory_range_copy(bytecode, "object");
     let binary_file = memory_buffer
         .create_binary_file(None)
         .map_err(|error| anyhow::anyhow!("{error}"))?;

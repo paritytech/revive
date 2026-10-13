@@ -1,5 +1,7 @@
 use revive_common::ObjectFormat;
 
+use crate::tests::cli::metadata::blob_metadata_hash;
+
 use crate::cli_utils::{
     assert_command_failure, assert_command_success, execute_resolc,
     SOLIDITY_DEPENDENCY_CONTRACT_PATH, SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH,
@@ -60,6 +62,10 @@ fn deploy_time_linking_works() {
     ]);
     assert_command_success(&output, "The linker mode with all library should work");
     assert!(!output.stdout.contains("still unresolved"));
+    assert!(
+        !blob_metadata_hash(&hex::encode(std::fs::read(&blob_path).unwrap())).is_empty(),
+        "Deploy time linking should keep the metadata hash"
+    );
 }
 
 #[test]
@@ -88,6 +94,9 @@ fn libraries_multiple_equal_signs_fails() {
 }
 
 /// Test that linking an object does not depend on the other objects being linked.
+///
+/// The metadata hash is disabled because the metadata records the libraries
+/// passed at compile time, which differ between the two builds compared here.
 #[test]
 fn link_output_is_independent_of_other_inputs() {
     let temp_dir = tempfile::TempDir::new().unwrap();
@@ -104,6 +113,8 @@ fn link_output_is_independent_of_other_inputs() {
         &execute_resolc(&[
             source_path.to_str().unwrap(),
             "--bin",
+            "--metadata-hash",
+            "none",
             "-o",
             unlinked_directory.to_str().unwrap(),
         ]),
@@ -113,6 +124,8 @@ fn link_output_is_independent_of_other_inputs() {
         &execute_resolc(&[
             source_path.to_str().unwrap(),
             "--bin",
+            "--metadata-hash",
+            "none",
             "-o",
             reference_directory.to_str().unwrap(),
             "--libraries",

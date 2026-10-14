@@ -262,6 +262,12 @@ fn compiles_dash_source_names() {
 
         let result = execute_resolc_in_directory(&["--bin", "--", name], directory.path());
         assert_pvm_blob(&result);
+        let header = format!("======= {name}:C =======");
+        assert!(
+            result.stdout.contains(&header),
+            "expected `{header}` in the output: {}",
+            result.stdout
+        );
     }
 }
 

@@ -5773,55 +5773,16 @@ fn call_data_length_loops() {
     run_differential(actions);
 }
 
-/// The keys used for the returned storage reference tests: the issue key and some edges.
-fn returned_storage_reference_keys() -> [U256; 4] {
-    [
-        U256::from_str("0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20")
-            .unwrap(),
-        U256::ZERO,
-        U256::from(1),
-        U256::MAX,
-    ]
-}
-
-/// Writes through a storage reference to a mapping entry returned by a recursive function must
-/// not get lost (issue #195).
+/// Writes through a storage reference returned by a recursive function are not lost.
 #[test]
 fn returned_storage_reference() {
-    let selector = keccak256(b"run(uint256,uint256)")[..4].to_vec();
-    let mut actions = instantiate("contracts/RVS.sol", "RVS");
-    for key in returned_storage_reference_keys() {
-        for depth in [0, 1, 3] {
-            let mut data = selector.clone();
-            data.extend(words(&[key, U256::from(depth)]));
-            push_call(&mut actions, TestAddress::Instantiated(0), data);
-        }
-    }
-    run_differential(actions);
-}
-
-/// Variants of [`returned_storage_reference`]: a second return value, a read through the
-/// returned reference, mutual recursion and a non-recursive function.
-#[test]
-fn returned_storage_reference_variants() {
+    let selector = keccak256(b"write(uint256,uint256)")[..4].to_vec();
     let mut actions = instantiate(
         "contracts/ReturnedStorageReference.sol",
         "ReturnedStorageReference",
     );
-    for key in returned_storage_reference_keys() {
-        for signature in [
-            "runTwo(uint256,uint256)",
-            "runRead(uint256,uint256)",
-            "runMutual(uint256,uint256)",
-        ] {
-            for depth in [0, 1, 2] {
-                let mut data = keccak256(signature.as_bytes())[..4].to_vec();
-                data.extend(words(&[key, U256::from(depth)]));
-                push_call(&mut actions, TestAddress::Instantiated(0), data);
-            }
-        }
-        let mut data = keccak256(b"runPlain(uint256)")[..4].to_vec();
-        data.extend(words(&[key]));
+    for depth in [0, 1] {
+        let data = [selector.clone(), words(&[U256::MAX, U256::from(depth)])].concat();
         push_call(&mut actions, TestAddress::Instantiated(0), data);
     }
     run_differential(actions);

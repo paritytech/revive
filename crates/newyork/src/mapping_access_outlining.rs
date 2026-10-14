@@ -54,10 +54,7 @@ pub fn outline_mapping_accesses_in_object(object: &mut Object) -> MappingAccessO
 /// use-before-definition that the IR validator rejects (a compiler ICE on valid input). The
 /// whole-block count sees the outer use and leaves such hashes alone.
 ///
-/// `live_out` are the values read after the block falls through (a function body's
-/// fall-through `return_values`). They are uses outside of any statement, so they must be
-/// counted as well: a hash that is stored to and also returned is not single-use, and fusing
-/// it would delete the definition the return value refers to.
+/// `live_out` are the values used after the block falls through, like a function's return values.
 fn outline_block(
     block: &mut Block,
     live_out: &[ValueId],
@@ -554,8 +551,7 @@ mod tests {
         assert!(crate::validate::validate_object(&object).is_ok());
     }
 
-    /// Builds `function f(v1, v2, v3) -> v4 { let v4 = keccak256_pair(v1, v2); <access> }`, which
-    /// falls through returning the hash v4.
+    /// Builds `function f(v1, v2, v3) -> v4 { let v4 = keccak256_pair(v1, v2); <access> }`.
     fn hash_returning_function_object(access: Statement) -> Object {
         let mut function = crate::ir::Function::new(crate::ir::FunctionId(0), "f".to_string());
         for id in 1..=3 {
@@ -585,9 +581,7 @@ mod tests {
         }
     }
 
-    /// A hash that is stored to and also returned through the fall-through return values is not
-    /// single-use: fusing it would delete the definition the return value refers to, which the
-    /// simplifier then resolves to the zero initial return value (a lost storage reference).
+    /// A returned hash is not fused into an `sstore`.
     #[test]
     fn returned_hash_not_fused_into_sstore() {
         let mut object = hash_returning_function_object(Statement::SStore {
@@ -602,7 +596,7 @@ mod tests {
         assert!(crate::validate::validate_object(&object).is_ok());
     }
 
-    /// Same as [`returned_hash_not_fused_into_sstore`] for a load from the returned hash.
+    /// A returned hash is not fused into an `sload`.
     #[test]
     fn returned_hash_not_fused_into_sload() {
         let mut object = hash_returning_function_object(Statement::Let {

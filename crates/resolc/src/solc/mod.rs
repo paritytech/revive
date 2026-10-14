@@ -1,6 +1,5 @@
 //! The Solidity compiler.
 
-use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -46,7 +45,7 @@ pub trait Compiler {
         base_path: Option<String>,
         include_paths: Vec<String>,
         allow_paths: Option<String>,
-        remappings: BTreeSet<String>,
+        remappings: Vec<String>,
     ) -> anyhow::Result<CombinedJson>;
 
     /// Validates the Yul project as paths and libraries.

@@ -5763,3 +5763,12 @@ fn deploy_code_call_data_is_empty() {
     *data = vec![0xff; 32];
     run_differential(actions);
 }
+
+/// Two loops bounded by the call data length compile and match EVM.
+#[test]
+fn call_data_length_loops() {
+    let mut actions = instantiate("contracts/CallDataLengthLoops.sol", "CallDataLengthLoops");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 5]);
+    run_differential(actions);
+}

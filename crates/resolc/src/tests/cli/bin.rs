@@ -5,9 +5,10 @@ use crate::{
         absolute_path, assert_command_failure, assert_command_success, execute_command,
         execute_resolc, execute_resolc_in_directory, execute_resolc_with_stdin_input,
         CommandResult, ResolcOptSettings, SolcOptSettings, DASH_SOURCE_NAMES, PVM_BLOB_START,
-        SOLIDITY_CONTRACT_PATH, SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH,
-        SOLIDITY_IMMUTABLES_AT_LIMIT_PATH, SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH,
-        STANDARD_JSON_CONTRACTS_PATH, YUL_EMPTY_RUNTIME_OBJECT_PATH, YUL_MEMSET_CONTRACT_PATH,
+        SOLIDITY_BLOB_OPCODES_PATH, SOLIDITY_CONTRACT_PATH,
+        SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH, SOLIDITY_IMMUTABLES_AT_LIMIT_PATH,
+        SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_CONTRACTS_PATH,
+        YUL_EMPTY_RUNTIME_OBJECT_PATH, YUL_MEMSET_CONTRACT_PATH,
     },
     SolcCompiler,
 };
@@ -219,6 +220,24 @@ fn rejects_immutables_over_limit() {
             result
                 .stderr
                 .contains("immutable data size of 4128 bytes exceeds the limit of 4096 bytes"),
+            "unexpected error output: {}",
+            result.stderr
+        );
+    }
+}
+
+/// `blobhash` and `blobbasefee` are a compile error on both pipelines.
+#[test]
+fn rejects_blob_opcodes() {
+    let path = absolute_path(SOLIDITY_BLOB_OPCODES_PATH);
+    for arguments in [
+        vec![path.as_str(), "--bin"],
+        vec![path.as_str(), "--newyork", "--bin"],
+    ] {
+        let result = execute_resolc(&arguments);
+        assert_command_failure(&result, "Compiling blob opcodes");
+        assert!(
+            result.stderr.to_lowercase().contains("blobhash"),
             "unexpected error output: {}",
             result.stderr
         );

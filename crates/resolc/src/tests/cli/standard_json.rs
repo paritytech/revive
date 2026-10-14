@@ -9,17 +9,19 @@ use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
     STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH, STANDARD_JSON_DEBUG_INFO_EMPTY_PATH,
-    STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH, STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH,
-    STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH, STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH,
+    STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH, STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
     STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
     STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
     STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH,
-    STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH,
-    STANDARD_JSON_REVERT_STRINGS_STRIP_PATH, STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH,
-    STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH, STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH,
-    STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH, STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH,
-    STANDARD_JSON_YUL_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH,
+    STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_REMAPPINGS_ORDER_PATH,
+    STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH, STANDARD_JSON_REVERT_STRINGS_STRIP_PATH,
+    STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH, STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH,
+    STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH, STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH,
+    STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
+    STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH,
 };
 use crate::{pipeline_name, ResolcVersion};
 
@@ -775,6 +777,28 @@ fn populates_output_metadata_fields() {
     }
 }
 
+/// Missing libraries of a created contract are reported for its creator too.
+#[test]
+fn missing_libraries_include_factory_dependencies() {
+    for path in [
+        STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH,
+        STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH,
+    ] {
+        let result = execute_resolc_with_stdin_input(&[JSON_OPTION], path);
+        assert_command_success(&result, "Compiling with standard JSON");
+        assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+        let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+        for name in ["K", "P"] {
+            assert_eq!(
+                output["contracts"]["Ch.sol"][name]["missingLibraries"],
+                serde_json::json!(["Ch.sol:L"]),
+                "`{name}` in `{path}` should miss the library `L`"
+            );
+        }
+    }
+}
+
 /// A heap size outside the PVM memory map is reported in the standard JSON errors.
 #[test]
 fn heap_size_out_of_range() {
@@ -820,6 +844,21 @@ fn switch_expression_missing_libraries() {
             "the library `sw.sol:L` should be reported as missing with arguments {arguments:?}"
         );
     }
+}
+
+/// The last of two remappings for the same prefix wins, as in solc.
+#[test]
+fn remappings_last_one_wins() {
+    let result =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_REMAPPINGS_ORDER_PATH);
+    assert_command_success(&result, "the remappings order input fixture");
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    assert_eq!(
+        output["contracts"]["main.sol"]["Main"]["abi"][0]["name"],
+        "second"
+    );
 }
 
 #[test]

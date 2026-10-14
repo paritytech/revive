@@ -6,7 +6,9 @@ use crate::cli_utils::{
     absolute_path, assert_command_failure, assert_command_success, assert_equal_exit_codes,
     execute_resolc, execute_resolc_in_directory, execute_resolc_with_stdin_input, execute_solc,
     DASH_SOURCE_NAMES, PVM_BLOB_START, SOLIDITY_CONTRACT_PATH, SOLIDITY_INCLUDED_IMPORT_PATH,
-    SOLIDITY_REMAPPED_IMPORT_PATH, YUL_CONTRACT_PATH,
+    SOLIDITY_REMAPPED_IMPORT_PATH, SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY,
+    SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH, SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY,
+    SOLIDITY_TWO_CONTRACTS_PATH, YUL_CONTRACT_PATH,
 };
 use crate::ResolcVersion;
 
@@ -176,6 +178,27 @@ fn resolves_imports_with_remappings() {
     );
 }
 
+/// The last of two remappings for the same prefix wins, as in solc.
+#[test]
+fn remappings_last_one_wins() {
+    let first_remapping = format!("target/={SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY}");
+    let second_remapping = format!("target/={SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY}");
+    let arguments = &[
+        first_remapping.as_str(),
+        second_remapping.as_str(),
+        SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH,
+        JSON_OPTION,
+        "abi",
+    ];
+    let result = execute_resolc(arguments);
+    assert_command_success(&result, "Compiling with combined JSON");
+
+    let combined_json: CombinedJson =
+        serde_json::from_str(&result.stdout).expect("Combined JSON output should deserialize");
+    let main = &combined_json.contracts[&format!("{SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH}:Main")];
+    assert_eq!(main.abi[0]["name"], "second");
+}
+
 #[test]
 fn resolves_imports_with_base_and_include_paths() {
     let arguments = &[
@@ -194,6 +217,38 @@ fn resolves_imports_with_base_and_include_paths() {
             "src/tests/data/solidity/included_import.sol:U",
         ],
     );
+}
+
+/// Contracts in a source whose path contains a colon keep their own entries.
+#[test]
+fn keeps_contracts_of_source_path_with_colon_apart() {
+    const SOURCE_PATH_WITH_COLON: &str = "directory:file.sol";
+
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::copy(
+        SOLIDITY_TWO_CONTRACTS_PATH,
+        directory.path().join(SOURCE_PATH_WITH_COLON),
+    )
+    .unwrap();
+
+    let result = execute_resolc_in_directory(
+        &[SOURCE_PATH_WITH_COLON, JSON_OPTION, "bin"],
+        directory.path(),
+    );
+    assert_command_success(&result, "Compiling a source path with a colon");
+
+    let combined_json: serde_json::Value =
+        serde_json::from_str(&result.stdout).expect("Combined JSON output should deserialize");
+    let bytecode = |name: &str| {
+        combined_json["contracts"][format!("{SOURCE_PATH_WITH_COLON}:{name}")]["bin"]
+            .as_str()
+            .unwrap_or_else(|| panic!("Combined JSON output should contain `{name}` bytecode"))
+            .to_owned()
+    };
+    let first = bytecode("First");
+    let second = bytecode("Second");
+    assert!(!first.is_empty() && !second.is_empty());
+    assert_ne!(first, second);
 }
 
 /// Asserts that the combined JSON `stdout` contains the bytecode of the `contract`.

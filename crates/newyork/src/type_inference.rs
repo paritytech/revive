@@ -757,7 +757,7 @@ impl TypeInference {
     /// A function returns via the fall-through `return_values` *and* via every early
     /// `leave`, which carries its own snapshot of the return variables. Narrowing must
     /// account for all of them — a `leave` can return a full-width value even when the
-    /// fall-through value is narrow — so [`return_path_value_ids`] collects every return path's
+    /// fall-through value is narrow — so `return_path_value_ids` collects every return path's
     /// value id per position and this narrows to the widest min_width across all of them. A signed return
     /// path keeps the type full width — a narrow magnitude can still be a full-width negative value.
     ///

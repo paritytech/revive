@@ -4,13 +4,14 @@ use crate::{
     cli_utils::{
         absolute_path, assert_command_failure, assert_command_success, execute_command,
         execute_resolc, execute_resolc_in_directory, execute_resolc_with_stdin_input,
-        CommandResult, ResolcOptSettings, SolcOptSettings, PVM_BLOB_START, SOLIDITY_CONTRACT_PATH,
-        SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH, SOLIDITY_IMMUTABLES_AT_LIMIT_PATH,
-        SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_CONTRACTS_PATH,
-        YUL_EMPTY_RUNTIME_OBJECT_PATH, YUL_MEMSET_CONTRACT_PATH,
+        CommandResult, ResolcOptSettings, SolcOptSettings, DASH_SOURCE_NAMES, PVM_BLOB_START,
+        SOLIDITY_CONTRACT_PATH, SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH,
+        SOLIDITY_IMMUTABLES_AT_LIMIT_PATH, SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH,
+        STANDARD_JSON_CONTRACTS_PATH, YUL_EMPTY_RUNTIME_OBJECT_PATH, YUL_MEMSET_CONTRACT_PATH,
     },
     SolcCompiler,
 };
+use revive_solc_json_interface::standard_json::input::source::STDIN_SOURCE_NAME;
 
 /// The starting hex value of an EVM blob compiled from Solidity.
 const EVM_BLOB_START_FROM_SOLIDITY: &str = "6080";
@@ -18,9 +19,6 @@ const EVM_BLOB_START_FROM_SOLIDITY: &str = "6080";
 /// The starting hex value of an EVM blob compiled from Yul.
 /// (Blobs compiled from Yul do not have consistent starting hex values.)
 const EVM_BLOB_START_FROM_YUL: &str = "";
-
-/// Source file names that start with a dash.
-const DASH_SOURCE_NAMES: [&str; 2] = ["-dash.sol", "-h"];
 
 /// The output header of the fixture contract read from the standard input.
 const STDIN_CONTRACT_HEADER: &str = "======= <stdin>:C =======";
@@ -281,5 +279,19 @@ fn compiles_stdin_source() {
         result.stdout.contains(STDIN_CONTRACT_HEADER),
         "expected `{STDIN_CONTRACT_HEADER}` in the output: {}",
         result.stdout
+    );
+}
+
+/// A file named like the standard input source cannot be compiled together with the standard input.
+#[test]
+fn rejects_file_named_stdin_next_to_stdin_source() {
+    let result = execute_resolc(&["--bin", STDIN_SOURCE_NAME, "-"]);
+    assert_command_failure(&result, "Compiling a file named `<stdin>` next to `-`");
+    assert!(
+        result
+            .stderr
+            .contains("cannot be compiled together with the standard input"),
+        "unexpected error output: {}",
+        result.stderr
     );
 }

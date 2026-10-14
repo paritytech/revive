@@ -76,6 +76,20 @@ pub fn narrow_guards_in_object(object: &mut Object) -> GuardNarrowStats {
     statistics
 }
 
+/// Re-applies [`narrow_allocator_param_types`] on an entire object tree (including subobjects).
+///
+/// Used when function signatures were widened back to full width for a re-inference. The
+/// allocator narrowing does not rely on the free memory pointer being bounded (the allocator's
+/// own overflow guard reverts for any pointer the narrowing would trap on), so it stays sound.
+pub(crate) fn narrow_allocator_parameters_in_object(object: &mut Object) {
+    let noreturn = detect_noreturn_functions(object);
+    narrow_allocator_param_types(object, &noreturn);
+
+    for subobject in &mut object.subobjects {
+        narrow_allocator_parameters_in_object(subobject);
+    }
+}
+
 /// Narrows the free-memory-pointer parameter (index 0) of allocator-shaped functions from
 /// i256 to i64. In solc's `finalize_allocation(memPtr, size)` this is `memPtr`: it is bounded
 /// by the heap size, and the function's own `or(gt(sum, UINT64_MAX), lt(sum, p0))` guard also

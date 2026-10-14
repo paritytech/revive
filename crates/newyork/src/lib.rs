@@ -205,10 +205,11 @@ fn run_late_inline_loop(
 /// only-when-bounded I32 FMP width. When the FMP could be unbounded, codegen loads the full FMP word
 /// (no `FMP < heap_size` range proof); the I32 forward width would then let a downstream comparison
 /// or offset bare-truncate the live value. Re-inferring with the flag set keeps the load — and every
-/// value derived from it — full width. The IR is already at its narrowing fixed point, so re-running
-/// `narrow_signatures` only reproduces the same parameter types (it never un-narrows); `heap_opt` is
-/// recomputed in case it shifted. Bounded FMPs (the Solidity allocator, all of OZ) skip this and keep
-/// the I32 width.
+/// value derived from it — full width. Signature narrowing never un-narrows, and the signatures
+/// narrowed so far relied on the I32 FMP width (e.g. a function returning an FMP load had its return
+/// type narrowed to I32), so they are widened back to full width before the re-inference and then
+/// narrowed again under the unbounded assumption. `heap_opt` is recomputed in case it shifted.
+/// Bounded FMPs (the Solidity allocator, all of OZ) skip this and keep the I32 width.
 fn reinfer_for_unbounded_fmp(
     ir_object: &mut ir::Object,
     type_info: TypeInference,
@@ -218,6 +219,8 @@ fn reinfer_for_unbounded_fmp(
     if !heap_opt.fmp_could_be_unbounded() {
         return (type_info, heap_opt);
     }
+    type_inference::widen_function_signatures(ir_object);
+    guard_narrow::narrow_allocator_parameters_in_object(ir_object);
     let mut reinferred = TypeInference::new();
     reinferred.set_fmp_could_be_unbounded(true);
     reinferred.infer_object_tree(ir_object);

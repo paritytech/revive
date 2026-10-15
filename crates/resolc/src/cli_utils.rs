@@ -210,6 +210,9 @@ pub const RESOLC_YUL_FLAG: &str = "--yul";
 /// See section `--strict-assembly vs. --yul` in the [release announcement](https://soliditylang.org/blog/2024/09/04/solidity-0.8.27-release-announcement/).
 pub const SOLC_YUL_FLAG: &str = "--strict-assembly";
 
+/// Source file names that start with a dash.
+pub const DASH_SOURCE_NAMES: [&str; 2] = ["-dash.sol", "-h"];
+
 /// The starting hex value of a PVM blob (encoding of `"PVM"`).
 pub const PVM_BLOB_START: &str = "50564d";
 

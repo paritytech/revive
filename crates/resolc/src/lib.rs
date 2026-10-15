@@ -3,7 +3,6 @@
 #![allow(clippy::too_many_arguments)]
 
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
@@ -138,7 +137,7 @@ pub fn standard_output<T: Compiler>(
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
-    remappings: BTreeSet<String>,
+    remappings: Vec<String>,
     suppressed_warnings: Vec<ResolcWarning>,
     debug_config: DebugConfig,
     llvm_arguments: Vec<String>,
@@ -323,7 +322,7 @@ pub fn combined_json<T: Compiler>(
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
-    remappings: BTreeSet<String>,
+    remappings: Vec<String>,
     suppressed_warnings: Vec<ResolcWarning>,
     debug_config: DebugConfig,
     output_directory: Option<PathBuf>,

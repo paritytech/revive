@@ -56,7 +56,7 @@ pub trait Compiler {
         messages: &mut Vec<SolcStandardJsonOutputError>,
     ) -> anyhow::Result<SolcStandardJsonOutput> {
         let mut solc_input =
-            SolcStandardJsonInput::from_yul_paths(paths, libraries, Default::default(), vec![]);
+            SolcStandardJsonInput::from_yul_paths(paths, libraries, Default::default(), vec![])?;
         self.validate_yul_standard_json(&mut solc_input, messages)
     }
 

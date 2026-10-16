@@ -9,6 +9,7 @@ use std::rc::Rc;
 use inkwell::debug_info::AsDIScope;
 use inkwell::debug_info::DIScope;
 use inkwell::types::BasicType;
+use inkwell::values::AsValueRef;
 use inkwell::values::BasicValue;
 use inkwell::values::InstructionOpcode;
 use revive_solc_json_interface::PolkaVMDefaultHeapMemorySize;
@@ -433,7 +434,11 @@ impl<'ctx> Context<'ctx> {
         global.set_initializer(&initializer);
         global.set_constant(true);
         global.set_linkage(inkwell::module::Linkage::Private);
-        global.set_section(Some(crate::polkavm::METADATA_HASH_SECTION));
+        let section = std::ffi::CString::new(crate::polkavm::METADATA_HASH_SECTION)
+            .expect("the section name should not contain a null byte");
+        unsafe {
+            inkwell::llvm_sys::core::LLVMSetSection(global.as_value_ref(), section.as_ptr());
+        }
         global.set_metadata(
             self.llvm.metadata_node(&[]),
             self.llvm

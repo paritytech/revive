@@ -203,6 +203,9 @@ pub const STANDARD_JSON_SOURCE_KECCAK256_MATCH_PATH: &str =
     "src/tests/data/standard_json/source_keccak256_match.json";
 /// A standard JSON fixture without `settings.optimizer`.
 pub const STANDARD_JSON_NO_OPTIMIZER_PATH: &str = "src/tests/data/standard_json/no_optimizer.json";
+/// A standard JSON fixture with an empty `settings.optimizer` object.
+pub const STANDARD_JSON_EMPTY_OPTIMIZER_PATH: &str =
+    "src/tests/data/standard_json/empty_optimizer.json";
 /// A standard JSON fixture requesting the `transientStorageLayout` output.
 pub const STANDARD_JSON_TRANSIENT_STORAGE_LAYOUT_PATH: &str =
     "src/tests/data/standard_json/transient_storage_layout.json";

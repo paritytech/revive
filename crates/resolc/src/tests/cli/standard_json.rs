@@ -9,7 +9,8 @@ use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
     execute_solc_with_stdin_input, PVM_BLOB_START, STANDARD_JSON_ALL_OUTPUTS_PATH,
     STANDARD_JSON_CONTRACTS_PATH, STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH,
-    STANDARD_JSON_DEBUG_INFO_EMPTY_PATH, STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH,
+    STANDARD_JSON_DEBUG_INFO_EMPTY_PATH, STANDARD_JSON_EMPTY_OPTIMIZER_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH,
     STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH, STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH,
     STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH, STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
     STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
@@ -959,19 +960,24 @@ fn source_keccak256_mismatch() {
     .starts_with(PVM_BLOB_START));
 }
 
-/// Settings without an optimizer compile.
+/// Settings with an omitted or empty optimizer compile.
 #[test]
 fn optimizer_input_setting_omitted() {
-    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NO_OPTIMIZER_PATH);
-    assert_command_success(&result, "a standard JSON input without optimizer settings");
-    let output = to_solc_standard_json_output(&result.stdout);
-    assert_no_errors(&output);
-    assert!(bytecode_object(
-        &output,
-        TRANSIENT_COUNTER_SOURCE_PATH,
-        TRANSIENT_COUNTER_CONTRACT_NAME
-    )
-    .starts_with(PVM_BLOB_START));
+    for path in [
+        STANDARD_JSON_NO_OPTIMIZER_PATH,
+        STANDARD_JSON_EMPTY_OPTIMIZER_PATH,
+    ] {
+        let result = execute_resolc_with_stdin_input(&[JSON_OPTION], path);
+        assert_command_success(&result, path);
+        let output = to_solc_standard_json_output(&result.stdout);
+        assert_no_errors(&output);
+        assert!(bytecode_object(
+            &output,
+            TRANSIENT_COUNTER_SOURCE_PATH,
+            TRANSIENT_COUNTER_CONTRACT_NAME
+        )
+        .starts_with(PVM_BLOB_START));
+    }
 }
 
 /// The transient storage layout output is passed through from solc.

@@ -5772,3 +5772,31 @@ fn call_data_length_loops() {
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 5]);
     run_differential(actions);
 }
+
+/// A value returned through an early `leave` must not be truncated to the width of the
+/// callee's fall-through return value at the call site (issue #190).
+#[test]
+fn early_return_width() {
+    let calldata = |w: U256, c1: u64, c2: u64| {
+        [w, U256::from(c1), U256::from(c2)]
+            .iter()
+            .flat_map(|word| word.to_be_bytes::<32>())
+            .collect::<Vec<u8>>()
+    };
+    let mut actions = instantiate("contracts/LC.sol", "LC");
+    for (w, c1, c2) in [
+        (U256::from(1u64) << 32, 1, 0),
+        (U256::from(1u64) << 32, 0, 1),
+        (U256::from(1u64) << 32, 1, 1),
+        (U256::from(299u64), 1, 0),
+        (U256::from(300u64), 1, 0),
+        (U256::MAX, 1, 0),
+    ] {
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            calldata(w, c1, c2),
+        );
+    }
+    run_differential(actions);
+}

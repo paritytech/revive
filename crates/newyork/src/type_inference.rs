@@ -146,9 +146,10 @@ pub struct TypeInference {
     uses: BTreeMap<u32, BTreeSet<UseContext>>,
     /// Whether any constraint changed in the last iteration.
     changed: bool,
-    /// Function return value IDs, keyed by FunctionId.
+    /// Per return position, the value IDs of every return path (the fall-through
+    /// `return_values` and each early `leave`), keyed by FunctionId.
     /// Used during the forward pass to propagate return value widths to call sites.
-    function_returns: BTreeMap<u32, Vec<ValueId>>,
+    function_returns: BTreeMap<u32, Vec<Vec<ValueId>>>,
     /// Per-value refined function-argument demand: the widest narrowed parameter width
     /// across all call sites where this value is passed as an argument.
     /// Set by `refine_demands_from_parameters` after parameter narrowing.
@@ -331,9 +332,9 @@ impl TypeInference {
     /// out-of-range semantics are preserved.
     pub fn infer_object(&mut self, object: &Object) {
         for (function_id, function) in &object.functions {
-            if !function.return_values.is_empty() {
+            if !function.returns.is_empty() {
                 self.function_returns
-                    .insert(function_id.0, function.return_values.clone());
+                    .insert(function_id.0, return_path_value_ids(function));
             }
         }
 
@@ -756,31 +757,15 @@ impl TypeInference {
     /// A function returns via the fall-through `return_values` *and* via every early
     /// `leave`, which carries its own snapshot of the return variables. Narrowing must
     /// account for all of them — a `leave` can return a full-width value even when the
-    /// fall-through value is narrow — so the loop below collects every return path's value
-    /// id per position and narrows to the widest min_width across all of them. A signed return
+    /// fall-through value is narrow — so `return_path_value_ids` collects every return path's
+    /// value id per position and this narrows to the widest min_width across all of them. A signed return
     /// path keeps the type full width — a narrow magnitude can still be a full-width negative value.
     ///
     /// Returns true if any return type was narrowed.
     pub fn narrow_function_returns(&self, object: &mut Object) -> bool {
         let mut changed = false;
         for function in object.functions.values_mut() {
-            let num_returns = function.returns.len();
-
-            let mut return_path_ids: Vec<Vec<ValueId>> = vec![Vec::new(); num_returns];
-            for (index, slot) in return_path_ids.iter_mut().enumerate() {
-                if let Some(id) = function.return_values.get(index) {
-                    slot.push(*id);
-                }
-            }
-            crate::ir::for_each_statement(&function.body.statements, &mut |statement| {
-                if let Statement::Leave { return_values } = statement {
-                    for (index, value) in return_values.iter().enumerate() {
-                        if let Some(slot) = return_path_ids.get_mut(index) {
-                            slot.push(value.id);
-                        }
-                    }
-                }
-            });
+            let return_path_ids = return_path_value_ids(function);
 
             for (index, ret_ty) in function.returns.iter_mut().enumerate() {
                 if !matches!(ret_ty, Type::Int(BitWidth::I256)) {
@@ -1868,9 +1853,12 @@ impl TypeInference {
                 function,
                 arguments: _,
             } => {
-                if let Some(ret_ids) = self.function_returns.get(&function.0).cloned() {
+                if let Some(return_paths) = self.function_returns.get(&function.0).cloned() {
+                    // The callee may return through an early `leave` as well as through
+                    // the fall-through, so the call result must be as wide as the widest
+                    // value on any return path, not just the fall-through one.
                     let mut max_ret_width = BitWidth::I1;
-                    for ret_id in &ret_ids {
+                    for ret_id in return_paths.iter().flatten() {
                         let ret_width = self.get(*ret_id).min_width;
                         max_ret_width = max_ret_width.max(ret_width);
                     }
@@ -1998,6 +1986,51 @@ pub fn double_width(width: BitWidth) -> BitWidth {
         BitWidth::I160 => BitWidth::I256,
         BitWidth::I256 => BitWidth::I256,
     }
+}
+
+/// Widens every integer parameter and return type in an object tree back to full width.
+///
+/// Signature narrowing never widens a type again, so a re-inference under weaker assumptions
+/// (see `reinfer_for_unbounded_fmp`) must start from full-width signatures. Otherwise a type
+/// narrowed under the previous, stronger assumptions would keep truncating values that the
+/// new inference proves can be wide.
+pub(crate) fn widen_function_signatures(object: &mut Object) {
+    for function in object.functions.values_mut() {
+        let parameter_types = function
+            .parameters
+            .iter_mut()
+            .map(|(_, value_type)| value_type);
+        for value_type in parameter_types.chain(function.returns.iter_mut()) {
+            if matches!(value_type, Type::Int(_)) {
+                *value_type = Type::Int(BitWidth::I256);
+            }
+        }
+    }
+
+    for subobject in &mut object.subobjects {
+        widen_function_signatures(subobject);
+    }
+}
+
+/// Collects, per return position, the value IDs of every path out of `function`.
+///
+/// A function returns via its fall-through `return_values` and via every early `leave`,
+/// each of which carries its own snapshot of the return variables. Any analysis that
+/// reasons about what a function returns must consider all of these paths, since a
+/// `leave` can return a full-width value even when the fall-through value is narrow.
+fn return_path_value_ids(function: &Function) -> Vec<Vec<ValueId>> {
+    let mut return_path_ids: Vec<Vec<ValueId>> = vec![Vec::new(); function.returns.len()];
+    for (slot, id) in return_path_ids.iter_mut().zip(&function.return_values) {
+        slot.push(*id);
+    }
+    for_each_statement(&function.body.statements, &mut |statement| {
+        if let Statement::Leave { return_values } = statement {
+            for (slot, value) in return_path_ids.iter_mut().zip(return_values) {
+                slot.push(value.id);
+            }
+        }
+    });
+    return_path_ids
 }
 
 /// Maximum number of param/return narrowing iterations.

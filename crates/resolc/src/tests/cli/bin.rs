@@ -6,6 +6,7 @@ use crate::{
         execute_resolc, execute_resolc_in_directory, execute_resolc_with_stdin_input,
         CommandResult, ResolcOptSettings, SolcOptSettings, DASH_SOURCE_NAMES, PVM_BLOB_START,
         SOLIDITY_BLOB_OPCODES_PATH, SOLIDITY_CONTRACT_PATH,
+        SOLIDITY_FACTORY_DEPENDENCY_CONSTRUCTOR_AND_RUNTIME_PATH,
         SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH, SOLIDITY_IMMUTABLES_AT_LIMIT_PATH,
         SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_CONTRACTS_PATH,
         YUL_EMPTY_RUNTIME_OBJECT_PATH, YUL_MEMSET_CONTRACT_PATH,
@@ -126,6 +127,17 @@ fn assert_binary_blob_from_json(
 /// for more details on the JSON output format.
 fn get_first_json_error(errors: &[serde_json::Value]) -> &str {
     errors.first().unwrap()["message"].as_str().unwrap()
+}
+
+/// A contract created in both the constructor and the runtime code compiles.
+#[test]
+fn compiles_factory_dependency_of_constructor_and_runtime() {
+    let path = absolute_path(SOLIDITY_FACTORY_DEPENDENCY_CONSTRUCTOR_AND_RUNTIME_PATH);
+    let result = execute_resolc(&[&path, "--bin"]);
+    assert_command_success(
+        &result,
+        "Compiling a contract created in constructor and runtime",
+    );
 }
 
 /// This test mimics the command used in the `resolc` benchmarks when compiling Solidity.

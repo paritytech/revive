@@ -47,6 +47,16 @@ pub enum Error {
         /// The invalid identifier.
         found: String,
     },
+    /// Two different objects with the same name.
+    #[error(
+        "{location} The object `{identifier}` is declared twice with different code, which is not supported"
+    )]
+    DuplicateObjectName {
+        /// The second object location.
+        location: Location,
+        /// The duplicate identifier.
+        identifier: String,
+    },
     /// Invalid code length.
     #[error("The line or column length exceed the maximum of u32::MAX")]
     InvalidLength,

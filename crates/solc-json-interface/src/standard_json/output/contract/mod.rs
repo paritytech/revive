@@ -104,6 +104,9 @@ impl Contract {
             SolcStandardJsonInputSettingsSelectionFileFlag::StorageLayout => {
                 self.storage_layout = Default::default();
             }
+            SolcStandardJsonInputSettingsSelectionFileFlag::TransientStorageLayout => {
+                self.transient_storage_layout = Default::default();
+            }
             SolcStandardJsonInputSettingsSelectionFileFlag::Yul => {
                 self.ir_optimized = Default::default();
             }

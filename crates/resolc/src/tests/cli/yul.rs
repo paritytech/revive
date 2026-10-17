@@ -2,9 +2,10 @@
 
 use crate::cli_utils::{
     assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
-    execute_solc, RESOLC_YUL_FLAG, SOLC_YUL_FLAG, YUL_CONTRACT_PATH, YUL_DEPLOY_ONLY_OBJECT_PATH,
-    YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH, YUL_DUPLICATE_FUNCTIONS_SWITCH_PATH,
-    YUL_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH, YUL_INVALID_HEX_NIBBLES_PATH,
+    execute_resolc_with_stdin_input, execute_solc, PVM_BLOB_START, RESOLC_YUL_FLAG, SOLC_YUL_FLAG,
+    YUL_CONTRACT_PATH, YUL_DEPLOY_ONLY_OBJECT_PATH, YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH,
+    YUL_DUPLICATE_FUNCTIONS_SWITCH_PATH, YUL_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH,
+    YUL_INVALID_HEX_NIBBLES_PATH,
 };
 
 #[test]
@@ -96,4 +97,18 @@ fn compiles_factory_dependency_nested_object() {
 
     let solc_result = execute_solc(&[YUL_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH, SOLC_YUL_FLAG]);
     assert_equal_exit_codes(&solc_result, &resolc_result);
+}
+
+/// A Yul source read from the standard input compiles under the `<stdin>` name.
+#[test]
+fn compiles_stdin_source() {
+    let result =
+        execute_resolc_with_stdin_input(&[RESOLC_YUL_FLAG, "--bin", "-"], YUL_CONTRACT_PATH);
+    assert_command_success(&result, "Compiling Yul from the standard input");
+    assert!(
+        result.stdout.contains("======= <stdin>:Test =======")
+            && result.stdout.contains(PVM_BLOB_START),
+        "expected the `<stdin>:Test` blob in the output: {}",
+        result.stdout
+    );
 }

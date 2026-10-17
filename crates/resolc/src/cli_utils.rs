@@ -2,7 +2,7 @@
 
 use std::{
     fs::File,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -55,12 +55,16 @@ pub const SOLIDITY_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH: &str =
 /// A contract created in both the constructor and the runtime code, with `leave` in its code.
 pub const SOLIDITY_FACTORY_DEPENDENCY_CONSTRUCTOR_AND_RUNTIME_PATH: &str =
     "src/tests/data/solidity/factory_dependency_constructor_and_runtime.sol";
+/// Two contracts named `First` and `Second` returning `1` and `2`.
+pub const SOLIDITY_TWO_CONTRACTS_PATH: &str = "src/tests/data/solidity/two_contracts.sol";
 /// The verbatim reproducer from paritytech/revive#632: two contracts calling the same library.
 pub const SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH: &str =
     "src/tests/data/solidity/link_independent_objects.sol";
 /// A Solidity contract whose `require` has a reason string.
 pub const SOLIDITY_REVERT_STRINGS_CONTRACT_PATH: &str =
     "src/tests/data/solidity/revert_strings.sol";
+/// A contract whose code depends on the heap and stack size.
+pub const SOLIDITY_HEAP_STACK_SIZE_PATH: &str = "src/tests/data/solidity/heap_stack_size.sol";
 
 /// The simple YUL contract test fixture path.
 pub const YUL_CONTRACT_PATH: &str = "src/tests/data/yul/contract.yul";
@@ -211,6 +215,20 @@ pub const STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH: &str =
 /// source location annotations from the Yul IR.
 pub const STANDARD_JSON_DEBUG_INFO_EMPTY_PATH: &str =
     "src/tests/data/standard_json/debug_info_empty.json";
+/// A standard JSON fixture whose source `keccak256` does not match its content.
+pub const STANDARD_JSON_SOURCE_KECCAK256_MISMATCH_PATH: &str =
+    "src/tests/data/standard_json/source_keccak256_mismatch.json";
+/// A standard JSON fixture whose source `keccak256` matches its content.
+pub const STANDARD_JSON_SOURCE_KECCAK256_MATCH_PATH: &str =
+    "src/tests/data/standard_json/source_keccak256_match.json";
+/// A standard JSON fixture without `settings.optimizer`.
+pub const STANDARD_JSON_NO_OPTIMIZER_PATH: &str = "src/tests/data/standard_json/no_optimizer.json";
+/// A standard JSON fixture with an empty `settings.optimizer` object.
+pub const STANDARD_JSON_EMPTY_OPTIMIZER_PATH: &str =
+    "src/tests/data/standard_json/empty_optimizer.json";
+/// A standard JSON fixture requesting the `transientStorageLayout` output.
+pub const STANDARD_JSON_TRANSIENT_STORAGE_LAYOUT_PATH: &str =
+    "src/tests/data/standard_json/transient_storage_layout.json";
 /// A standard JSON fixture requesting codegen for all contracts in all files
 /// via the "all" (`*`) wildcard, but only additional fields for specific files.
 pub const STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH: &str =
@@ -221,6 +239,9 @@ pub const RESOLC_YUL_FLAG: &str = "--yul";
 /// The `--yul` option was deprecated in Solidity 0.8.27 in favor of `--strict-assembly`.
 /// See section `--strict-assembly vs. --yul` in the [release announcement](https://soliditylang.org/blog/2024/09/04/solidity-0.8.27-release-announcement/).
 pub const SOLC_YUL_FLAG: &str = "--strict-assembly";
+
+/// Source file names that start with a dash.
+pub const DASH_SOURCE_NAMES: [&str; 2] = ["-dash.sol", "-h"];
 
 /// The starting hex value of a PVM blob (encoding of `"PVM"`).
 pub const PVM_BLOB_START: &str = "50564d";
@@ -265,6 +286,11 @@ pub fn execute_resolc_with_stdin_input(arguments: &[&str], stdin_file_path: &str
     execute_command("resolc", arguments, Some(stdin_file_path))
 }
 
+/// Executes the `resolc` command with the given `arguments` inside `directory`.
+pub fn execute_resolc_in_directory(arguments: &[&str], directory: &Path) -> CommandResult {
+    execute_command_in_directory("resolc", arguments, None, Some(directory))
+}
+
 /// Executes the `solc` command with the given `arguments`.
 pub fn execute_solc(arguments: &[&str]) -> CommandResult {
     execute_command(SolcCompiler::DEFAULT_EXECUTABLE_NAME, arguments, None)
@@ -285,6 +311,16 @@ pub fn execute_command(
     arguments: &[&str],
     stdin_file_path: Option<&str>,
 ) -> CommandResult {
+    execute_command_in_directory(command, arguments, stdin_file_path, None)
+}
+
+/// Executes the `command` like [`execute_command`], inside `directory` if given.
+pub fn execute_command_in_directory(
+    command: &str,
+    arguments: &[&str],
+    stdin_file_path: Option<&str>,
+    directory: Option<&Path>,
+) -> CommandResult {
     log::trace!(
         "executing command: '{command} {}{}'",
         arguments.join(" "),
@@ -297,7 +333,11 @@ pub fn execute_command(
         Some(path) => Stdio::from(File::open(path).unwrap()),
         None => Stdio::null(),
     };
-    let result = Command::new(command)
+    let mut command = Command::new(command);
+    if let Some(directory) = directory {
+        command.current_dir(directory);
+    }
+    let result = command
         .args(arguments)
         .stdin(stdin_config)
         .stdout(Stdio::piped())

@@ -231,7 +231,7 @@ impl Project {
             .iter()
             .map(|path| {
                 let source = SolcStandardJsonInputSource::from(path.as_path());
-                (path.to_string_lossy().to_string(), source)
+                (SolcStandardJsonInputSource::name(path.as_path()), source)
             })
             .collect::<BTreeMap<String, SolcStandardJsonInputSource>>();
         Self::try_from_yul_sources(sources, libraries, solc_output, debug_config, use_newyork)

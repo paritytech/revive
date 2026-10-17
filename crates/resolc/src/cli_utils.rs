@@ -52,6 +52,9 @@ pub const SOLIDITY_COLLISION_UNDERSCORE_PATH: &str = "src/tests/data/solidity/co
 /// The verbatim reproducer from paritytech/revive#631: a contract creating another contract.
 pub const SOLIDITY_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH: &str =
     "src/tests/data/solidity/factory_dependency_nested_object.sol";
+/// A contract created in both the constructor and the runtime code, with `leave` in its code.
+pub const SOLIDITY_FACTORY_DEPENDENCY_CONSTRUCTOR_AND_RUNTIME_PATH: &str =
+    "src/tests/data/solidity/factory_dependency_constructor_and_runtime.sol";
 /// The verbatim reproducer from paritytech/revive#632: two contracts calling the same library.
 pub const SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH: &str =
     "src/tests/data/solidity/link_independent_objects.sol";

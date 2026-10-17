@@ -29,8 +29,8 @@ use crate::parser::statement::Statement;
 use crate::visitor::AstNode;
 use crate::visitor::AstVisitor;
 
-/// The name of the source location field of the serialized syntax tree nodes.
-const LOCATION_FIELD: &str = "location";
+/// The fields of a serialized source location.
+const LOCATION_FIELDS: [&str; 2] = ["line", "column"];
 
 /// The upper-level YUL object, representing the deploy code.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -211,8 +211,15 @@ impl Object {
     fn without_locations(&self) -> serde_json::Value {
         fn remove_locations(value: &mut serde_json::Value) {
             match value {
+                serde_json::Value::Object(fields)
+                    if fields.len() == LOCATION_FIELDS.len()
+                        && LOCATION_FIELDS
+                            .iter()
+                            .all(|field| fields.contains_key(*field)) =>
+                {
+                    *value = serde_json::Value::Null;
+                }
                 serde_json::Value::Object(fields) => {
-                    fields.remove(LOCATION_FIELD);
                     fields.values_mut().for_each(remove_locations);
                 }
                 serde_json::Value::Array(elements) => {
@@ -649,14 +656,21 @@ object "P" {
         code { }
         object "K" {
             code { }
-            object "K_deployed" { code { stop() } }
+            object "K_deployed" { code { function f() { for { } 1 { } { if 1 { break } continue } leave } f() } }
         }
     }
     object "K" {
         code { }
         object "K_deployed" {
             code {
-                stop()
+                function f() {
+                    for { } 1 { } {
+                        if 1 { break }
+                        continue
+                    }
+                    leave
+                }
+                f()
             }
         }
     }

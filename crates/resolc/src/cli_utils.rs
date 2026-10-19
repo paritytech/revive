@@ -195,6 +195,20 @@ pub const STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH: &str =
 /// source location annotations from the Yul IR.
 pub const STANDARD_JSON_DEBUG_INFO_EMPTY_PATH: &str =
     "src/tests/data/standard_json/debug_info_empty.json";
+/// A standard JSON fixture whose source `keccak256` does not match its content.
+pub const STANDARD_JSON_SOURCE_KECCAK256_MISMATCH_PATH: &str =
+    "src/tests/data/standard_json/source_keccak256_mismatch.json";
+/// A standard JSON fixture whose source `keccak256` matches its content.
+pub const STANDARD_JSON_SOURCE_KECCAK256_MATCH_PATH: &str =
+    "src/tests/data/standard_json/source_keccak256_match.json";
+/// A standard JSON fixture without `settings.optimizer`.
+pub const STANDARD_JSON_NO_OPTIMIZER_PATH: &str = "src/tests/data/standard_json/no_optimizer.json";
+/// A standard JSON fixture with an empty `settings.optimizer` object.
+pub const STANDARD_JSON_EMPTY_OPTIMIZER_PATH: &str =
+    "src/tests/data/standard_json/empty_optimizer.json";
+/// A standard JSON fixture requesting the `transientStorageLayout` output.
+pub const STANDARD_JSON_TRANSIENT_STORAGE_LAYOUT_PATH: &str =
+    "src/tests/data/standard_json/transient_storage_layout.json";
 /// A standard JSON fixture requesting codegen for all contracts in all files
 /// via the "all" (`*`) wildcard, but only additional fields for specific files.
 pub const STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH: &str =

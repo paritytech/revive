@@ -1,3 +1,7 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.0;
+
 contract K {
     function f(uint256 n) external pure returns (uint256) {
         if (n > 1) return 1;

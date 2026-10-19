@@ -1,7 +1,5 @@
 //! The Yul IR parser error.
 
-use std::collections::BTreeSet;
-
 use crate::lexer::token::location::Location;
 
 /// The Yul IR parser error.
@@ -48,14 +46,6 @@ pub enum Error {
         expected: String,
         /// The invalid identifier.
         found: String,
-    },
-    /// Invalid attributes.
-    #[error("{location} Found invalid LLVM attributes: {values:?}")]
-    InvalidAttributes {
-        /// The invalid token location.
-        location: Location,
-        /// The list of invalid attributes.
-        values: BTreeSet<String>,
     },
     /// Invalid code length.
     #[error("The line or column length exceed the maximum of u32::MAX")]

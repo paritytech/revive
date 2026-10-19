@@ -1,6 +1,5 @@
 //! The Solidity compiler solJson interface.
 
-use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -81,7 +80,7 @@ impl Compiler for SoljsonCompiler {
         _base_path: Option<String>,
         _include_paths: Vec<String>,
         _allow_paths: Option<String>,
-        _remappings: BTreeSet<String>,
+        _remappings: Vec<String>,
     ) -> anyhow::Result<CombinedJson> {
         unimplemented!();
     }

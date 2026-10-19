@@ -1026,14 +1026,6 @@ impl<'a> Printer<'a> {
             Expression::ChainId => self.output.push_str("chainid()"),
             Expression::SelfBalance => self.output.push_str("selfbalance()"),
             Expression::BaseFee => self.output.push_str("basefee()"),
-
-            Expression::BlobHash { index } => {
-                self.output.push_str("blobhash(");
-                self.write_value(index);
-                self.output.push(')');
-            }
-
-            Expression::BlobBaseFee => self.output.push_str("blobbasefee()"),
             Expression::Gas => self.output.push_str("gas()"),
             Expression::MSize => self.output.push_str("msize()"),
             Expression::Address => self.output.push_str("address()"),

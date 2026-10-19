@@ -5677,6 +5677,59 @@ fn assert_returns_with_optimizer(
     .run();
 }
 
+/// Runs `enter(implementation, 7)` across resolc deploys 0 and 1 and EVM deploys 2 and 3.
+fn transient_storage(steps: &[(usize, usize)]) {
+    let source = include_str!("../contracts/TransientCrossVm.sol");
+    let pvm = resolc::test_utils::compile_blob("TransientCrossVm", source);
+    let evm = resolc::test_utils::compile_evm_deploy_code(
+        "TransientCrossVm",
+        source,
+        true,
+        Default::default(),
+    );
+    let codes = [&pvm, &pvm, &evm, &evm];
+    let alice = Address::from(ALICE.0);
+    let mut actions = Vec::new();
+    for (index, code) in codes.iter().enumerate() {
+        actions.push(Instantiate {
+            origin: TestAddress::Alice,
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            code: Code::Bytes(code.to_vec()),
+            data: vec![],
+            salt: OptionalHex::from([index as u8; 32]),
+        });
+    }
+    let mut expected = U256::from(1).to_be_bytes::<32>().to_vec();
+    expected.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    for &(caller, implementation) in steps {
+        let address = alice.create2([implementation as u8; 32], keccak256(codes[implementation]));
+        let mut data = hex!("7e348b7d").to_vec();
+        data.extend_from_slice(address.into_word().as_slice());
+        data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(caller),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data,
+        });
+        actions.push(VerifyCall(VerifyCallExpectation {
+            success: true,
+            output: OptionalHex::from(expected.clone()),
+            gas_consumed: None,
+        }));
+    }
+    Specs {
+        actions,
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
 /// Encodes a call to `signature` with the given word arguments.
 fn encode_call(signature: &str, arguments: &[U256]) -> Vec<u8> {
     let mut data = keccak256(signature.as_bytes())[..4].to_vec();
@@ -5730,4 +5783,94 @@ fn loop_pure_unoptimized_stack_usage() {
         ),
         state,
     );
+}
+
+/// Reproducer from paritytech/security_findings#153.
+#[test]
+fn transient_same_vm() {
+    transient_storage(&[(0, 1), (2, 3)]);
+}
+
+/// Reproducer from paritytech/security_findings#153.
+#[test]
+fn transient_evm_proxy_to_resolc() {
+    transient_storage(&[(2, 1)]);
+}
+
+/// Reproducer from paritytech/security_findings#153.
+#[test]
+fn transient_resolc_to_evm() {
+    transient_storage(&[(0, 3)]);
+}
+
+/// Calls `f(3)` on a contract whose Yul function names contain LLVM attribute markers.
+fn run_function_name_fixture(contract: &str) {
+    let mut actions = instantiate(&format!("contracts/{contract}.sol"), contract);
+    let mut data = keccak256(b"f(uint256)")[..4].to_vec();
+    data.extend_from_slice(&U256::from(3).to_be_bytes::<32>());
+    push_call(&mut actions, TestAddress::Instantiated(0), data);
+    run_differential(actions);
+}
+
+/// Reproducer from paritytech/security_findings#111.
+#[test]
+fn function_name_injected_no_return() {
+    run_function_name_fixture("NameInjectedNoReturn");
+}
+
+/// Reproducer from paritytech/security_findings#111.
+#[test]
+fn function_name_injected_unknown_attribute() {
+    run_function_name_fixture("NameInjectedUnknownAttribute");
+}
+
+/// Reproducer from paritytech/security_findings#111.
+#[test]
+fn function_name_overlapping_llvm_markers() {
+    run_function_name_fixture("NameOverlappingLlvmMarkers");
+}
+
+/// A struct name containing an LLVM attribute marker.
+#[test]
+fn struct_name_injected_no_return() {
+    run_function_name_fixture("StructNameInjectedNoReturn");
+}
+
+/// Reproducer from paritytech/security_findings#115.
+#[test]
+fn constructor_call_data_is_empty() {
+    let mut actions = instantiate("contracts/ConstructorCallData.sol", "ConstructorCallData");
+    let Instantiate { data, .. } = &mut actions[0] else {
+        unreachable!()
+    };
+    *data = U256::from(5).to_be_bytes::<32>().to_vec();
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"n()")[..4].to_vec(),
+    });
+    run_differential(actions);
+}
+
+/// Deploy code reads empty call data although the instantiate input carries data.
+#[test]
+fn deploy_code_call_data_is_empty() {
+    let mut actions = instantiate_yul("contracts/DeployCallData.yul", "DeployCallData");
+    let Instantiate { data, .. } = &mut actions[0] else {
+        unreachable!()
+    };
+    *data = vec![0xff; 32];
+    run_differential(actions);
+}
+
+/// Two loops bounded by the call data length compile and match EVM.
+#[test]
+fn call_data_length_loops() {
+    let mut actions = instantiate("contracts/CallDataLengthLoops.sol", "CallDataLengthLoops");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 5]);
+    run_differential(actions);
 }

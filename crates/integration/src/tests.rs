@@ -5765,6 +5765,18 @@ fn loop_tuple_write_stack_usage() {
     );
 }
 
+/// Recursion through an internal function pointer with many arguments, optimized for size.
+#[test]
+fn many_arguments_function_pointer_size_optimized() {
+    assert_returns_with_optimizer(
+        "contracts/ManyArgumentsFunctionPointer.sol",
+        "ManyArgumentsFunctionPointer",
+        revive_llvm_context::OptimizerSettings::size(),
+        encode_call("entry()", &[]),
+        U256::from(1),
+    );
+}
+
 /// Reproducer from paritytech/security_findings#113.
 #[test]
 fn loop_pure_unoptimized_stack_usage() {

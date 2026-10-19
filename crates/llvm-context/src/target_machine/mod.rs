@@ -78,11 +78,26 @@ impl TargetMachine {
         })
     }
 
+    /// The LLVM function attribute that keeps the code generator from lowering a `switch` to a
+    /// jump table.
+    pub const NO_JUMP_TABLES_ATTRIBUTE: &'static str = "no-jump-tables";
+
     /// Writes the LLVM module to a memory buffer.
+    ///
+    /// Jump tables are disabled for every function in `module` beforehand. The polkavm-linker
+    /// optimizer folds the entry load of a PC-relative jump table dispatched with a constant
+    /// index into a jump to the table's own data address, which traps at runtime.
     pub fn write_to_memory_buffer(
         &self,
         module: &inkwell::module::Module,
     ) -> Result<inkwell::memory_buffer::MemoryBuffer<'static>, inkwell::support::LLVMString> {
+        let no_jump_tables = module
+            .get_context()
+            .create_string_attribute(Self::NO_JUMP_TABLES_ATTRIBUTE, "true");
+        for function in module.get_functions() {
+            function.add_attribute(inkwell::attributes::AttributeLoc::Function, no_jump_tables);
+        }
+
         match self.target {
             Target::PVM => self
                 .target_machine

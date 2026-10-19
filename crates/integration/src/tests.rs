@@ -5772,3 +5772,25 @@ fn call_data_length_loops() {
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 5]);
     run_differential(actions);
 }
+
+/// Loops that differ only in their bound and the order of their step assignment stay distinct.
+#[test]
+fn swapped_loop_step() {
+    let mut actions = instantiate("contracts/SwappedLoopStep.sol", "SwappedLoopStep");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::ZERO]),
+    );
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(5)]),
+    );
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(11)]),
+    );
+    run_differential(actions);
+}

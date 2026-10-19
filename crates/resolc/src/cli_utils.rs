@@ -55,6 +55,12 @@ pub const SOLIDITY_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH: &str =
 /// A contract created in both the constructor and the runtime code, with `leave` in its code.
 pub const SOLIDITY_FACTORY_DEPENDENCY_CONSTRUCTOR_AND_RUNTIME_PATH: &str =
     "src/tests/data/solidity/factory_dependency_constructor_and_runtime.sol";
+/// A contract named `Duplicate` in a file named `Duplicate.sol` returning `1`.
+pub const SOLIDITY_DUPLICATE_FIRST_PATH: &str =
+    "src/tests/data/solidity/duplicate/first/Duplicate.sol";
+/// A contract named `Duplicate` in a file named `Duplicate.sol` returning `2`.
+pub const SOLIDITY_DUPLICATE_SECOND_PATH: &str =
+    "src/tests/data/solidity/duplicate/second/Duplicate.sol";
 /// Two contracts named `First` and `Second` returning `1` and `2`.
 pub const SOLIDITY_TWO_CONTRACTS_PATH: &str = "src/tests/data/solidity/two_contracts.sol";
 /// The verbatim reproducer from paritytech/revive#632: two contracts calling the same library.

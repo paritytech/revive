@@ -1,0 +1,18 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "TransientCounter.sol": {
+      "urls": ["src/tests/data/solidity/transient_counter.sol"]
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true
+    },
+    "outputSelection": {
+      "*": {
+        "*": ["transientStorageLayout"]
+      }
+    }
+  }
+}

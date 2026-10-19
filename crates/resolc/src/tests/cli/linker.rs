@@ -2,8 +2,9 @@ use revive_common::ObjectFormat;
 
 use crate::cli_utils::{
     assert_command_failure, assert_command_success, execute_resolc, execute_resolc_in_directory,
-    SOLIDITY_DEPENDENCY_CONTRACT_PATH, SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH,
-    SOLIDITY_LIBRARY_CALL_CONTRACT_PATH, SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH,
+    execute_resolc_with_stdin_input, SOLIDITY_DEPENDENCY_CONTRACT_PATH,
+    SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH, SOLIDITY_LIBRARY_CALL_CONTRACT_PATH,
+    SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH,
 };
 
 /// Test deploy time linking a contract with unresolved factory dependencies.
@@ -223,5 +224,33 @@ fn library_address_is_not_resolved_from_library_blob() {
     assert_eq!(
         ObjectFormat::try_from(std::fs::read(&blob_path).unwrap().as_slice()).unwrap(),
         ObjectFormat::PVM
+    );
+}
+
+/// A library defined in the standard input source can be linked.
+#[test]
+fn links_library_in_stdin_source() {
+    let output =
+        execute_resolc_with_stdin_input(&["--bin", "-"], SOLIDITY_LIBRARY_CALL_CONTRACT_PATH);
+    assert_command_success(
+        &output,
+        "Compiling a library calling contract without --libraries",
+    );
+    assert!(output.stderr.contains("<stdin>:U is unlinked"));
+
+    let output = execute_resolc_with_stdin_input(
+        &[
+            "--bin",
+            "--libraries",
+            "<stdin>:L=0x1111111111111111111111111111111111111111",
+            "-",
+        ],
+        SOLIDITY_LIBRARY_CALL_CONTRACT_PATH,
+    );
+    assert_command_success(&output, "Compiling with the library of the standard input");
+    assert!(
+        !output.stderr.contains("is unlinked"),
+        "unexpected unlinked warning: {}",
+        output.stderr
     );
 }

@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::fs::File;
 use std::io::Write;
+use std::path::Component;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -18,6 +19,9 @@ use revive_solc_json_interface::CombinedJsonContract;
 use revive_solc_json_interface::SolcStandardJsonOutputContract;
 use serde::Deserialize;
 use serde::Serialize;
+
+/// The directory that stands for a `..` component in an output directory.
+const ESCAPED_PARENT_DIRECTORY: &str = "%2E%2E";
 
 /// The Solidity contract build.
 #[derive(Debug, Serialize, Deserialize)]
@@ -89,7 +93,14 @@ impl Contract {
         Ok(())
     }
 
-    /// Writes the contract text assembly and bytecode to files.
+    /// Writes the contract metadata, text assembly, and bytecode to files.
+    ///
+    /// Each file's path inside `path` is the contract's full path, `<source path>:<contract name>`,
+    /// plus the extension, because `--link` identifies a factory dependency by its blob's path
+    /// without the extension. A `..` component becomes a `%2E%2E` directory, so that the file stays
+    /// inside `path` without taking the place of another source's file. The root and a Windows prefix
+    /// are dropped, because pushing either would replace `path`, and so is a leading `.`, which names
+    /// the same directory.
     pub fn write_to_directory(
         self,
         path: &Path,
@@ -104,14 +115,24 @@ impl Contract {
             .expect("Always exists")
             .to_str()
             .expect("Always valid");
-        let output_path = path.to_owned();
-        std::fs::create_dir_all(output_path.as_path())?;
+        let file_stem = match self.identifier.name.as_deref() {
+            Some(contract_name) => format!("{file_name}:{contract_name}"),
+            None => file_name.to_owned(),
+        };
+        let mut output_path = path.to_owned();
+        for component in file_path.parent().into_iter().flat_map(Path::components) {
+            match component {
+                Component::Normal(name) => output_path.push(name),
+                Component::ParentDir => output_path.push(ESCAPED_PARENT_DIRECTORY),
+                Component::Prefix(_) | Component::RootDir | Component::CurDir => {}
+            }
+        }
+        std::fs::create_dir_all(output_path.as_path()).map_err(|error| {
+            anyhow::anyhow!("Directory {output_path:?} creating error: {error}")
+        })?;
 
         if output_metadata {
-            let file_path = output_path.join(format!(
-                "{file_name}:{}.{EXTENSION_JSON}",
-                self.identifier.name.as_deref().unwrap_or(file_name),
-            ));
+            let file_path = output_path.join(format!("{file_stem}.{EXTENSION_JSON}"));
             if file_path.exists() && !overwrite {
                 anyhow::bail!(
                     "Refusing to overwrite an existing file {file_path:?} (use --overwrite to force)."
@@ -124,10 +145,7 @@ impl Contract {
             .map_err(|error| anyhow::anyhow!("File {file_path:?} writing: {error}"))?;
         }
         if output_assembly {
-            let file_path = output_path.join(format!(
-                "{file_name}:{}.{EXTENSION_POLKAVM_ASSEMBLY}",
-                self.identifier.name.as_deref().unwrap_or(file_name),
-            ));
+            let file_path = output_path.join(format!("{file_stem}.{EXTENSION_POLKAVM_ASSEMBLY}"));
             if file_path.exists() && !overwrite {
                 anyhow::bail!(
                     "Refusing to overwrite an existing file {file_path:?} (use --overwrite to force)."
@@ -140,10 +158,7 @@ impl Contract {
         }
 
         if output_binary {
-            let file_path = output_path.join(format!(
-                "{file_name}:{}.{EXTENSION_POLKAVM_BINARY}",
-                self.identifier.name.as_deref().unwrap_or(file_name),
-            ));
+            let file_path = output_path.join(format!("{file_stem}.{EXTENSION_POLKAVM_BINARY}"));
             if file_path.exists() && !overwrite {
                 anyhow::bail!(
                     "Refusing to overwrite an existing file {file_path:?} (use --overwrite to force)."

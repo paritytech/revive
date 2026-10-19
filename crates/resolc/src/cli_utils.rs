@@ -49,6 +49,12 @@ pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/l
 pub const SOLIDITY_COLLISION_NESTED_PATH: &str = "src/tests/data/solidity/collision/a/c.sol";
 /// The paritytech/revive#622 reproducer contract at `a_c.sol`.
 pub const SOLIDITY_COLLISION_UNDERSCORE_PATH: &str = "src/tests/data/solidity/collision/a_c.sol";
+/// A contract named `Duplicate` in a file named `Duplicate.sol` returning `1`.
+pub const SOLIDITY_DUPLICATE_FIRST_PATH: &str =
+    "src/tests/data/solidity/duplicate/first/Duplicate.sol";
+/// A contract named `Duplicate` in a file named `Duplicate.sol` returning `2`.
+pub const SOLIDITY_DUPLICATE_SECOND_PATH: &str =
+    "src/tests/data/solidity/duplicate/second/Duplicate.sol";
 /// Two contracts named `First` and `Second` returning `1` and `2`.
 pub const SOLIDITY_TWO_CONTRACTS_PATH: &str = "src/tests/data/solidity/two_contracts.sol";
 /// The verbatim reproducer from paritytech/revive#632: two contracts calling the same library.

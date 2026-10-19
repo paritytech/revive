@@ -3,13 +3,16 @@
 use crate::{
     cli_utils::{
         absolute_path, assert_command_failure, assert_command_success, execute_command,
-        execute_resolc, CommandResult, ResolcOptSettings, SolcOptSettings, PVM_BLOB_START,
-        SOLIDITY_CONTRACT_PATH, SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH,
-        SOLIDITY_IMMUTABLES_AT_LIMIT_PATH, SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH,
-        STANDARD_JSON_CONTRACTS_PATH, YUL_EMPTY_RUNTIME_OBJECT_PATH, YUL_MEMSET_CONTRACT_PATH,
+        execute_resolc, execute_resolc_in_directory, execute_resolc_with_stdin_input,
+        CommandResult, ResolcOptSettings, SolcOptSettings, DASH_SOURCE_NAMES, PVM_BLOB_START,
+        SOLIDITY_BLOB_OPCODES_PATH, SOLIDITY_CONTRACT_PATH,
+        SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH, SOLIDITY_IMMUTABLES_AT_LIMIT_PATH,
+        SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_CONTRACTS_PATH,
+        YUL_EMPTY_RUNTIME_OBJECT_PATH, YUL_MEMSET_CONTRACT_PATH,
     },
     SolcCompiler,
 };
+use revive_solc_json_interface::standard_json::input::source::STDIN_SOURCE_NAME;
 
 /// The starting hex value of an EVM blob compiled from Solidity.
 const EVM_BLOB_START_FROM_SOLIDITY: &str = "6080";
@@ -17,6 +20,9 @@ const EVM_BLOB_START_FROM_SOLIDITY: &str = "6080";
 /// The starting hex value of an EVM blob compiled from Yul.
 /// (Blobs compiled from Yul do not have consistent starting hex values.)
 const EVM_BLOB_START_FROM_YUL: &str = "";
+
+/// The output header of the fixture contract read from the standard input.
+const STDIN_CONTRACT_HEADER: &str = "======= <stdin>:C =======";
 
 /// Asserts that the `resolc` output contains a PVM blob.
 fn assert_pvm_blob(result: &CommandResult) {
@@ -220,6 +226,24 @@ fn rejects_immutables_over_limit() {
     }
 }
 
+/// `blobhash` and `blobbasefee` are a compile error on both pipelines.
+#[test]
+fn rejects_blob_opcodes() {
+    let path = absolute_path(SOLIDITY_BLOB_OPCODES_PATH);
+    for arguments in [
+        vec![path.as_str(), "--bin"],
+        vec![path.as_str(), "--newyork", "--bin"],
+    ] {
+        let result = execute_resolc(&arguments);
+        assert_command_failure(&result, "Compiling blob opcodes");
+        assert!(
+            result.stderr.to_lowercase().contains("blobhash"),
+            "unexpected error output: {}",
+            result.stderr
+        );
+    }
+}
+
 /// This test mimics the command used in the `resolc` benchmarks when compiling Solidity via standard JSON input.
 #[test]
 fn compiles_json_to_binary_blob() {
@@ -240,4 +264,53 @@ fn compiles_json_to_binary_blob() {
         Some(&path),
     );
     assert_evm_blob_from_json(&solc_result, "src/Counter.sol", "Counter");
+}
+
+/// Sources whose names start with a dash compile.
+#[test]
+fn compiles_dash_source_names() {
+    let directory = tempfile::tempdir().unwrap();
+    for name in DASH_SOURCE_NAMES {
+        std::fs::copy(
+            absolute_path(SOLIDITY_CONTRACT_PATH),
+            directory.path().join(name),
+        )
+        .unwrap();
+
+        let result = execute_resolc_in_directory(&["--bin", "--", name], directory.path());
+        assert_pvm_blob(&result);
+        let header = format!("======= {name}:C =======");
+        assert!(
+            result.stdout.contains(&header),
+            "expected `{header}` in the output: {}",
+            result.stdout
+        );
+    }
+}
+
+/// A source read from the standard input compiles under the `<stdin>` name.
+#[test]
+fn compiles_stdin_source() {
+    let path = absolute_path(SOLIDITY_CONTRACT_PATH);
+    let result = execute_resolc_with_stdin_input(&["-", "--bin"], &path);
+    assert_pvm_blob(&result);
+    assert!(
+        result.stdout.contains(STDIN_CONTRACT_HEADER),
+        "expected `{STDIN_CONTRACT_HEADER}` in the output: {}",
+        result.stdout
+    );
+}
+
+/// A file named like the standard input source cannot be compiled together with the standard input.
+#[test]
+fn rejects_file_named_stdin_next_to_stdin_source() {
+    let result = execute_resolc(&["--bin", STDIN_SOURCE_NAME, "-"]);
+    assert_command_failure(&result, "Compiling a file named `<stdin>` next to `-`");
+    assert!(
+        result
+            .stderr
+            .contains("cannot be compiled together with the standard input"),
+        "unexpected error output: {}",
+        result.stderr
+    );
 }

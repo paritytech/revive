@@ -1,4 +1,7 @@
+// SPDX-License-Identifier: MIT
+
 pragma solidity ^0.8.0;
+
 contract C {
   function h0(uint256 a, uint256 b) internal returns (uint256 r) {
     if (true) { assembly { r := gt(r, b) } return r; }

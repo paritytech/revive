@@ -1,0 +1,1 @@
+{"language":"Solidity","sources":{"c.sol":{"content":"pragma solidity *; contract C {}"}},"settings":{"optimizer":{"enabled":true},"polkavm":{"memoryConfig":{"heapSize":4294967295}},"outputSelection":{"*":{"*":["evm.bytecode"]}}}}

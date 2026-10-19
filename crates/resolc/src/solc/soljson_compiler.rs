@@ -77,6 +77,10 @@ impl Compiler for SoljsonCompiler {
         &self,
         _paths: &[PathBuf],
         _selector: HashSet<CombinedJsonSelector>,
+        _base_path: Option<String>,
+        _include_paths: Vec<String>,
+        _allow_paths: Option<String>,
+        _remappings: Vec<String>,
     ) -> anyhow::Result<CombinedJson> {
         unimplemented!();
     }

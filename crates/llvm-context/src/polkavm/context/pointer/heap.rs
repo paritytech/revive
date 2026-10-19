@@ -498,21 +498,14 @@ impl RuntimeFunction for Keccak256TwoWords {
         let word0 = Self::paramater(context, 0).into_int_value();
         let word1 = Self::paramater(context, 1).into_int_value();
 
-        // Mirror EVM's `mstore(0, word0); mstore(32, word1)`: byte-swap
-        // and store both words to heap[0..64].
-        let zero_xlen = context.xlen_type().const_zero();
-        let word_xlen = context
-            .xlen_type()
-            .const_int(BYTE_LENGTH_WORD as u64, false);
-        crate::polkavm::evm::memory::store_bswap_unchecked(context, zero_xlen, word0)?;
-        crate::polkavm::evm::memory::store_bswap_unchecked(context, word_xlen, word1)?;
+        let input_pointer =
+            crate::polkavm::evm::memory::store_scratch_pair_unchecked(context, word0, word1)?;
 
         let length = context
             .xlen_type()
             .const_int(2 * BYTE_LENGTH_WORD as u64, false);
 
         let output_pointer = context.build_alloca_at_entry(context.word_type(), "output_pointer");
-        let input_pointer = context.build_heap_gep_unchecked(zero_xlen)?;
 
         context.build_runtime_call(
             revive_runtime_api::polkavm_imports::HASH_KECCAK_256,

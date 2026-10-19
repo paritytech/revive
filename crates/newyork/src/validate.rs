@@ -631,7 +631,6 @@ impl Validator {
             | Expression::ChainId
             | Expression::SelfBalance
             | Expression::BaseFee
-            | Expression::BlobBaseFee
             | Expression::Gas
             | Expression::MSize
             | Expression::Address => {}
@@ -646,10 +645,6 @@ impl Validator {
 
             Expression::BlockHash { number } => {
                 self.use_value(number, context);
-            }
-
-            Expression::BlobHash { index } => {
-                self.use_value(index, context);
             }
 
             Expression::Balance { address } => {

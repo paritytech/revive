@@ -24,7 +24,7 @@ impl TestDir {
                 "submodule",
                 "add",
                 "-b",
-                "release/21.x",
+                "release/23.x",
                 "https://github.com/llvm/llvm-project.git",
                 "llvm",
             ])

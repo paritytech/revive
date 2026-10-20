@@ -79,9 +79,7 @@ polkadot-sdk = { version = "=2609.0.0" }
 
 # llvm
 [workspace.dependencies.inkwell]
-# TODO: switch back to crates.io once inkwell 0.11.0 is published.
-git = "https://github.com/TheDan64/inkwell"
-rev = "4da592ef59e7a7750a80a2ca0b1d64a3deb907cf"
+version = "0.11.0"
 default-features = false
 features = ["serde", "llvm23-1", "no-libffi-linking", "target-riscv"]
 

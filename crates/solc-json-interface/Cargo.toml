@@ -18,6 +18,7 @@ revive-common = { workspace = true }
 
 anyhow = { workspace = true }
 hex = { workspace = true }
+polkavm-common = { workspace = true }
 rayon = { workspace = true, optional = true }
 semver = { workspace = true }
 serde = { workspace = true }

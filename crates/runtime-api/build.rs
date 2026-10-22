@@ -30,9 +30,9 @@ const TARGET_FEATURES: &[&str] = &[
     "+a",
     "+c",
     "+zbb",
-    "+auipc-addi-fusion",
-    "+ld-add-fusion",
-    "+lui-addi-fusion",
+    "+fusion-auipc-addi",
+    "+fusion-ld-add",
+    "+fusion-lui-addi",
     "+xtheadcondmov",
     "+relax",
 ];
@@ -85,17 +85,11 @@ fn build_module(source_path: &str, bitcode_path: &str, rust_file: &str) {
     let lib = Path::new(&out_dir).join(bitcode_path);
     compile(source_path, lib.to_str().expect("$OUT_DIR should be UTF-8"));
 
-    // `inkwell::MemoryBuffer::create_from_memory_range` requires a trailing nul byte
-    // (it subtracts one from the length to drop the terminator), so we embed the bitcode
-    // with an extra nul byte appended.
-    let mut bitcode = fs::read(lib).expect("bitcode should have been built");
-    bitcode.push(0);
-    let padded_name = format!("{bitcode_path}.nul");
-    let padded_path = Path::new(&out_dir).join(&padded_name);
-    fs::write(&padded_path, &bitcode).expect("should be able to write in $OUT_DIR");
-    let len = bitcode.len();
+    let len = fs::metadata(&lib)
+        .expect("bitcode should have been built")
+        .len();
     let src_path = Path::new(&out_dir).join(rust_file);
-    let src = format!("pub static BITCODE: &[u8; {len}] = include_bytes!(\"{padded_name}\");");
+    let src = format!("pub static BITCODE: &[u8; {len}] = include_bytes!(\"{bitcode_path}\");");
     fs::write(src_path, src).expect("should be able to write in $OUT_DIR");
 }
 

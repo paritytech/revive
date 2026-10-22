@@ -29,7 +29,7 @@ impl TargetMachine {
 
     /// LLVM target features.
     pub const VM_FEATURES: &'static str =
-        "+e,+m,+a,+c,+zbb,+auipc-addi-fusion,+ld-add-fusion,+lui-addi-fusion,+xtheadcondmov,+relax";
+        "+e,+m,+a,+c,+zbb,+fusion-auipc-addi,+fusion-ld-add,+fusion-lui-addi,+xtheadcondmov,+relax";
 
     /// RISC-V backend feature that lets the code generator emit single (potentially unaligned)
     /// scalar memory accesses instead of splitting them into byte-wise sequences. Enabled for

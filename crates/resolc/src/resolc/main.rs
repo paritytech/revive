@@ -179,6 +179,7 @@ fn main_inner(
         Some(arguments.heap_size),
         Some(arguments.stack_size),
     );
+    memory_config.validate()?;
 
     let use_newyork = arguments.newyork;
 

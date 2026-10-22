@@ -65,7 +65,6 @@ pub struct SimplifyResults {
 enum EnvRead {
     Address,
     BaseFee,
-    BlobBaseFee,
     CallDataSize,
     CallValue,
     Caller,
@@ -85,7 +84,6 @@ fn env_read_kind(expression: &Expression) -> Option<EnvRead> {
     match expression {
         Expression::Address => Some(EnvRead::Address),
         Expression::BaseFee => Some(EnvRead::BaseFee),
-        Expression::BlobBaseFee => Some(EnvRead::BlobBaseFee),
         Expression::CallDataSize => Some(EnvRead::CallDataSize),
         Expression::CallValue => Some(EnvRead::CallValue),
         Expression::Caller => Some(EnvRead::Caller),
@@ -562,6 +560,7 @@ impl Simplifier {
 
                 let saved_constants = self.constants.clone();
                 let saved_copies = self.copies.clone();
+                let saved_env_reads = self.env_reads.clone();
 
                 let condition_statements = self.simplify_statements(condition_statements);
                 let condition = self.simplify_expression(condition);
@@ -570,6 +569,7 @@ impl Simplifier {
 
                 self.constants = saved_constants;
                 self.copies = saved_copies;
+                self.env_reads = saved_env_reads;
 
                 vec![Statement::For {
                     initial_values,
@@ -804,7 +804,6 @@ impl Simplifier {
 
             Expression::Address => self.cse_env_read(EnvRead::Address, expression),
             Expression::BaseFee => self.cse_env_read(EnvRead::BaseFee, expression),
-            Expression::BlobBaseFee => self.cse_env_read(EnvRead::BlobBaseFee, expression),
             Expression::CallDataSize => self.cse_env_read(EnvRead::CallDataSize, expression),
             Expression::CallValue => self.cse_env_read(EnvRead::CallValue, expression),
             Expression::Caller => self.cse_env_read(EnvRead::Caller, expression),
@@ -2408,10 +2407,6 @@ impl Canonicalizer {
                 buffer.push(0x23);
                 self.encode_value(number, buffer);
             }
-            Expression::BlobHash { index } => {
-                buffer.push(0x26);
-                self.encode_value(index, buffer);
-            }
             Expression::DataOffset { id } => {
                 buffer.push(0x30);
                 buffer.extend_from_slice(&(id.len() as u16).to_le_bytes());
@@ -2906,7 +2901,6 @@ fn nullary_expr_tag(expression: &Expression) -> u8 {
         Expression::ChainId => 0x4C,
         Expression::SelfBalance => 0x4D,
         Expression::BaseFee => 0x4E,
-        Expression::BlobBaseFee => 0x4F,
         Expression::Gas => 0x50,
         Expression::MSize => 0x51,
         Expression::Address => 0x52,
@@ -3356,9 +3350,9 @@ fn fuzzy_encode_statement(
             condition_statements,
             condition,
             body,
+            post_input_variables,
             post,
             outputs,
-            ..
         } => {
             buffer.push(0x87);
             buffer.push(initial_values.len() as u8);
@@ -3375,6 +3369,10 @@ fn fuzzy_encode_statement(
             }
             fuzzy_encode_expression(canon, condition, buffer, literal_counter);
             fuzzy_encode_region(canon, body, buffer, literal_counter);
+            buffer.push(post_input_variables.len() as u8);
+            for post_input_variable_id in post_input_variables {
+                canon.encode_value_id(*post_input_variable_id, buffer);
+            }
             fuzzy_encode_region(canon, post, buffer, literal_counter);
             buffer.push(outputs.len() as u8);
             for output in outputs {

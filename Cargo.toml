@@ -37,30 +37,30 @@ libc = "0.2.172"
 tempfile = "3.27"
 anyhow = "1.0"
 semver = { version = "1.0", features = ["serde"] }
-itertools = "0.14"
+itertools = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", features = ["arbitrary_precision"] }
 regex = "1.12"
 num = "0.4.3"
 sha1 = "0.11"
-sha3 = "0.11"
+sha3 = "0.12"
 thiserror = "2.0"
 which = "8.0"
 path-slash = "0.2"
 rayon = "1.11"
 clap = { version = "4", default-features = false, features = ["derive"] }
-polkavm-common = "0.36.0"
-polkavm-linker = "0.36.0"
-polkavm-disassembler = "0.36.0"
-polkavm = "0.36.0"
+polkavm-common = "0.37.0"
+polkavm-linker = "0.37.0"
+polkavm-disassembler = "0.37.0"
+polkavm = "0.37.0"
 alloy-primitives = { version = "1.4", features = ["serde"] }
 alloy-sol-types = "1.4"
-alloy-genesis = "1.1.2"
-alloy-serde = "1.1"
-env_logger = { version = "0.11.8", default-features = false }
+alloy-genesis = "2.5.0"
+alloy-serde = "2.5.0"
+env_logger = { version = "0.11.11", default-features = false }
 serde_stacker = "0.1.14"
 criterion = { version = "0.8", features = ["html_reports"] }
-log = { version = "0.4.28" }
+log = { version = "0.4.34" }
 git2 = { version = "0.21.0", default-features = false }
 downloader = "0.2.8"
 flate2 = "1.1"
@@ -75,13 +75,13 @@ normpath = "1.5"
 # polkadot-sdk and friends
 codec = { version = "3.7.5", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.6", default-features = false }
-polkadot-sdk = { version = "=2604.2.0" }
+polkadot-sdk = { version = "=2609.0.0" }
 
 # llvm
 [workspace.dependencies.inkwell]
-version = "0.9.0"
+version = "0.11.0"
 default-features = false
-features = ["serde", "llvm22-1", "no-libffi-linking", "target-riscv"]
+features = ["serde", "llvm23-1", "no-libffi-linking", "target-riscv"]
 
 [profile.bench]
 inherits = "release"

@@ -372,7 +372,7 @@ fn build_target(
     let mut target_lib_directory = target_directory.to_path_buf();
     target_lib_directory.push("lib/");
 
-    // Stage libc++/libunwind alongside the LLVM archives so `LLVM_SYS_221_PREFIX`
+    // Stage libc++/libunwind alongside the LLVM archives so `LLVM_SYS_231_PREFIX`
     // consumers can resolve the libc++ symbols they reference. The musl sysroot
     // is not copied: it would shadow the host libc on the link search path.
     let copy_options = fs_extra::dir::CopyOptions {

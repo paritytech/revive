@@ -13,7 +13,8 @@ use self::details::Details;
 #[serde(rename_all = "camelCase")]
 pub struct Optimizer {
     /// Whether the optimizer is enabled.
-    pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
     /// The optimization mode string.
     #[serde(default = "Optimizer::default_mode", skip_serializing)]
     pub mode: char,
@@ -26,7 +27,7 @@ impl Optimizer {
     /// A shortcut constructor.
     pub fn new(enabled: bool, mode: char, details: Details) -> Self {
         Self {
-            enabled,
+            enabled: Some(enabled),
             mode,
             details,
         }

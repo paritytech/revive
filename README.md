@@ -64,7 +64,7 @@ Building revive requires a [stable Rust installation](https://rustup.rs/) and a 
 
 ### LLVM
 
-`revive` depends on a custom build of LLVM `v18.1.8` with the RISC-V _embedded_ target, including the `compiler-rt` builtins. You can either download a build from our releases (recommended for older hardware) or build it from source.
+`revive` depends on a custom build of LLVM with the RISC-V _embedded_ target, including the `compiler-rt` builtins. You can either download a build from our releases (recommended for older hardware) or build it from source.
 
 <details>
   <summary>Download from our LLVM releases</summary>

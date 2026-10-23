@@ -587,7 +587,7 @@ impl<'ctx> Context<'ctx> {
                 let alloca_type = r#type
                     .get_return_type()
                     .unwrap_or_else(|| self.word_type().as_basic_type_enum());
-                let pointer = self.build_alloca(alloca_type, "return_pointer");
+                let pointer = self.build_alloca_at_entry(alloca_type, "return_pointer");
                 FunctionReturn::primitive(pointer)
             }
             size => {
@@ -598,7 +598,7 @@ impl<'ctx> Context<'ctx> {
                     )
                     .as_basic_type_enum()
                 });
-                let pointer = self.build_alloca(alloca_type, "return_pointer");
+                let pointer = self.build_alloca_at_entry(alloca_type, "return_pointer");
                 FunctionReturn::compound(pointer, size)
             }
         };
@@ -824,43 +824,24 @@ impl<'ctx> Context<'ctx> {
         r#type: T,
         name: &str,
     ) -> Pointer<'ctx> {
-        let current_block = self.builder.get_insert_block().unwrap();
-        let function = current_block.get_parent().unwrap();
-        let entry_block = function.get_first_basic_block().unwrap();
+        let entry_block = self
+            .basic_block()
+            .get_parent()
+            .and_then(|function| function.get_first_basic_block())
+            .expect("ICE: the builder is positioned inside a function");
 
-        if let Some(terminator) = entry_block.get_terminator() {
-            self.builder.position_before(&terminator);
-        } else {
-            self.builder.position_at_end(entry_block);
+        let builder = self.llvm.create_builder();
+        match entry_block.get_terminator() {
+            Some(terminator) => builder.position_before(&terminator),
+            None => builder.position_at_end(entry_block),
         }
 
-        let pointer = self.builder.build_alloca(r#type, name).unwrap();
+        let pointer = builder.build_alloca(r#type, name).unwrap();
         pointer
             .as_instruction()
             .unwrap()
             .set_alignment(revive_common::BYTE_LENGTH_STACK_ALIGN as u32)
             .expect("ICE: alignment is valid");
-
-        self.builder.position_at_end(current_block);
-
-        Pointer::new(r#type, AddressSpace::Stack, pointer)
-    }
-
-    /// Builds an aligned stack allocation at the current position.
-    /// Use this if [`Self::build_alloca_at_entry`] might change program semantics.
-    /// Otherwise, alloca should always be built at the function prelude!
-    pub fn build_alloca<T: BasicType<'ctx> + Clone + Copy>(
-        &self,
-        r#type: T,
-        name: &str,
-    ) -> Pointer<'ctx> {
-        let pointer = self.builder.build_alloca(r#type, name).unwrap();
-
-        pointer
-            .as_instruction()
-            .unwrap()
-            .set_alignment(revive_common::BYTE_LENGTH_STACK_ALIGN as u32)
-            .expect("Alignment is valid");
 
         Pointer::new(r#type, AddressSpace::Stack, pointer)
     }

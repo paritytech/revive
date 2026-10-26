@@ -5773,6 +5773,45 @@ fn call_data_length_loops() {
     run_differential(actions);
 }
 
+/// Loops that differ only in their bound and the order of their step assignment stay distinct.
+#[test]
+fn swapped_loop_step() {
+    let mut actions = instantiate("contracts/SwappedLoopStep.sol", "SwappedLoopStep");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::ZERO]),
+    );
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(5)]),
+    );
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(11)]),
+    );
+    run_differential(actions);
+}
+
+/// Reproducer from paritytech/security_findings#152.
+#[test]
+fn recursive_call_result() {
+    alloy_sol_types::sol! { function f(uint256 d, uint256 a) external returns (uint256); }
+    let mut actions = instantiate("contracts/RecursiveCallResult.sol", "RecursiveCallResult");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        fCall {
+            d: U256::from(3),
+            a: U256::from(5),
+        }
+        .abi_encode(),
+    );
+    run_differential(actions);
+}
+
 /// A range check that runs on only one path does not narrow the checked value.
 #[test]
 fn partial_range_check() {

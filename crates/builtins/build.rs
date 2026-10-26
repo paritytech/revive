@@ -16,7 +16,7 @@ fn main() {
     );
 
     // When cross-compiling, the riscv64 builtins live in the target LLVM,
-    // not the host LLVM that `LLVM_SYS_221_PREFIX` points at.
+    // not the host LLVM that `LLVM_SYS_231_PREFIX` points at.
     let llvm_lib_dir = match env::var_os(revive_build_utils::REVIVE_LLVM_TARGET_PREFIX) {
         Some(prefix) => PathBuf::from(prefix).join("lib"),
         None => revive_build_utils::llvm_lib_dir(),

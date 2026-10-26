@@ -125,6 +125,16 @@ impl Settings {
         }
     }
 
+    /// Returns the level for the `default<O{level}>` middle-end pass pipeline.
+    /// LLVM 23 removed the `Os` and `Oz` pipelines in favor of `O2` combined with
+    /// the `optsize` and `minsize` function attributes, which are set per size level.
+    pub fn middle_end_pipeline_level(&self) -> u8 {
+        match self.level_middle_end_size {
+            SizeLevel::Zero => self.level_middle_end as u8,
+            SizeLevel::S | SizeLevel::Z => inkwell::OptimizationLevel::Default as u8,
+        }
+    }
+
     /// Checks whether there are middle-end optimizations enabled.
     pub fn is_middle_end_enabled(&self) -> bool {
         self.level_middle_end != inkwell::OptimizationLevel::None

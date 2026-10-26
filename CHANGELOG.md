@@ -6,6 +6,7 @@ Supported `polkadot-sdk` rev: `2609.0.0`
 
 ### Added
 
+- Support for solc v0.8.38.
 - Support for solc v0.8.37. The new `slotnum()` Yul builtin (EIP-7843) is rejected with an unsupported instruction error, as `pallet-revive` has no notion of a beacon chain slot number.
 
 ### Changed

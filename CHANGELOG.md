@@ -6,12 +6,14 @@ Supported `polkadot-sdk` rev: `2609.0.0`
 
 ### Added
 
+- Support for solc v0.8.38.
 - Support for solc v0.8.37. The new `slotnum()` Yul builtin (EIP-7843) is rejected with an unsupported instruction error, as `pallet-revive` has no notion of a beacon chain slot number.
 
 ### Changed
 
 - `--newyork`: Loop-carried variables are typed as the join of the widths flowing into them instead of being forced to `I256`, and constant shifts are bounded by the operand width and emitted at 64 bits when the result fits, so masked 32-bit loop variables such as those of a SHA-256 round loop stay narrow through the loop. [#615](https://github.com/paritytech/revive/pull/615)
 - The latest supported `polkadot-sdk` version is now `2609.0.0`
+- Updated `LLVM` to `23.1.3`. The vendored fix for [llvm/llvm-project#229015](https://github.com/llvm/llvm-project/pull/229015) is applied on top.
 
 ### Fixed
 - `--newyork`: A bug in dead call value analysis. [#589](https://github.com/paritytech/revive/pull/589)

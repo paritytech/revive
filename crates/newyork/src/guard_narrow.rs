@@ -130,7 +130,8 @@ fn is_allocator_function(function: &Function, noreturn: &std::collections::BTree
 /// exist as dead comparisons, and not merely `leave`/`return`. That guard is what makes narrowing
 /// `p0` sound: a caller passing a wide pointer reverts under EVM exactly as the narrowed call-site
 /// truncation traps. Without it, a function that computes-but-ignores the checks would be narrowed
-/// and trap on inputs EVM accepts.
+/// and trap on inputs EVM accepts. Only statements before the first `leave` count, since a guard
+/// after it can be bypassed.
 fn has_allocator_shape(
     block: &Block,
     p0: ValueId,
@@ -147,6 +148,9 @@ fn has_allocator_shape(
         std::collections::BTreeSet::new();
 
     for statement in &block.statements {
+        if statement_may_leave(statement) {
+            break;
+        }
         if let Statement::Let { bindings, value } = statement {
             if bindings.len() == 1 {
                 let binding_id = bindings[0].0;
@@ -273,6 +277,17 @@ fn region_reverts(region: &Region, noreturn: &std::collections::BTreeSet<u32>) -
     })
 }
 
+/// Whether `statement` contains a `leave` at any nesting depth. Function-level guard detection
+/// stops at such a statement because a guard after it does not run on every path out of the
+/// function.
+fn statement_may_leave(statement: &Statement) -> bool {
+    let mut leaves = false;
+    for_each_statement(std::slice::from_ref(statement), &mut |nested| {
+        leaves |= matches!(nested, Statement::Leave { .. });
+    });
+    leaves
+}
+
 /// Detects functions that always terminate (no fall-through). A function
 /// is noreturn if its body has a single statement that is a known terminator
 /// (Revert, PanicRevert, etc.) — the typical compiler-generated panic helper
@@ -362,7 +377,8 @@ fn detect_validator_functions(
 /// call. A `leave` just returns from the validator, so the caller would proceed with a
 /// silently-masked (wrong) value. Detection therefore uses [`region_reverts`], which excludes
 /// `leave`/`return` — unlike the looser [`region_terminates`] used for intra-function guards, where
-/// the terminator merely skips the narrowed uses within the same function.
+/// the terminator merely skips the narrowed uses within the same function. For the same reason the
+/// guard must precede any `leave`, so that it runs on every path out of the validator.
 fn detect_validator_mask(
     block: &Block,
     parameter_id: ValueId,
@@ -376,6 +392,9 @@ fn detect_validator_mask(
     let mut iszero_eq_definitions: BTreeMap<u32, BigUint> = BTreeMap::new();
 
     for statement in statements {
+        if statement_may_leave(statement) {
+            return None;
+        }
         if let Statement::Let {
             ref bindings,
             ref value,

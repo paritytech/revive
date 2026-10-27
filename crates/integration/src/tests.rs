@@ -5811,3 +5811,40 @@ fn recursive_call_result() {
     );
     run_differential(actions);
 }
+
+/// A range check that runs on only one path does not narrow the checked value.
+#[test]
+fn partial_range_check() {
+    let mut actions = instantiate("contracts/PartialRangeCheck.sol", "PartialRangeCheck");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(5000)]),
+    );
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(200)]),
+    );
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(500)]),
+    );
+    run_differential(actions);
+}
+
+/// Writes through a storage reference returned by a recursive function are not lost.
+#[test]
+fn returned_storage_reference() {
+    let selector = keccak256(b"write(uint256,uint256)")[..4].to_vec();
+    let mut actions = instantiate(
+        "contracts/ReturnedStorageReference.sol",
+        "ReturnedStorageReference",
+    );
+    for depth in [0, 1] {
+        let data = [selector.clone(), words(&[U256::MAX, U256::from(depth)])].concat();
+        push_call(&mut actions, TestAddress::Instantiated(0), data);
+    }
+    run_differential(actions);
+}

@@ -14,7 +14,7 @@ Supported `polkadot-sdk` rev: `2609.0.0`
 
 - `--newyork`: Loop-carried variables are typed as the join of the widths flowing into them instead of being forced to `I256`, and constant shifts are bounded by the operand width and emitted at 64 bits when the result fits, so masked 32-bit loop variables such as those of a SHA-256 round loop stay narrow through the loop. [#615](https://github.com/paritytech/revive/pull/615)
 - The latest supported `polkadot-sdk` version is now `2609.0.0`
-- Updated `LLVM` to `23.1.3`. The vendored fix for a backend miscompilation [llvm/llvm-project#229015](https://github.com/llvm/llvm-project/pull/229015) is applied on top.
+- Updated `LLVM` to `23.1.3` and vendored fix for a backend miscompilation ([llvm/llvm-project#229015](https://github.com/llvm/llvm-project/pull/229015)).
 - Updated `polkavm` to `0.37.0`. [#609](https://github.com/paritytech/revive/pull/609) [#681](https://github.com/paritytech/revive/pull/681)
 - The metadata now includes the heap size, stack size and `--newyork` settings. [#671](https://github.com/paritytech/revive/pull/671)
 

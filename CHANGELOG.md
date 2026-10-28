@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v1.5.0
 
 Supported `polkadot-sdk` rev: `2609.0.0`
 
@@ -8,16 +8,20 @@ Supported `polkadot-sdk` rev: `2609.0.0`
 
 - Support for solc v0.8.38.
 - Support for solc v0.8.37. The new `slotnum()` Yul builtin (EIP-7843) is rejected with an unsupported instruction error, as `pallet-revive` has no notion of a beacon chain slot number.
+- Support for the standard JSON `settings.debug` field and the `--revert-strings` CLI flag. [#650](https://github.com/paritytech/revive/pull/650)
 
 ### Changed
 
 - `--newyork`: Loop-carried variables are typed as the join of the widths flowing into them instead of being forced to `I256`, and constant shifts are bounded by the operand width and emitted at 64 bits when the result fits, so masked 32-bit loop variables such as those of a SHA-256 round loop stay narrow through the loop. [#615](https://github.com/paritytech/revive/pull/615)
 - The latest supported `polkadot-sdk` version is now `2609.0.0`
-- Updated `LLVM` to `23.1.3`. The vendored fix for [llvm/llvm-project#229015](https://github.com/llvm/llvm-project/pull/229015) is applied on top.
+- Updated `LLVM` to `23.1.3` and vendored fix for a backend miscompilation ([llvm/llvm-project#229015](https://github.com/llvm/llvm-project/pull/229015)).
+- Updated `polkavm` to `0.37.0`. [#609](https://github.com/paritytech/revive/pull/609) [#681](https://github.com/paritytech/revive/pull/681)
+- The metadata now includes the heap size, stack size and `--newyork` settings. [#671](https://github.com/paritytech/revive/pull/671)
 
 ### Fixed
+
 - `--newyork`: A bug in dead call value analysis. [#589](https://github.com/paritytech/revive/pull/589)
-- `--newyork`: a literal free memory pointer at or above the heap size, such as `mstore(0x40, not(0))`, was trusted, and the surviving `mload(0x40)` was truncated by the `FMP < heap_size` range proof. [611](https://github.com/paritytech/revive/pull/611)
+- `--newyork`: a literal free memory pointer at or above the heap size, such as `mstore(0x40, not(0))`, was trusted, and the surviving `mload(0x40)` was truncated by the `FMP < heap_size` range proof. [#611](https://github.com/paritytech/revive/pull/611)
 - `--newyork`: Object code that fell off the end was not terminated with the implicit EVM return, so LLVM folded away the runtime dispatch and a call would have run the constructor. [#598](https://github.com/paritytech/revive/pull/598)
 - Yul objects carrying deploy code only, without a `_deployed` runtime sub-object, failed to compile with an LLVM IR verification error. [#597](https://github.com/paritytech/revive/pull/597)
 - `--newyork`: a memory offset carried by a loop counter resolved to its first iteration address on every iteration, leaving words written by later iterations eligible for native byte order, and a stale free memory pointer survived an unresolvable `mstore8`, or an unresolvable `mstore` inside a branch, loop, or called function. [#612](https://github.com/paritytech/revive/pull/612)
@@ -28,6 +32,32 @@ Supported `polkadot-sdk` rev: `2609.0.0`
 - resolc: A bug that arbitrarily picks an input mode when multiple are specified. [#635](https://github.com/paritytech/revive/pull/635)
 - Yul objects that `resolc` cannot represent, a sibling object that is not a contract and the dotted notation for a nested object, aborted the compiler instead of being reported. [#600](https://github.com/paritytech/revive/pull/600)
 - `--newyork`: In rare cases, a mapping read or write left the wrong bytes in scratch memory. [#610](https://github.com/paritytech/revive/pull/610)
+- `--newyork`: A miscompilation of mapping return values. [#684](https://github.com/paritytech/revive/pull/684)
+- `--newyork`: A miscompilation in an integer truncation edge case. [#685](https://github.com/paritytech/revive/pull/685)
+- `--newyork`: A miscompilation in a loop edge case. [#686](https://github.com/paritytech/revive/pull/686)
+- `--newyork`: An ICE on a fallback with two loops bounded by `msg.data.length`. [#679](https://github.com/paritytech/revive/pull/679)
+- `--newyork`: `blobhash` and `blobbasefee` compiled to `0` instead of being rejected. [#668](https://github.com/paritytech/revive/pull/668)
+- `--newyork`: Constructors read their own arguments as call data. [#651](https://github.com/paritytech/revive/pull/651)
+- `--newyork`: A missed `calldatacopy` of unknown length onto the free memory pointer. [#655](https://github.com/paritytech/revive/pull/655)
+- `--newyork`: The outlined call value check was optimized away. [#653](https://github.com/paritytech/revive/pull/653)
+- Transient storage was not kept big endian, breaking cross VM calls. [#667](https://github.com/paritytech/revive/pull/667)
+- Solidity function or struct names could inject LLVM attributes. [#659](https://github.com/paritytech/revive/pull/659)
+- resolc: `-o` overwrote same-named contracts in same-named files. [#673](https://github.com/paritytech/revive/pull/673)
+- resolc: Source names starting with a dash failed to compile. [#678](https://github.com/paritytech/revive/pull/678)
+- resolc: `--combined-json` confused contracts with a colon in the source path. [#674](https://github.com/paritytech/revive/pull/674)
+- resolc: Path handling bugs in `--combined-json`. [#637](https://github.com/paritytech/revive/pull/637)
+- resolc: Standard JSON source `keccak256` hashes were not checked. [#677](https://github.com/paritytech/revive/pull/677)
+- resolc: Standard JSON `remappings` were reordered. [#675](https://github.com/paritytech/revive/pull/675)
+- resolc: Standard JSON file output selections replaced `*` instead of adding to it. [#670](https://github.com/paritytech/revive/pull/670)
+- resolc: `missingLibraries` missed libraries of created contracts. [#647](https://github.com/paritytech/revive/pull/647)
+- resolc: `missingLibraries` missed libraries used in switch expressions. [#644](https://github.com/paritytech/revive/pull/644)
+- resolc: Library address and factory dependency linker symbols shared a namespace. [#645](https://github.com/paritytech/revive/pull/645)
+- resolc: Objects were linked against factory dependencies they do not reference. [#649](https://github.com/paritytech/revive/pull/649)
+- resolc: `--libraries` arguments with more than one equal sign were accepted. [#641](https://github.com/paritytech/revive/pull/641)
+- resolc: Out of range memory sizes and linker failures crashed the compiler. [#639](https://github.com/paritytech/revive/pull/639)
+- resolc: Immutable data above the 4 KiB limit was accepted. [#640](https://github.com/paritytech/revive/pull/640)
+- resolc: Wrong line and column in warning source locations. [#643](https://github.com/paritytech/revive/pull/643)
+- resolc: `--debug-output-dir` file names could collide. [#638](https://github.com/paritytech/revive/pull/638)
 
 ## v1.4.0
 

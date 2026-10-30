@@ -6,6 +6,7 @@ on:
     paths:
       - 'crates/llvm-builder/**'
       - '.github/workflows/test-llvm-builder.yml'
+      - 'patches/llvm/**'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}

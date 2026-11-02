@@ -30,9 +30,9 @@ const TARGET_FEATURES: &[&str] = &[
     "+a",
     "+c",
     "+zbb",
-    "+auipc-addi-fusion",
-    "+ld-add-fusion",
-    "+lui-addi-fusion",
+    "+fusion-auipc-addi",
+    "+fusion-ld-add",
+    "+fusion-lui-addi",
     "+xtheadcondmov",
     "+relax",
 ];

@@ -3350,9 +3350,9 @@ fn fuzzy_encode_statement(
             condition_statements,
             condition,
             body,
+            post_input_variables,
             post,
             outputs,
-            ..
         } => {
             buffer.push(0x87);
             buffer.push(initial_values.len() as u8);
@@ -3369,6 +3369,10 @@ fn fuzzy_encode_statement(
             }
             fuzzy_encode_expression(canon, condition, buffer, literal_counter);
             fuzzy_encode_region(canon, body, buffer, literal_counter);
+            buffer.push(post_input_variables.len() as u8);
+            for post_input_variable_id in post_input_variables {
+                canon.encode_value_id(*post_input_variable_id, buffer);
+            }
             fuzzy_encode_region(canon, post, buffer, literal_counter);
             buffer.push(outputs.len() as u8);
             for output in outputs {

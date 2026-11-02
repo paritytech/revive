@@ -61,7 +61,7 @@ jobs:
 
       - name: Set LLVM environment variables
         run: |
-          echo "LLVM_SYS_221_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
+          echo "LLVM_SYS_231_PREFIX=$(pwd)/llvm-x86_64-unknown-linux-gnu" >> $GITHUB_ENV
 
       - name: Run coverage and generate revive HTML report
         id: coverage

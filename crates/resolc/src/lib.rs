@@ -240,7 +240,11 @@ pub fn standard_json<T: Compiler>(
     let use_newyork = use_newyork || solc_input.settings.polkavm.newyork.unwrap_or(false);
     let metadata_hash = match solc_input.settings.metadata.bytecode_hash {
         Some(SolcStandardJsonInputSettingsMetadataHash::None) => MetadataHash::None,
-        _ => metadata_hash,
+        Some(SolcStandardJsonInputSettingsMetadataHash::Keccak256) => {
+            solc_input.settings.metadata.bytecode_hash = None;
+            MetadataHash::Keccak256
+        }
+        None => metadata_hash,
     };
     debug_config.emit_debug_info = solc_input
         .settings

@@ -967,6 +967,27 @@ fn metadata_hash_input_setting() {
     );
 }
 
+/// `settings.metadata.bytecodeHash` set to `keccak256` is not forwarded to solc,
+/// which rejects it, and embeds the metadata hash.
+#[test]
+fn metadata_hash_keccak256_input_setting() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        crate::cli_utils::STANDARD_JSON_METADATA_HASH_KECCAK256_PATH,
+    );
+    assert_command_success(
+        &result,
+        "the `keccak256` bytecode hash standard JSON input should build",
+    );
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+    assert!(
+        !blob_metadata_hash(&bytecode_object(&output, "C.sol", "C")).is_empty(),
+        "settings.metadata.bytecodeHash `keccak256` should embed the metadata hash"
+    );
+}
+
 /// A source whose content does not match its keccak256 hash is rejected.
 #[test]
 fn source_keccak256_mismatch() {

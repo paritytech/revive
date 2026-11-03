@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
-contract LC {
+contract EarlyReturnCallWidth {
     function f(uint256 c, uint256 w) internal pure returns (uint256) {
         if (c != 0) return w;
         return 5;

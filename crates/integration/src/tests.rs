@@ -5850,7 +5850,7 @@ fn returned_storage_reference() {
 }
 
 /// A value returned through an early `leave` must not be truncated to the width of the
-/// callee's fall-through return value at the call site (issue #190).
+/// callee's fall-through return value at the call site.
 #[test]
 fn early_return_width() {
     let calldata = |w: U256, c1: u64, c2: u64| {
@@ -5859,7 +5859,7 @@ fn early_return_width() {
             .flat_map(|word| word.to_be_bytes::<32>())
             .collect::<Vec<u8>>()
     };
-    let mut actions = instantiate("contracts/LC.sol", "LC");
+    let mut actions = instantiate("contracts/EarlyReturnCallWidth.sol", "EarlyReturnCallWidth");
     for (w, c1, c2) in [
         (U256::from(1u64) << 32, 1, 0),
         (U256::from(1u64) << 32, 0, 1),

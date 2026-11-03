@@ -49,6 +49,12 @@ pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/l
 pub const SOLIDITY_COLLISION_NESTED_PATH: &str = "src/tests/data/solidity/collision/a/c.sol";
 /// The paritytech/revive#622 reproducer contract at `a_c.sol`.
 pub const SOLIDITY_COLLISION_UNDERSCORE_PATH: &str = "src/tests/data/solidity/collision/a_c.sol";
+/// A contract named `Duplicate` in a file named `Duplicate.sol` returning `1`.
+pub const SOLIDITY_DUPLICATE_FIRST_PATH: &str =
+    "src/tests/data/solidity/duplicate/first/Duplicate.sol";
+/// A contract named `Duplicate` in a file named `Duplicate.sol` returning `2`.
+pub const SOLIDITY_DUPLICATE_SECOND_PATH: &str =
+    "src/tests/data/solidity/duplicate/second/Duplicate.sol";
 /// Two contracts named `First` and `Second` returning `1` and `2`.
 pub const SOLIDITY_TWO_CONTRACTS_PATH: &str = "src/tests/data/solidity/two_contracts.sol";
 /// The verbatim reproducer from paritytech/revive#632: two contracts calling the same library.
@@ -123,6 +129,14 @@ pub const STANDARD_JSON_NEWYORK_ENABLED_PATH: &str =
 /// `settings.polkavm.newyork` field, so it compiles through the stock pipeline.
 pub const STANDARD_JSON_NEWYORK_DISABLED_PATH: &str =
     "src/tests/data/standard_json/newyork_disabled.json";
+/// The same source as [`STANDARD_JSON_NEWYORK_DISABLED_PATH`] with
+/// `settings.metadata.bytecodeHash` set to `none`.
+pub const STANDARD_JSON_METADATA_HASH_NONE_PATH: &str =
+    "src/tests/data/standard_json/metadata_hash_none.json";
+/// The same source as [`STANDARD_JSON_NEWYORK_DISABLED_PATH`] with
+/// `settings.metadata.bytecodeHash` set to `keccak256`.
+pub const STANDARD_JSON_METADATA_HASH_KECCAK256_PATH: &str =
+    "src/tests/data/standard_json/metadata_hash_keccak256.json";
 /// A `"language": "Yul"` standard JSON fixture enabling newyork via `settings.polkavm.newyork`.
 pub const STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH: &str =
     "src/tests/data/standard_json/yul_newyork_enabled.json";
@@ -195,6 +209,20 @@ pub const STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH: &str =
 /// source location annotations from the Yul IR.
 pub const STANDARD_JSON_DEBUG_INFO_EMPTY_PATH: &str =
     "src/tests/data/standard_json/debug_info_empty.json";
+/// A standard JSON fixture whose source `keccak256` does not match its content.
+pub const STANDARD_JSON_SOURCE_KECCAK256_MISMATCH_PATH: &str =
+    "src/tests/data/standard_json/source_keccak256_mismatch.json";
+/// A standard JSON fixture whose source `keccak256` matches its content.
+pub const STANDARD_JSON_SOURCE_KECCAK256_MATCH_PATH: &str =
+    "src/tests/data/standard_json/source_keccak256_match.json";
+/// A standard JSON fixture without `settings.optimizer`.
+pub const STANDARD_JSON_NO_OPTIMIZER_PATH: &str = "src/tests/data/standard_json/no_optimizer.json";
+/// A standard JSON fixture with an empty `settings.optimizer` object.
+pub const STANDARD_JSON_EMPTY_OPTIMIZER_PATH: &str =
+    "src/tests/data/standard_json/empty_optimizer.json";
+/// A standard JSON fixture requesting the `transientStorageLayout` output.
+pub const STANDARD_JSON_TRANSIENT_STORAGE_LAYOUT_PATH: &str =
+    "src/tests/data/standard_json/transient_storage_layout.json";
 /// A standard JSON fixture requesting codegen for all contracts in all files
 /// via the "all" (`*`) wildcard, but only additional fields for specific files.
 pub const STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH: &str =
@@ -205,6 +233,9 @@ pub const RESOLC_YUL_FLAG: &str = "--yul";
 /// The `--yul` option was deprecated in Solidity 0.8.27 in favor of `--strict-assembly`.
 /// See section `--strict-assembly vs. --yul` in the [release announcement](https://soliditylang.org/blog/2024/09/04/solidity-0.8.27-release-announcement/).
 pub const SOLC_YUL_FLAG: &str = "--strict-assembly";
+
+/// Source file names that start with a dash.
+pub const DASH_SOURCE_NAMES: [&str; 2] = ["-dash.sol", "-h"];
 
 /// The starting hex value of a PVM blob (encoding of `"PVM"`).
 pub const PVM_BLOB_START: &str = "50564d";

@@ -3,11 +3,12 @@
 use revive_solc_json_interface::{combined_json::CombinedJson, CombinedJsonInvalidSelectorMessage};
 
 use crate::cli_utils::{
-    assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
-    execute_resolc_in_directory, execute_solc, SOLIDITY_CONTRACT_PATH,
-    SOLIDITY_INCLUDED_IMPORT_PATH, SOLIDITY_REMAPPED_IMPORT_PATH,
-    SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY, SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH,
-    SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY, SOLIDITY_TWO_CONTRACTS_PATH, YUL_CONTRACT_PATH,
+    absolute_path, assert_command_failure, assert_command_success, assert_equal_exit_codes,
+    execute_resolc, execute_resolc_in_directory, execute_resolc_with_stdin_input, execute_solc,
+    DASH_SOURCE_NAMES, PVM_BLOB_START, SOLIDITY_CONTRACT_PATH, SOLIDITY_INCLUDED_IMPORT_PATH,
+    SOLIDITY_REMAPPED_IMPORT_PATH, SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY,
+    SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH, SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY,
+    SOLIDITY_TWO_CONTRACTS_PATH, YUL_CONTRACT_PATH,
 };
 use crate::ResolcVersion;
 
@@ -248,4 +249,43 @@ fn keeps_contracts_of_source_path_with_colon_apart() {
     let second = bytecode("Second");
     assert!(!first.is_empty() && !second.is_empty());
     assert_ne!(first, second);
+}
+
+/// Asserts that the combined JSON `stdout` contains the bytecode of the `contract`.
+fn assert_contract_bytecode(stdout: &str, contract: &str) {
+    let combined_json: serde_json::Value = serde_json::from_str(stdout).unwrap();
+    let bytecode = combined_json["contracts"][contract]["bin"].as_str();
+    assert!(
+        bytecode.is_some_and(|bytecode| bytecode.starts_with(PVM_BLOB_START)),
+        "expected bytecode for `{contract}` in the output: {stdout}"
+    );
+}
+
+/// Sources whose names start with a dash compile in the combined JSON mode.
+#[test]
+fn compiles_dash_source_names() {
+    let directory = tempfile::tempdir().unwrap();
+    for name in DASH_SOURCE_NAMES {
+        std::fs::copy(
+            absolute_path(SOLIDITY_CONTRACT_PATH),
+            directory.path().join(name),
+        )
+        .unwrap();
+
+        let result =
+            execute_resolc_in_directory(&[JSON_OPTION, "abi,bin", "--", name], directory.path());
+        assert_command_success(&result, "Compiling a source name starting with a dash");
+        assert_contract_bytecode(&result.stdout, &format!("{name}:C"));
+    }
+}
+
+/// A source read from the standard input compiles to bytecode in the combined JSON mode.
+#[test]
+fn compiles_stdin_source() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION, "abi,bin", "-"],
+        &absolute_path(SOLIDITY_CONTRACT_PATH),
+    );
+    assert_command_success(&result, "Compiling the standard input");
+    assert_contract_bytecode(&result.stdout, "<stdin>:C");
 }

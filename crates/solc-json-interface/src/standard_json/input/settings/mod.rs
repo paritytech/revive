@@ -47,7 +47,8 @@ pub struct Settings {
     )]
     pub via_ir: Option<bool>,
     /// The optimizer settings.
-    pub optimizer: Optimizer,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optimizer: Option<Optimizer>,
     /// The metadata settings.
     #[serde(default)]
     pub metadata: Metadata,
@@ -95,7 +96,7 @@ impl Settings {
             libraries,
             remappings,
             output_selection,
-            optimizer,
+            optimizer: Some(optimizer),
             metadata,
             via_ir: Some(true),
             debug,

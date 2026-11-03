@@ -22,6 +22,7 @@ use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonInputLanguage;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsDebug;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsMetadataHash;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVM;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
@@ -229,10 +230,22 @@ pub fn standard_json<T: Compiler>(
     let prune_output = solc_input.settings.selection_to_prune();
     let deployed_libraries = solc_input.settings.libraries.as_paths();
     let linker_symbols = solc_input.settings.libraries.as_linker_symbols()?;
-    let optimizer_settings = OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?;
+    let optimizer_mode = solc_input.settings.optimizer.as_ref().map_or(
+        SolcStandardJsonInputSettingsOptimizer::default_mode(),
+        |optimizer| optimizer.mode,
+    );
+    let optimizer_settings = OptimizerSettings::try_from_cli(optimizer_mode)?;
     let detect_missing_libraries =
         solc_input.settings.detect_missing_libraries || detect_missing_libraries;
     let use_newyork = use_newyork || solc_input.settings.polkavm.newyork.unwrap_or(false);
+    let metadata_hash = match solc_input.settings.metadata.bytecode_hash {
+        Some(SolcStandardJsonInputSettingsMetadataHash::None) => MetadataHash::None,
+        Some(SolcStandardJsonInputSettingsMetadataHash::Keccak256) => {
+            solc_input.settings.metadata.bytecode_hash = None;
+            MetadataHash::Keccak256
+        }
+        None => metadata_hash,
+    };
     debug_config.emit_debug_info = solc_input
         .settings
         .polkavm

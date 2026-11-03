@@ -87,8 +87,9 @@ pub fn link(
                 .map(|(name, hash)| (name.to_owned(), *hash))
                 .collect();
             let symbols = build_symbols(linker_symbols, &factory_dependencies)?;
+            let metadata_hash = metadata_hash(bytecode)?;
             let bytecode_linked = ElfLinker::setup()?.link(bytecode, &symbols)?;
-            match polkavm_linker(&bytecode_linked, strip_binary) {
+            match polkavm_linker(&bytecode_linked, strip_binary, metadata_hash) {
                 Ok(pvm) => (pvm, ObjectFormat::PVM),
                 Err(error)
                     if error
@@ -205,4 +206,26 @@ fn symbol_names(bytecode: &[u8]) -> anyhow::Result<BTreeSet<String>> {
         }
     }
     Ok(names)
+}
+
+/// Returns the metadata hash embedded in the ELF object `bytecode`, if any.
+fn metadata_hash(bytecode: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
+    let memory_buffer =
+        inkwell::memory_buffer::MemoryBuffer::create_from_memory_range_copy(bytecode, "object");
+    let binary_file = memory_buffer
+        .create_binary_file(None)
+        .map_err(|error| anyhow::anyhow!("{error}"))?;
+    let mut sections = binary_file
+        .get_sections()
+        .context("the ELF object should have a section table")?;
+
+    while let Some(section) = sections.next_section() {
+        if section
+            .get_name()
+            .is_some_and(|name| name.to_bytes() == METADATA_HASH_SECTION.as_bytes())
+        {
+            return Ok(Some(section.get_contents().to_vec()));
+        }
+    }
+    Ok(None)
 }

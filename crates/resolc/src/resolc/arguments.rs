@@ -6,13 +6,14 @@ use std::path::PathBuf;
 use clap::{parser::ValueSource, ArgMatches, CommandFactory, Parser};
 use path_slash::PathExt;
 use revive_common::MetadataHash;
+use revive_solc_json_interface::standard_json::input::source::{STDIN_PATH, STDIN_SOURCE_NAME};
 use revive_solc_json_interface::{
     PolkaVMDefaultHeapMemorySize, PolkaVMDefaultStackMemorySize,
     SolcStandardJsonInputSettingsRevertStrings, SolcStandardJsonOutputError,
 };
 
-/// Compiles the provided Solidity input files (or use the standard input if no files
-/// are given or "-" is specified as a file name). Outputs the components based on the
+/// Compiles the provided input files (or uses the standard input if
+/// "-" is specified as a file name). Outputs the components based on the
 /// chosen options, either to the standard output or to files within the designated
 /// output directory.
 /// Example: resolc ERC20.sol -O3 --bin --output-dir './build/'
@@ -267,6 +268,20 @@ impl Arguments {
         if modes > 1 {
             messages.push(SolcStandardJsonOutputError::new_error(
                 "Only one mode is allowed at the same time: Yul, combined JSON, standard JSON, link.",
+                None,
+                None,
+            ));
+        }
+
+        if !self.link
+            && self.inputs.iter().any(|input| input.trim() == STDIN_PATH)
+            && self
+                .inputs
+                .iter()
+                .any(|input| input.trim() == STDIN_SOURCE_NAME)
+        {
+            messages.push(SolcStandardJsonOutputError::new_error(
+                format!("The file `{STDIN_SOURCE_NAME}` cannot be compiled together with the standard input `{STDIN_PATH}`, which has the same source name."),
                 None,
                 None,
             ));

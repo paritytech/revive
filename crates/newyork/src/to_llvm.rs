@@ -3462,7 +3462,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
             .get_last_instruction()
             .map(|instruction| instruction.get_opcode())
         {
-            Some(inkwell::values::InstructionOpcode::Br) => {}
+            Some(
+                inkwell::values::InstructionOpcode::UncondBr
+                | inkwell::values::InstructionOpcode::CondBr,
+            ) => {}
             Some(inkwell::values::InstructionOpcode::Switch) => {}
             Some(inkwell::values::InstructionOpcode::Return) => {}
             Some(inkwell::values::InstructionOpcode::Unreachable) => {}

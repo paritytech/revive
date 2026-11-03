@@ -5876,3 +5876,21 @@ fn early_return_width() {
     }
     run_differential(actions);
 }
+
+/// A free memory pointer loaded from an unbounded value keeps its full width in a comparison,
+/// even when function signatures are narrowed again after the unbounded re-inference.
+#[test]
+fn fmp_unbounded_compare_narrowed_call() {
+    let mut actions = instantiate_yul(
+        "contracts/FmpUnboundedCompareNarrowedCall.yul",
+        "FmpUnboundedCompareNarrowedCall",
+    );
+    for free_memory_pointer in [U256::from(0x80), U256::from(1) << 40] {
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            words(&[free_memory_pointer, U256::from(0x1234)]),
+        );
+    }
+    run_differential(actions);
+}

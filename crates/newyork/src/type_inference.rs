@@ -2046,10 +2046,15 @@ pub(crate) const PARAM_NARROW_ITERATIONS: u32 = 4;
 /// param, forward return, demand-driven return — and re-runs full type inference
 /// so the new signature widths cascade through every function body before the next
 /// iteration. Bounded by [`PARAM_NARROW_ITERATIONS`] but exits early on a fixed point.
+///
+/// Every re-inference keeps the free memory pointer assumption of the given `type_info`.
+/// Dropping it after an unbounded re-inference would narrow free memory pointer loads, and
+/// everything derived from them, as if the pointer were bounded.
 pub(crate) fn narrow_signatures_to_fixed_point(
     ir_object: &mut Object,
     mut type_info: TypeInference,
 ) -> TypeInference {
+    let fmp_could_be_unbounded = type_info.fmp_could_be_unbounded;
     for _ in 0..PARAM_NARROW_ITERATIONS {
         let mut changed = type_info.narrow_function_parameters(ir_object);
         changed |= type_info.narrow_function_parameters_from_callers(ir_object);
@@ -2059,6 +2064,7 @@ pub(crate) fn narrow_signatures_to_fixed_point(
             break;
         }
         type_info = TypeInference::new();
+        type_info.set_fmp_could_be_unbounded(fmp_could_be_unbounded);
         type_info.infer_object_tree(ir_object);
         type_info.refine_demands_from_parameters(ir_object);
     }

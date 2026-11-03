@@ -251,7 +251,17 @@ impl TypeInference {
     /// particular, `MemoryOffset` deliberately stays at I256 — see the
     /// `MemoryOffset` arm of `max_width_needed` for why narrowing offsets
     /// here would bypass the use-site bounds check.
+    ///
+    /// The result never drops below the value's forward `min_width`, and signed values (whose
+    /// `min_width` is a magnitude) stay at I256. A narrowed parameter relies on its call sites to
+    /// check that the argument fits, and that check traps on a wide argument. Truncating the
+    /// argument where it is defined would drop the high bits before the call site could see them,
+    /// so a demand only ever narrows a value that already fits.
     pub fn use_demand_width(&self, id: ValueId) -> BitWidth {
+        let constraint = self.get(id);
+        if constraint.is_signed {
+            return BitWidth::I256;
+        }
         if let Some(uses) = self.uses.get(&id.0) {
             if uses.is_empty() {
                 return BitWidth::I256;
@@ -270,7 +280,7 @@ impl TypeInference {
                     widest_needed = needed;
                 }
             }
-            widest_needed
+            widest_needed.max(constraint.min_width)
         } else {
             BitWidth::I256
         }
@@ -2166,6 +2176,32 @@ mod tests {
         inference.apply_backward_constraints();
 
         assert_eq!(inference.get(key).max_width, BitWidth::I256);
+    }
+
+    /// A narrowed parameter's demand only narrows an argument that already fits. A wider
+    /// argument keeps its width so the call site can trap on it.
+    #[test]
+    fn narrowed_parameter_demand_never_truncates_wider_argument() {
+        let mut inference = TypeInference::new();
+        let fitting = ValueId(0);
+        let wide = ValueId(1);
+        let signed = ValueId(2);
+        for argument in [fitting, wide, signed] {
+            inference.record_use(argument, UseContext::FunctionArg);
+            inference
+                .fn_argument_demand
+                .insert(argument.0, BitWidth::I64);
+        }
+        inference.widen(fitting, BitWidth::I32);
+        inference.widen(wide, BitWidth::I256);
+        inference.widen(signed, BitWidth::I32);
+        let mut signed_constraint = inference.get(signed);
+        signed_constraint.is_signed = true;
+        inference.constraints.insert(signed.0, signed_constraint);
+
+        assert_eq!(inference.use_demand_width(fitting), BitWidth::I64);
+        assert_eq!(inference.use_demand_width(wide), BitWidth::I256);
+        assert_eq!(inference.use_demand_width(signed), BitWidth::I256);
     }
 
     /// Builds a `Statement::Let` binding `id` to the literal `value`.

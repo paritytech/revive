@@ -5894,3 +5894,31 @@ fn fmp_unbounded_compare_narrowed_call() {
     }
     run_differential(actions);
 }
+
+/// A memory offset that does not fit the callee's narrowed offset parameter traps at the call
+/// site, matching the EVM running out of gas, while the free memory pointer stays bounded.
+#[test]
+fn huge_offset_argument_load() {
+    let mut actions = instantiate_yul(
+        "contracts/HugeOffsetArgumentLoad.yul",
+        "HugeOffsetArgumentLoad",
+    );
+    for offset in [U256::from(0x40), (U256::from(1) << 64) + U256::from(0x40)] {
+        push_call(&mut actions, TestAddress::Instantiated(0), words(&[offset]));
+    }
+    run_differential(actions);
+}
+
+/// A memory offset that does not fit the callee's narrowed offset parameter traps at the call
+/// site, matching the EVM running out of gas, while the free memory pointer may be unbounded.
+#[test]
+fn huge_offset_argument_store() {
+    let mut actions = instantiate_yul(
+        "contracts/HugeOffsetArgumentStore.yul",
+        "HugeOffsetArgumentStore",
+    );
+    for offset in [U256::from(0x40), (U256::from(1) << 64) + U256::from(0x40)] {
+        push_call(&mut actions, TestAddress::Instantiated(0), words(&[offset]));
+    }
+    run_differential(actions);
+}

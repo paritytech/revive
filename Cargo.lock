@@ -12398,6 +12398,7 @@ dependencies = [
  "mimalloc",
  "normpath",
  "path-slash",
+ "polkavm-common 0.37.0",
  "rayon",
  "revive-common",
  "revive-llvm-context",

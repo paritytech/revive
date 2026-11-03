@@ -49,6 +49,7 @@ git2 = { workspace = true, default-features = false }
 
 [dev-dependencies]
 criterion = { workspace = true }
+polkavm-common = { workspace = true }
 tempfile = { workspace = true }
 
 [features]

@@ -209,7 +209,7 @@ fn run_late_inline_loop(
 /// narrowed so far relied on the I32 FMP width (e.g. a function returning an FMP load had its return
 /// type narrowed to I32), so they are widened back to full width before the re-inference and then
 /// narrowed again under the unbounded assumption. `heap_opt` is recomputed in case it shifted.
-/// Bounded FMPs (the Solidity allocator, all of OZ) skip this and keep the I32 width.
+/// Bounded FMPs (the Solidity allocator, most of OZ) skip this and keep the I32 width.
 fn reinfer_for_unbounded_fmp(
     ir_object: &mut ir::Object,
     type_info: TypeInference,

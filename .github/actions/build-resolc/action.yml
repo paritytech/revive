@@ -49,7 +49,7 @@ runs:
       if: ${{ steps.cache.outputs.cache-hit != 'true' && inputs.build-type == 'native' }}
       shell: bash
       run: |
-        export LLVM_SYS_221_PREFIX=$PWD/llvm-${{ inputs.target }}
+        export LLVM_SYS_231_PREFIX=$PWD/llvm-${{ inputs.target }}
         make install-bin
         mv target/release/resolc resolc-${{ inputs.target }} || mv target/release/resolc.exe resolc-${{ inputs.target }}.exe
 
@@ -63,7 +63,7 @@ runs:
          cd /opt/revive
          chown -R root:root .
          apt update && apt upgrade -y && apt install -y pkg-config
-         export LLVM_SYS_221_PREFIX=/opt/revive/llvm-${{ inputs.target }}
+         export LLVM_SYS_231_PREFIX=/opt/revive/llvm-${{ inputs.target }}
          make install-bin
          mv target/${{ inputs.target }}/release/resolc resolc-${{ inputs.target }}
          "

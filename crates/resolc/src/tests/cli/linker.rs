@@ -1,5 +1,7 @@
 use revive_common::ObjectFormat;
 
+use crate::tests::cli::metadata::blob_metadata_hash;
+
 use crate::cli_utils::{
     assert_command_failure, assert_command_success, execute_resolc, execute_resolc_in_directory,
     execute_resolc_with_stdin_input, SOLIDITY_DEPENDENCY_CONTRACT_PATH,
@@ -46,6 +48,13 @@ fn deploy_time_linking_works() {
     );
     assert_command_success(&output, "The linker mode with all library should work");
     assert!(!output.stdout.contains("still unresolved"));
+    assert!(
+        !blob_metadata_hash(&hex::encode(
+            std::fs::read(temp_dir.path().join(blob_path)).unwrap(),
+        ))
+        .is_empty(),
+        "Deploy time linking should keep the metadata hash"
+    );
 }
 
 /// Test deploy time linking from the output directory, with the factory dependency in a
@@ -122,6 +131,9 @@ fn libraries_multiple_equal_signs_fails() {
 }
 
 /// Test that linking an object does not depend on the other objects being linked.
+///
+/// The metadata hash is disabled because the metadata records the libraries
+/// passed at compile time, which differ between the two builds compared here.
 #[test]
 fn link_output_is_independent_of_other_inputs() {
     let temp_dir = tempfile::TempDir::new().unwrap();
@@ -133,7 +145,14 @@ fn link_output_is_independent_of_other_inputs() {
 
     assert_command_success(
         &execute_resolc_in_directory(
-            &["x.sol", "--bin", "-o", unlinked_directory.to_str().unwrap()],
+            &[
+                "x.sol",
+                "--bin",
+                "--metadata-hash",
+                "none",
+                "-o",
+                unlinked_directory.to_str().unwrap(),
+            ],
             temp_dir.path(),
         ),
         "Missing libraries should compile fine",
@@ -143,6 +162,8 @@ fn link_output_is_independent_of_other_inputs() {
             &[
                 "x.sol",
                 "--bin",
+                "--metadata-hash",
+                "none",
                 "-o",
                 reference_directory.to_str().unwrap(),
                 "--libraries",

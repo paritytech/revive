@@ -72,7 +72,7 @@ impl Optimizer {
         target_machine: &TargetMachine,
         module: &inkwell::module::Module,
     ) -> Result<(), inkwell::support::LLVMString> {
-        let optimization_level = self.settings.middle_end_as_string();
+        let optimization_level = self.settings.middle_end_pipeline_level();
         let pass_pipeline = if self.newyork {
             format!(
                 "mergefunc,default<O{optimization_level}>,mergefunc,ipsccp,deadargelim,attributor,default<O1>,mergefunc"

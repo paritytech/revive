@@ -1,0 +1,88 @@
+diff --git a/llvm/lib/Target/RISCV/RISCVInstrInfo.cpp b/llvm/lib/Target/RISCV/RISCVInstrInfo.cpp
+index 49d8fa0fc2..8a17c6fb16 100644
+--- a/llvm/lib/Target/RISCV/RISCVInstrInfo.cpp
++++ b/llvm/lib/Target/RISCV/RISCVInstrInfo.cpp
+@@ -3763,7 +3763,8 @@ bool RISCVInstrInfo::analyzeCandidate(outliner::Candidate &C) const {
+     return false;
+ 
+   // Otherwise, try to save X5 into t1-t6 (MachineOutlinerRegSave).
+-  if (OutlinerEnableRegSave && findRegisterToSaveX5To(C, RegInfo))
++  if (OutlinerEnableRegSave && !C.getMF()->isOutlined() &&
++      findRegisterToSaveX5To(C, RegInfo))
+     return false;
+ 
+   return true;
+diff --git a/llvm/test/CodeGen/RISCV/machine-outliner-x5-regsave-outlined.mir b/llvm/test/CodeGen/RISCV/machine-outliner-x5-regsave-outlined.mir
+new file mode 100644
+index 0000000000..36244072c7
+--- /dev/null
++++ b/llvm/test/CodeGen/RISCV/machine-outliner-x5-regsave-outlined.mir
+@@ -0,0 +1,68 @@
++# RUN: llc -mtriple=riscv64 -x mir -run-pass=machine-outliner -simplify-mir \
++# RUN:   -verify-machineinstrs < %s | FileCheck %s
++
++# Callers of an outlined function rely on it preserving every register it does
++# not define. With -machine-outliner-reruns, saving X5 into t1 inside one
++# clobbers the t1 its caller saved X5 into.
++
++--- |
++  define void @outlined() { ret void }
++  define void @f0() { ret void }
++  define void @f1() { ret void }
++...
++---
++name:            outlined
++tracksRegLiveness: true
++isOutlined:      true
++body:             |
++  bb.0:
++    liveins: $x5, $x10, $x11
++    ; CHECK-LABEL: name: outlined
++    ; CHECK-NOT:   PseudoCALLReg
++    ; CHECK:       $x0 = JALR $x5, 0
++    $x11 = ANDI $x11, 1023
++    $x12 = ADDI $x10, 17
++    $x11 = AND $x12, $x11
++    $x13 = ORI $x11, 255
++    $x12 = XOR $x13, $x10
++    $x14 = SUB $x12, $x11
++    $x0 = JALR $x5, 0
++...
++---
++name:            f0
++tracksRegLiveness: true
++body:             |
++  bb.0:
++    liveins: $x10, $x11
++    ; CHECK-LABEL: name: f0
++    ; CHECK:       $x5 = PseudoCALLReg target-flags(riscv-call) @OUTLINED_FUNCTION_0
++    $x11 = ANDI $x11, 1023
++    $x12 = ADDI $x10, 17
++    $x11 = AND $x12, $x11
++    $x13 = ORI $x11, 255
++    $x12 = XOR $x13, $x10
++    $x14 = SUB $x12, $x11
++    PseudoBR %bb.1
++
++  bb.1:
++    PseudoRET
++...
++---
++name:            f1
++tracksRegLiveness: true
++body:             |
++  bb.0:
++    liveins: $x10, $x11
++    ; CHECK-LABEL: name: f1
++    ; CHECK:       $x5 = PseudoCALLReg target-flags(riscv-call) @OUTLINED_FUNCTION_0
++    $x11 = ANDI $x11, 1023
++    $x12 = ADDI $x10, 17
++    $x11 = AND $x12, $x11
++    $x13 = ORI $x11, 255
++    $x12 = XOR $x13, $x10
++    $x14 = SUB $x12, $x11
++    PseudoBR %bb.1
++
++  bb.1:
++    PseudoRET
++...

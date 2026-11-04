@@ -6,6 +6,8 @@ mod combined_json;
 mod ir_stages;
 mod linker;
 mod llvm_arguments;
+mod memory_config;
+mod metadata;
 mod optimization;
 mod output_dir;
 mod revert_strings;

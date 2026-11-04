@@ -11,8 +11,6 @@ pub mod selection;
 #[cfg(feature = "resolc")]
 pub mod warning;
 
-use std::collections::BTreeSet;
-
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -35,9 +33,9 @@ pub struct Settings {
     /// The linker library addresses.
     #[serde(default, skip_serializing_if = "Libraries::is_empty")]
     pub libraries: Libraries,
-    /// The sorted list of remappings.
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub remappings: BTreeSet<String>,
+    /// The list of remappings, in the order given.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remappings: Vec<String>,
     /// The output selection filters.
     #[serde(default)]
     pub output_selection: Selection,
@@ -49,7 +47,8 @@ pub struct Settings {
     )]
     pub via_ir: Option<bool>,
     /// The optimizer settings.
-    pub optimizer: Optimizer,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optimizer: Option<Optimizer>,
     /// The metadata settings.
     #[serde(default)]
     pub metadata: Metadata,
@@ -82,7 +81,7 @@ impl Settings {
     pub fn new(
         evm_version: Option<revive_common::EVMVersion>,
         libraries: Libraries,
-        remappings: BTreeSet<String>,
+        remappings: Vec<String>,
         output_selection: Selection,
         optimizer: Optimizer,
         metadata: Metadata,
@@ -97,7 +96,7 @@ impl Settings {
             libraries,
             remappings,
             output_selection,
-            optimizer,
+            optimizer: Some(optimizer),
             metadata,
             via_ir: Some(true),
             debug,

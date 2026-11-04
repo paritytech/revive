@@ -5150,6 +5150,26 @@ fn fmp_loop_mstore8() {
     run_differential(actions);
 }
 
+/// Reproducer from paritytech/security_findings#118.
+#[test]
+fn calldata_copy_over_free_pointer() {
+    let mut actions = instantiate(
+        "contracts/CalldataCopyOverFreePointer.sol",
+        "CalldataCopyOverFreePointer",
+    );
+    let mut data = vec![0; 64];
+    data.extend(U256::from(1u64 << 40).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Reproducer from paritytech/security_findings#116.
 #[test]
 fn non_payable_call_value() {
@@ -5505,6 +5525,63 @@ fn assert_trapped(result: &CallResult) {
     assert_eq!(result.weight_consumed, GAS_LIMIT);
 }
 
+/// Scratch `[0, 0x40)` must hold the key and slot after a fused mapping store.
+#[test]
+fn mapping_sstore_writes_scratch() {
+    let mut actions = instantiate_yul("contracts/MappingSStoreScratch.yul", "MappingSStoreScratch");
+    let mut data = U256::from(0xabcdef0123u64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// Scratch written between a mapping store's hash and its `sstore` must survive the fused store.
+#[test]
+fn mapping_sstore_keeps_intervening_scratch() {
+    let mut actions = instantiate_yul(
+        "contracts/MappingSStoreScratchOrder.yul",
+        "MappingSStoreScratchOrder",
+    );
+    let mut data = U256::from(0xabcdef0123u64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// Scratch written between a mapping load's hash and its `sload` must survive the fused load.
+#[test]
+fn mapping_sload_keeps_intervening_scratch() {
+    let mut actions = instantiate_yul(
+        "contracts/MappingSLoadScratchOrder.yul",
+        "MappingSLoadScratchOrder",
+    );
+    let mut data = U256::from(0xabcdef0123u64).to_be_bytes::<32>().to_vec();
+    data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// Regression (newyork dead-store elimination): a store read back by an
 /// intervening unaligned *overlapping* load must not be eliminated as dead.
 /// `mem_opt` marked a pending store read only on an exact-offset load, so
@@ -5550,5 +5627,298 @@ fn calldatacopy_fmp_range_proof() {
         storage_deposit_limit: None,
         data,
     });
+    run_differential(actions);
+}
+
+/// Runs `enter(implementation, 7)` across resolc deploys 0 and 1 and EVM deploys 2 and 3.
+fn transient_storage(steps: &[(usize, usize)]) {
+    let source = include_str!("../contracts/TransientCrossVm.sol");
+    let pvm = resolc::test_utils::compile_blob("TransientCrossVm", source);
+    let evm = resolc::test_utils::compile_evm_deploy_code(
+        "TransientCrossVm",
+        source,
+        true,
+        Default::default(),
+    );
+    let codes = [&pvm, &pvm, &evm, &evm];
+    let alice = Address::from(ALICE.0);
+    let mut actions = Vec::new();
+    for (index, code) in codes.iter().enumerate() {
+        actions.push(Instantiate {
+            origin: TestAddress::Alice,
+            value: 0,
+            gas_limit: Some(GAS_LIMIT),
+            storage_deposit_limit: None,
+            code: Code::Bytes(code.to_vec()),
+            data: vec![],
+            salt: OptionalHex::from([index as u8; 32]),
+        });
+    }
+    let mut expected = U256::from(1).to_be_bytes::<32>().to_vec();
+    expected.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+    for &(caller, implementation) in steps {
+        let address = alice.create2([implementation as u8; 32], keccak256(codes[implementation]));
+        let mut data = hex!("7e348b7d").to_vec();
+        data.extend_from_slice(address.into_word().as_slice());
+        data.extend_from_slice(&U256::from(7).to_be_bytes::<32>());
+        actions.push(Call {
+            origin: TestAddress::Alice,
+            dest: TestAddress::Instantiated(caller),
+            value: 0,
+            gas_limit: None,
+            storage_deposit_limit: None,
+            data,
+        });
+        actions.push(VerifyCall(VerifyCallExpectation {
+            success: true,
+            output: OptionalHex::from(expected.clone()),
+            gas_consumed: None,
+        }));
+    }
+    Specs {
+        actions,
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}
+
+/// Reproducer from paritytech/security_findings#153.
+#[test]
+fn transient_same_vm() {
+    transient_storage(&[(0, 1), (2, 3)]);
+}
+
+/// Reproducer from paritytech/security_findings#153.
+#[test]
+fn transient_evm_proxy_to_resolc() {
+    transient_storage(&[(2, 1)]);
+}
+
+/// Reproducer from paritytech/security_findings#153.
+#[test]
+fn transient_resolc_to_evm() {
+    transient_storage(&[(0, 3)]);
+}
+
+/// Calls `f(3)` on a contract whose Yul function names contain LLVM attribute markers.
+fn run_function_name_fixture(contract: &str) {
+    let mut actions = instantiate(&format!("contracts/{contract}.sol"), contract);
+    let mut data = keccak256(b"f(uint256)")[..4].to_vec();
+    data.extend_from_slice(&U256::from(3).to_be_bytes::<32>());
+    push_call(&mut actions, TestAddress::Instantiated(0), data);
+    run_differential(actions);
+}
+
+/// Reproducer from paritytech/security_findings#111.
+#[test]
+fn function_name_injected_no_return() {
+    run_function_name_fixture("NameInjectedNoReturn");
+}
+
+/// Reproducer from paritytech/security_findings#111.
+#[test]
+fn function_name_injected_unknown_attribute() {
+    run_function_name_fixture("NameInjectedUnknownAttribute");
+}
+
+/// Reproducer from paritytech/security_findings#111.
+#[test]
+fn function_name_overlapping_llvm_markers() {
+    run_function_name_fixture("NameOverlappingLlvmMarkers");
+}
+
+/// A struct name containing an LLVM attribute marker.
+#[test]
+fn struct_name_injected_no_return() {
+    run_function_name_fixture("StructNameInjectedNoReturn");
+}
+
+/// Reproducer from paritytech/security_findings#115.
+#[test]
+fn constructor_call_data_is_empty() {
+    let mut actions = instantiate("contracts/ConstructorCallData.sol", "ConstructorCallData");
+    let Instantiate { data, .. } = &mut actions[0] else {
+        unreachable!()
+    };
+    *data = U256::from(5).to_be_bytes::<32>().to_vec();
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data: keccak256(b"n()")[..4].to_vec(),
+    });
+    run_differential(actions);
+}
+
+/// Deploy code reads empty call data although the instantiate input carries data.
+#[test]
+fn deploy_code_call_data_is_empty() {
+    let mut actions = instantiate_yul("contracts/DeployCallData.yul", "DeployCallData");
+    let Instantiate { data, .. } = &mut actions[0] else {
+        unreachable!()
+    };
+    *data = vec![0xff; 32];
+    run_differential(actions);
+}
+
+/// Two loops bounded by the call data length compile and match EVM.
+#[test]
+fn call_data_length_loops() {
+    let mut actions = instantiate("contracts/CallDataLengthLoops.sol", "CallDataLengthLoops");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 5]);
+    run_differential(actions);
+}
+
+/// Loops that differ only in their bound and the order of their step assignment stay distinct.
+#[test]
+fn swapped_loop_step() {
+    let mut actions = instantiate("contracts/SwappedLoopStep.sol", "SwappedLoopStep");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::ZERO]),
+    );
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(5)]),
+    );
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(11)]),
+    );
+    run_differential(actions);
+}
+
+/// Reproducer from paritytech/security_findings#152.
+#[test]
+fn recursive_call_result() {
+    alloy_sol_types::sol! { function f(uint256 d, uint256 a) external returns (uint256); }
+    let mut actions = instantiate("contracts/RecursiveCallResult.sol", "RecursiveCallResult");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        fCall {
+            d: U256::from(3),
+            a: U256::from(5),
+        }
+        .abi_encode(),
+    );
+    run_differential(actions);
+}
+
+/// A range check that runs on only one path does not narrow the checked value.
+#[test]
+fn partial_range_check() {
+    let mut actions = instantiate("contracts/PartialRangeCheck.sol", "PartialRangeCheck");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(5000)]),
+    );
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(200)]),
+    );
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(500)]),
+    );
+    run_differential(actions);
+}
+
+/// Writes through a storage reference returned by a recursive function are not lost.
+#[test]
+fn returned_storage_reference() {
+    let selector = keccak256(b"write(uint256,uint256)")[..4].to_vec();
+    let mut actions = instantiate(
+        "contracts/ReturnedStorageReference.sol",
+        "ReturnedStorageReference",
+    );
+    for depth in [0, 1] {
+        let data = [selector.clone(), words(&[U256::MAX, U256::from(depth)])].concat();
+        push_call(&mut actions, TestAddress::Instantiated(0), data);
+    }
+    run_differential(actions);
+}
+
+/// A value returned through an early `leave` must not be truncated to the width of the
+/// callee's fall-through return value at the call site.
+#[test]
+fn early_return_width() {
+    let calldata = |w: U256, c1: u64, c2: u64| {
+        [w, U256::from(c1), U256::from(c2)]
+            .iter()
+            .flat_map(|word| word.to_be_bytes::<32>())
+            .collect::<Vec<u8>>()
+    };
+    let mut actions = instantiate("contracts/EarlyReturnCallWidth.sol", "EarlyReturnCallWidth");
+    for (w, c1, c2) in [
+        (U256::from(1u64) << 32, 1, 0),
+        (U256::from(1u64) << 32, 0, 1),
+        (U256::from(1u64) << 32, 1, 1),
+        (U256::from(299u64), 1, 0),
+        (U256::from(300u64), 1, 0),
+        (U256::MAX, 1, 0),
+    ] {
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            calldata(w, c1, c2),
+        );
+    }
+    run_differential(actions);
+}
+
+/// A free memory pointer loaded from an unbounded value keeps its full width in a comparison,
+/// even when function signatures are narrowed again after the unbounded re-inference.
+#[test]
+fn fmp_unbounded_compare_narrowed_call() {
+    let mut actions = instantiate_yul(
+        "contracts/FmpUnboundedCompareNarrowedCall.yul",
+        "FmpUnboundedCompareNarrowedCall",
+    );
+    for free_memory_pointer in [U256::from(0x80), U256::from(1) << 40] {
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            words(&[free_memory_pointer, U256::from(0x1234)]),
+        );
+    }
+    run_differential(actions);
+}
+
+/// A memory offset that does not fit the callee's narrowed offset parameter traps at the call
+/// site, matching the EVM running out of gas, while the free memory pointer stays bounded.
+#[test]
+fn huge_offset_argument_load() {
+    let mut actions = instantiate_yul(
+        "contracts/HugeOffsetArgumentLoad.yul",
+        "HugeOffsetArgumentLoad",
+    );
+    for offset in [U256::from(0x40), (U256::from(1) << 64) + U256::from(0x40)] {
+        push_call(&mut actions, TestAddress::Instantiated(0), words(&[offset]));
+    }
+    run_differential(actions);
+}
+
+/// A memory offset that does not fit the callee's narrowed offset parameter traps at the call
+/// site, matching the EVM running out of gas, while the free memory pointer may be unbounded.
+#[test]
+fn huge_offset_argument_store() {
+    let mut actions = instantiate_yul(
+        "contracts/HugeOffsetArgumentStore.yul",
+        "HugeOffsetArgumentStore",
+    );
+    for offset in [U256::from(0x40), (U256::from(1) << 64) + U256::from(0x40)] {
+        push_call(&mut actions, TestAddress::Instantiated(0), words(&[offset]));
+    }
     run_differential(actions);
 }

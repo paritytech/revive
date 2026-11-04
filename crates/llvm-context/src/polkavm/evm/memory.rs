@@ -101,6 +101,22 @@ pub fn store_bswap_unchecked<'ctx>(
     build_efficient_store_swap(context, pointer.value, value)
 }
 
+/// Stores the keccak pre-image `mstore(0, word0); mstore(32, word1)` to scratch memory.
+/// Returns the pointer to heap offset 0.
+pub fn store_scratch_pair_unchecked<'ctx>(
+    context: &Context<'ctx>,
+    word0: inkwell::values::IntValue<'ctx>,
+    word1: inkwell::values::IntValue<'ctx>,
+) -> anyhow::Result<Pointer<'ctx>> {
+    let zero = context.xlen_type().const_zero();
+    let word_length = context
+        .xlen_type()
+        .const_int(revive_common::BYTE_LENGTH_WORD as u64, false);
+    store_bswap_unchecked(context, zero, word0)?;
+    store_bswap_unchecked(context, word_length, word1)?;
+    context.build_heap_gep_unchecked(zero)
+}
+
 /// Builds an efficient 256-bit load with byte-swap at a pointer obtained via unchecked GEP
 /// (no sbrk bounds check). For use by the newyork InlineByteSwap mode on constant offsets
 /// within the static heap.

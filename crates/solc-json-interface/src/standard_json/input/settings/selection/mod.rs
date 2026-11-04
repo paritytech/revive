@@ -34,12 +34,18 @@ impl PerFileSelection {
     /// Returns flags that are going to be automatically added by the compiler,
     /// but were not explicitly requested by the user.
     ///
+    /// The `all` selection is first merged into each file selection.
+    ///
     /// Afterwards, the flags are used to prune JSON output before returning it.
-    pub fn selection_to_prune(&self) -> Self {
+    pub fn selection_to_prune(&self, all: &FileSelection) -> Self {
         let files = self
             .files
             .iter()
-            .map(|(k, v)| (k.to_owned(), v.selection_to_prune()))
+            .map(|(path, file)| {
+                let mut merged = file.clone();
+                merged.extend(all.clone());
+                (path.to_owned(), merged.selection_to_prune())
+            })
             .collect();
         Self { files }
     }
@@ -142,7 +148,7 @@ impl Selection {
     pub fn selection_to_prune(&self) -> Self {
         Self {
             all: self.all.selection_to_prune(),
-            files: self.files.selection_to_prune(),
+            files: self.files.selection_to_prune(&self.all),
         }
     }
 

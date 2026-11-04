@@ -13,6 +13,8 @@ use revive_llvm_context::OptimizerSettings;
 use revive_llvm_context::PolkaVMContext;
 use revive_llvm_context::PolkaVMContextSolidityData;
 use revive_llvm_context::PolkaVMContextYulData;
+use revive_solc_json_interface::PolkaVMDefaultHeapMemorySize;
+use revive_solc_json_interface::PolkaVMDefaultStackMemorySize;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
 use serde::Deserialize;
 use serde::Serialize;
@@ -81,6 +83,20 @@ impl Contract {
                 .map(|version| version.default.to_owned()),
             optimizer.settings().to_owned(),
             llvm_arguments.to_owned(),
+            SolcStandardJsonInputSettingsPolkaVMMemory::new(
+                Some(
+                    memory_config
+                        .heap_size
+                        .unwrap_or(PolkaVMDefaultHeapMemorySize),
+                ),
+                Some(
+                    memory_config
+                        .stack_size
+                        .unwrap_or(PolkaVMDefaultStackMemorySize),
+                ),
+            ),
+            matches!(self.ir, IR::NewYork(_)),
+            debug_config.emit_debug_info,
         );
         let metadata_json = serde_json::to_value(&metadata).expect("Always valid");
         let metadata_json_bytes = serde_json::to_vec(&metadata_json).expect("Always valid");

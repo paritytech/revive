@@ -3,7 +3,6 @@
 #![allow(clippy::too_many_arguments)]
 
 use std::collections::BTreeMap;
-use std::collections::BTreeSet;
 use std::collections::HashSet;
 use std::io::Write;
 use std::path::PathBuf;
@@ -23,6 +22,7 @@ use revive_solc_json_interface::SolcStandardJsonInput;
 use revive_solc_json_interface::SolcStandardJsonInputLanguage;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsDebug;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsLibraries;
+use revive_solc_json_interface::SolcStandardJsonInputSettingsMetadataHash;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsOptimizer;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVM;
 use revive_solc_json_interface::SolcStandardJsonInputSettingsPolkaVMMemory;
@@ -138,7 +138,7 @@ pub fn standard_output<T: Compiler>(
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
-    remappings: BTreeSet<String>,
+    remappings: Vec<String>,
     suppressed_warnings: Vec<ResolcWarning>,
     debug_config: DebugConfig,
     llvm_arguments: Vec<String>,
@@ -230,15 +230,33 @@ pub fn standard_json<T: Compiler>(
     let prune_output = solc_input.settings.selection_to_prune();
     let deployed_libraries = solc_input.settings.libraries.as_paths();
     let linker_symbols = solc_input.settings.libraries.as_linker_symbols()?;
-    let optimizer_settings = OptimizerSettings::try_from_cli(solc_input.settings.optimizer.mode)?;
+    let optimizer_mode = solc_input.settings.optimizer.as_ref().map_or(
+        SolcStandardJsonInputSettingsOptimizer::default_mode(),
+        |optimizer| optimizer.mode,
+    );
+    let optimizer_settings = OptimizerSettings::try_from_cli(optimizer_mode)?;
     let detect_missing_libraries =
         solc_input.settings.detect_missing_libraries || detect_missing_libraries;
     let use_newyork = use_newyork || solc_input.settings.polkavm.newyork.unwrap_or(false);
+    let metadata_hash = match solc_input.settings.metadata.bytecode_hash {
+        Some(SolcStandardJsonInputSettingsMetadataHash::None) => MetadataHash::None,
+        Some(SolcStandardJsonInputSettingsMetadataHash::Keccak256) => {
+            solc_input.settings.metadata.bytecode_hash = None;
+            MetadataHash::Keccak256
+        }
+        None => metadata_hash,
+    };
     debug_config.emit_debug_info = solc_input
         .settings
         .polkavm
         .debug_information
         .unwrap_or(false);
+    let memory_config = solc_input
+        .settings
+        .polkavm
+        .memory_config
+        .unwrap_or_default();
+    memory_config.validate()?;
 
     solc_input.extend_selection(
         SolcStandardJsonInputSettingsSelection::new_required_for_codegen(
@@ -288,11 +306,7 @@ pub fn standard_json<T: Compiler>(
         metadata_hash,
         &debug_config,
         &solc_input.settings.llvm_arguments,
-        solc_input
-            .settings
-            .polkavm
-            .memory_config
-            .unwrap_or_default(),
+        memory_config,
     )?;
     if build.has_errors() {
         build.write_to_standard_json(&mut solc_output, &solc_version)?;
@@ -321,7 +335,7 @@ pub fn combined_json<T: Compiler>(
     base_path: Option<String>,
     include_paths: Vec<String>,
     allow_paths: Option<String>,
-    remappings: BTreeSet<String>,
+    remappings: Vec<String>,
     suppressed_warnings: Vec<ResolcWarning>,
     debug_config: DebugConfig,
     output_directory: Option<PathBuf>,

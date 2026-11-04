@@ -9,9 +9,12 @@
 //!   → `let value = mapping_sload(key, slot)`
 //! - Mapping SStore: `let hash = keccak256_pair(key, slot); sstore(hash, value)`
 //!   → `mapping_sstore(key, slot, value)`
+//!
+//! The fused helpers write the pre-image to scratch `[0, 0x40)` at the position of the
+//! `sload` or `sstore`, so a pattern is only fused when no statement in between accesses memory.
 use std::collections::BTreeMap;
 
-use crate::ir::{Block, Expression, Object, Region, Statement, Value};
+use crate::ir::{Block, Expression, Object, Region, Statement, Value, ValueId};
 
 /// Statistics from the compound outlining pass.
 #[derive(Default, Debug)]
@@ -26,9 +29,9 @@ pub struct MappingAccessOutliningStatistics {
 pub fn outline_mapping_accesses_in_object(object: &mut Object) -> MappingAccessOutliningStatistics {
     let mut statistics = MappingAccessOutliningStatistics::default();
 
-    outline_block(&mut object.code, &mut statistics);
+    outline_block(&mut object.code, &[], &mut statistics);
     for function in object.functions.values_mut() {
-        outline_block(&mut function.body, &mut statistics);
+        outline_block(&mut function.body, &function.return_values, &mut statistics);
     }
 
     for sub_object in &mut object.subobjects {
@@ -50,8 +53,14 @@ pub fn outline_mapping_accesses_in_object(object: &mut Object) -> MappingAccessO
 /// would delete the keccak definition while the outer reference still points at it, producing a
 /// use-before-definition that the IR validator rejects (a compiler ICE on valid input). The
 /// whole-block count sees the outer use and leaves such hashes alone.
-fn outline_block(block: &mut Block, statistics: &mut MappingAccessOutliningStatistics) {
-    let use_counts = count_value_uses(&block.statements);
+///
+/// `live_out` are the values used after the block falls through, like a function's return values.
+fn outline_block(
+    block: &mut Block,
+    live_out: &[ValueId],
+    statistics: &mut MappingAccessOutliningStatistics,
+) {
+    let use_counts = count_value_uses(&block.statements, live_out);
     for statement in &mut block.statements {
         outline_nested_regions(statement, &use_counts, statistics);
     }
@@ -115,13 +124,16 @@ fn outline_region(
 }
 
 /// Count how many times each ValueId is referenced (used) in a statement list,
-/// recursing through nested regions and counting yields.
+/// recursing through nested regions and counting yields, plus once per entry of `live_out`.
 ///
 /// Call this on the whole enclosing block, not an inner list: fusion deletes a hash's
 /// definition, which is only sound when the hash has no uses anywhere else, and scope-transparent
 /// `Statement::Block`s let inner definitions be used by ancestor statements.
-fn count_value_uses(statements: &[Statement]) -> BTreeMap<u32, usize> {
+fn count_value_uses(statements: &[Statement], live_out: &[ValueId]) -> BTreeMap<u32, usize> {
     let mut counts = BTreeMap::new();
+    for id in live_out {
+        *counts.entry(id.0).or_insert(0) += 1;
+    }
     for statement in statements {
         statement.for_each_value_id(&mut |id| {
             *counts.entry(id.0).or_insert(0) += 1;
@@ -137,6 +149,8 @@ fn count_value_uses(statements: &[Statement]) -> BTreeMap<u32, usize> {
 ///    where hash has exactly one use (the sload).
 /// 2. MappingSStore: `let hash = keccak256_pair(key, slot); ... sstore(hash, value)`
 ///    where hash has exactly one use (the sstore).
+///
+/// In both, the statements in `...` must not access memory.
 fn outline_statements(
     statements: &mut Vec<Statement>,
     use_counts: &BTreeMap<u32, usize>,
@@ -168,7 +182,11 @@ fn outline_statements(
                 value: Expression::SLoad { key, .. },
             } if bindings.len() == 1 => {
                 if let Some((definition_index, word0, word1)) = keccak_definitions.get(&key.id.0) {
-                    if use_counts.get(&key.id.0).copied().unwrap_or(0) == 1 {
+                    if use_counts.get(&key.id.0).copied().unwrap_or(0) == 1
+                        && statements[*definition_index + 1..index]
+                            .iter()
+                            .all(is_memory_free)
+                    {
                         transformations.push((
                             index,
                             Statement::Let {
@@ -185,7 +203,11 @@ fn outline_statements(
             }
             Statement::SStore { key, value, .. } => {
                 if let Some((definition_index, word0, word1)) = keccak_definitions.get(&key.id.0) {
-                    if use_counts.get(&key.id.0).copied().unwrap_or(0) == 1 {
+                    if use_counts.get(&key.id.0).copied().unwrap_or(0) == 1
+                        && statements[*definition_index + 1..index]
+                            .iter()
+                            .all(is_memory_free)
+                    {
                         transformations.push((
                             index,
                             Statement::MappingSStore {
@@ -233,6 +255,59 @@ fn outline_statements(
     for index in indices_to_remove.into_iter().rev() {
         statements.remove(index);
     }
+}
+
+/// Whether the statement certainly neither reads nor writes heap memory.
+fn is_memory_free(statement: &Statement) -> bool {
+    match statement {
+        Statement::Let { value, .. } | Statement::Expression(value) => {
+            is_memory_free_expression(value)
+        }
+        Statement::SStore { .. } | Statement::TStore { .. } => true,
+        _ => false,
+    }
+}
+
+/// Whether the expression certainly neither reads nor writes heap memory.
+fn is_memory_free_expression(expression: &Expression) -> bool {
+    matches!(
+        expression,
+        Expression::Literal { .. }
+            | Expression::Var(_)
+            | Expression::Binary { .. }
+            | Expression::Ternary { .. }
+            | Expression::Unary { .. }
+            | Expression::CallDataLoad { .. }
+            | Expression::CallValue
+            | Expression::Caller
+            | Expression::Origin
+            | Expression::CallDataSize
+            | Expression::CodeSize
+            | Expression::GasPrice
+            | Expression::ExtCodeSize { .. }
+            | Expression::ReturnDataSize
+            | Expression::ExtCodeHash { .. }
+            | Expression::BlockHash { .. }
+            | Expression::Coinbase
+            | Expression::Timestamp
+            | Expression::Number
+            | Expression::Difficulty
+            | Expression::GasLimit
+            | Expression::ChainId
+            | Expression::SelfBalance
+            | Expression::BaseFee
+            | Expression::Gas
+            | Expression::Address
+            | Expression::Balance { .. }
+            | Expression::SLoad { .. }
+            | Expression::TLoad { .. }
+            | Expression::Truncate { .. }
+            | Expression::ZeroExtend { .. }
+            | Expression::SignExtendTo { .. }
+            | Expression::DataOffset { .. }
+            | Expression::DataSize { .. }
+            | Expression::LinkerSymbol { .. }
+    )
 }
 
 #[cfg(test)]
@@ -357,6 +432,184 @@ mod tests {
             statistics.mapping_sloads, 1,
             "a single-use hash should still be fused into a mapping_sload"
         );
+        assert!(crate::validate::validate_object(&object).is_ok());
+    }
+
+    /// Builds `let v4 = keccak256_pair(v1, v2); <between>; <access>`.
+    fn mapping_access_object(between: Statement, access: Statement) -> Object {
+        Object {
+            name: "test".to_string(),
+            code: Block {
+                statements: vec![
+                    literal(1, 0),
+                    literal(2, 1),
+                    literal(3, 42),
+                    Statement::Let {
+                        bindings: vec![crate::ir::ValueId(4)],
+                        value: Expression::Keccak256Pair {
+                            word0: value(1),
+                            word1: value(2),
+                        },
+                    },
+                    between,
+                    access,
+                ],
+            },
+            functions: BTreeMap::new(),
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        }
+    }
+
+    /// Builds `let v4 = keccak256_pair(v1, v2); <between>; sstore(v4, v3)`.
+    fn mapping_sstore_object(between: Statement) -> Object {
+        mapping_access_object(
+            between,
+            Statement::SStore {
+                key: value(4),
+                value: value(3),
+                static_slot: None,
+            },
+        )
+    }
+
+    /// Builds `let v4 = keccak256_pair(v1, v2); <between>; let v6 = sload(v4)`.
+    fn mapping_sload_object(between: Statement) -> Object {
+        mapping_access_object(
+            between,
+            Statement::Let {
+                bindings: vec![crate::ir::ValueId(6)],
+                value: Expression::SLoad {
+                    key: value(4),
+                    static_slot: None,
+                },
+            },
+        )
+    }
+
+    /// A scratch write between the hash and the `sstore` must not be clobbered by the fused helper.
+    #[test]
+    fn memory_access_between_hash_and_sstore_not_fused() {
+        let mut object = mapping_sstore_object(Statement::MStore {
+            offset: value(1),
+            value: value(3),
+            region: crate::ir::MemoryRegion::Scratch,
+        });
+
+        let statistics = outline_mapping_accesses_in_object(&mut object);
+
+        assert_eq!(statistics.mapping_sstores, 0);
+    }
+
+    /// Pure statements between the hash and the `sstore` do not prevent fusion.
+    #[test]
+    fn pure_statement_between_hash_and_sstore_still_fused() {
+        let mut object = mapping_sstore_object(Statement::Let {
+            bindings: vec![crate::ir::ValueId(5)],
+            value: Expression::Binary {
+                operation: crate::ir::BinaryOperation::Add,
+                lhs: value(1),
+                rhs: value(3),
+            },
+        });
+
+        let statistics = outline_mapping_accesses_in_object(&mut object);
+
+        assert_eq!(statistics.mapping_sstores, 1);
+        assert!(crate::validate::validate_object(&object).is_ok());
+    }
+
+    /// A scratch write between the hash and the `sload` must not be clobbered by the fused helper.
+    #[test]
+    fn memory_access_between_hash_and_sload_not_fused() {
+        let mut object = mapping_sload_object(Statement::MStore {
+            offset: value(1),
+            value: value(3),
+            region: crate::ir::MemoryRegion::Scratch,
+        });
+
+        let statistics = outline_mapping_accesses_in_object(&mut object);
+
+        assert_eq!(statistics.mapping_sloads, 0);
+    }
+
+    /// Pure statements between the hash and the `sload` do not prevent fusion.
+    #[test]
+    fn pure_statement_between_hash_and_sload_still_fused() {
+        let mut object = mapping_sload_object(Statement::Let {
+            bindings: vec![crate::ir::ValueId(5)],
+            value: Expression::Binary {
+                operation: crate::ir::BinaryOperation::Add,
+                lhs: value(1),
+                rhs: value(3),
+            },
+        });
+
+        let statistics = outline_mapping_accesses_in_object(&mut object);
+
+        assert_eq!(statistics.mapping_sloads, 1);
+        assert!(crate::validate::validate_object(&object).is_ok());
+    }
+
+    /// Builds `function f(v1, v2, v3) -> v4 { let v4 = keccak256_pair(v1, v2); <access> }`.
+    fn hash_returning_function_object(access: Statement) -> Object {
+        let mut function = crate::ir::Function::new(crate::ir::FunctionId(0), "f".to_string());
+        for id in 1..=3 {
+            function
+                .parameters
+                .push((crate::ir::ValueId(id), Type::Int(BitWidth::I256)));
+        }
+        function.returns.push(Type::Int(BitWidth::I256));
+        function.return_values_initial.push(crate::ir::ValueId(7));
+        function.body.statements = vec![
+            Statement::Let {
+                bindings: vec![crate::ir::ValueId(4)],
+                value: Expression::Keccak256Pair {
+                    word0: value(1),
+                    word1: value(2),
+                },
+            },
+            access,
+        ];
+        function.return_values.push(crate::ir::ValueId(4));
+        Object {
+            name: "test".to_string(),
+            code: Block { statements: vec![] },
+            functions: BTreeMap::from([(function.id, function)]),
+            subobjects: vec![],
+            data: BTreeMap::new(),
+        }
+    }
+
+    /// A returned hash is not fused into an `sstore`.
+    #[test]
+    fn returned_hash_not_fused_into_sstore() {
+        let mut object = hash_returning_function_object(Statement::SStore {
+            key: value(4),
+            value: value(3),
+            static_slot: None,
+        });
+
+        let statistics = outline_mapping_accesses_in_object(&mut object);
+
+        assert_eq!(statistics.mapping_sstores, 0);
+        assert!(crate::validate::validate_object(&object).is_ok());
+    }
+
+    /// A returned hash is not fused into an `sload`.
+    #[test]
+    fn returned_hash_not_fused_into_sload() {
+        let mut object = hash_returning_function_object(Statement::Let {
+            bindings: vec![crate::ir::ValueId(5)],
+            value: Expression::SLoad {
+                key: value(4),
+                static_slot: None,
+            },
+        });
+
+        let statistics = outline_mapping_accesses_in_object(&mut object);
+
+        assert_eq!(statistics.mapping_sloads, 0);
         assert!(crate::validate::validate_object(&object).is_ok());
     }
 }

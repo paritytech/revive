@@ -32,3 +32,4 @@ workdir
 /stages-loopswitch/
 /stages-addition/
 /cfg-viz/data/
+/.mcp.json

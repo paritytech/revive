@@ -58,7 +58,10 @@ alloy-sol-types = "1.4"
 alloy-genesis = "2.5.0"
 alloy-serde = "2.5.0"
 env_logger = { version = "0.11.11", default-features = false }
+console = "0.16"
+indicatif = "0.18"
 serde_stacker = "0.1.14"
+smtlib = "0.4"
 criterion = { version = "0.8", features = ["html_reports"] }
 log = { version = "0.4.34" }
 git2 = { version = "0.21.0", default-features = false }

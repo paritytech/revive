@@ -1,13 +1,20 @@
-use assert_fs::TempDir;
+use assert_fs::{prelude::*, TempDir};
+use revive_llvm_builder::LLVMPath;
 
 pub const REVIVE_LLVM: &str = "revive-llvm";
+
+/// The repository root relative to this crate's manifest directory.
+const REPOSITORY_ROOT: &str = "../..";
+
+/// Matches the LLVM patch files the builder applies.
+const PATCH_FILE_PATTERN: &str = "*.patch";
 
 pub struct TestDir {
     _tempdir: TempDir,
     path: std::path::PathBuf,
 }
 
-/// Creates a temporary directory for testing with submodule setup.
+/// Creates a temporary directory for testing with submodule and LLVM patches setup.
 impl TestDir {
     pub fn new() -> anyhow::Result<Self> {
         let tempdir = TempDir::new()?;
@@ -42,6 +49,15 @@ impl TestDir {
             ])
             .current_dir(tmppath)
             .output()?;
+
+        let patches = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join(REPOSITORY_ROOT)
+            .join(LLVMPath::DIRECTORY_PATCHES);
+        if patches.exists() {
+            tempdir
+                .child(LLVMPath::DIRECTORY_PATCHES)
+                .copy_from(patches, &[PATCH_FILE_PATTERN])?;
+        }
 
         Ok(Self {
             path: tmppath.to_path_buf(),

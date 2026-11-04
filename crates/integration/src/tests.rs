@@ -5925,3 +5925,114 @@ fn recursive_call_result() {
     );
     run_differential(actions);
 }
+
+/// A range check that runs on only one path does not narrow the checked value.
+#[test]
+fn partial_range_check() {
+    let mut actions = instantiate("contracts/PartialRangeCheck.sol", "PartialRangeCheck");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(5000)]),
+    );
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(200)]),
+    );
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(500)]),
+    );
+    run_differential(actions);
+}
+
+/// Writes through a storage reference returned by a recursive function are not lost.
+#[test]
+fn returned_storage_reference() {
+    let selector = keccak256(b"write(uint256,uint256)")[..4].to_vec();
+    let mut actions = instantiate(
+        "contracts/ReturnedStorageReference.sol",
+        "ReturnedStorageReference",
+    );
+    for depth in [0, 1] {
+        let data = [selector.clone(), words(&[U256::MAX, U256::from(depth)])].concat();
+        push_call(&mut actions, TestAddress::Instantiated(0), data);
+    }
+    run_differential(actions);
+}
+
+/// A value returned through an early `leave` must not be truncated to the width of the
+/// callee's fall-through return value at the call site.
+#[test]
+fn early_return_width() {
+    let calldata = |w: U256, c1: u64, c2: u64| {
+        [w, U256::from(c1), U256::from(c2)]
+            .iter()
+            .flat_map(|word| word.to_be_bytes::<32>())
+            .collect::<Vec<u8>>()
+    };
+    let mut actions = instantiate("contracts/EarlyReturnCallWidth.sol", "EarlyReturnCallWidth");
+    for (w, c1, c2) in [
+        (U256::from(1u64) << 32, 1, 0),
+        (U256::from(1u64) << 32, 0, 1),
+        (U256::from(1u64) << 32, 1, 1),
+        (U256::from(299u64), 1, 0),
+        (U256::from(300u64), 1, 0),
+        (U256::MAX, 1, 0),
+    ] {
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            calldata(w, c1, c2),
+        );
+    }
+    run_differential(actions);
+}
+
+/// A free memory pointer loaded from an unbounded value keeps its full width in a comparison,
+/// even when function signatures are narrowed again after the unbounded re-inference.
+#[test]
+fn fmp_unbounded_compare_narrowed_call() {
+    let mut actions = instantiate_yul(
+        "contracts/FmpUnboundedCompareNarrowedCall.yul",
+        "FmpUnboundedCompareNarrowedCall",
+    );
+    for free_memory_pointer in [U256::from(0x80), U256::from(1) << 40] {
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            words(&[free_memory_pointer, U256::from(0x1234)]),
+        );
+    }
+    run_differential(actions);
+}
+
+/// A memory offset that does not fit the callee's narrowed offset parameter traps at the call
+/// site, matching the EVM running out of gas, while the free memory pointer stays bounded.
+#[test]
+fn huge_offset_argument_load() {
+    let mut actions = instantiate_yul(
+        "contracts/HugeOffsetArgumentLoad.yul",
+        "HugeOffsetArgumentLoad",
+    );
+    for offset in [U256::from(0x40), (U256::from(1) << 64) + U256::from(0x40)] {
+        push_call(&mut actions, TestAddress::Instantiated(0), words(&[offset]));
+    }
+    run_differential(actions);
+}
+
+/// A memory offset that does not fit the callee's narrowed offset parameter traps at the call
+/// site, matching the EVM running out of gas, while the free memory pointer may be unbounded.
+#[test]
+fn huge_offset_argument_store() {
+    let mut actions = instantiate_yul(
+        "contracts/HugeOffsetArgumentStore.yul",
+        "HugeOffsetArgumentStore",
+    );
+    for offset in [U256::from(0x40), (U256::from(1) << 64) + U256::from(0x40)] {
+        push_call(&mut actions, TestAddress::Instantiated(0), words(&[offset]));
+    }
+    run_differential(actions);
+}

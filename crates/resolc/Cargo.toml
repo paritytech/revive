@@ -1,6 +1,6 @@
 [package]
 name = "resolc"
-version = "1.4.0"
+version = "1.5.0"
 license.workspace = true
 edition.workspace = true
 repository.workspace = true
@@ -49,6 +49,7 @@ git2 = { workspace = true, default-features = false }
 
 [dev-dependencies]
 criterion = { workspace = true }
+polkavm-common = { workspace = true }
 tempfile = { workspace = true }
 
 [features]

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "command",
+        "bash": "./.agent-guidance-loader/load.sh copilot",
+        "cwd": ".",
+        "timeoutSec": 15
+      }
+    ]
+  }
+}

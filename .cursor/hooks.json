@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": ".agent-guidance-loader/load.sh cursor",
+        "timeout": 15
+      }
+    ]
+  }
+}

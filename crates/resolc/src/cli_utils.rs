@@ -149,6 +149,14 @@ pub const STANDARD_JSON_NEWYORK_ENABLED_PATH: &str =
 /// `settings.polkavm.newyork` field, so it compiles through the stock pipeline.
 pub const STANDARD_JSON_NEWYORK_DISABLED_PATH: &str =
     "src/tests/data/standard_json/newyork_disabled.json";
+/// The same source as [`STANDARD_JSON_NEWYORK_DISABLED_PATH`] with
+/// `settings.metadata.bytecodeHash` set to `none`.
+pub const STANDARD_JSON_METADATA_HASH_NONE_PATH: &str =
+    "src/tests/data/standard_json/metadata_hash_none.json";
+/// The same source as [`STANDARD_JSON_NEWYORK_DISABLED_PATH`] with
+/// `settings.metadata.bytecodeHash` set to `keccak256`.
+pub const STANDARD_JSON_METADATA_HASH_KECCAK256_PATH: &str =
+    "src/tests/data/standard_json/metadata_hash_keccak256.json";
 /// A `"language": "Yul"` standard JSON fixture enabling newyork via `settings.polkavm.newyork`.
 pub const STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH: &str =
     "src/tests/data/standard_json/yul_newyork_enabled.json";

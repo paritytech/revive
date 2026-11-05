@@ -16,7 +16,7 @@ use crate::cli_utils::{
     STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH,
     STANDARD_JSON_FACTORY_DEPENDENCY_PATH_COLLISION_PATH,
     STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH, STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH,
-    STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
+    STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_METADATA_HASH_NONE_PATH,
     STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
     STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_OPTIMIZER_PATH,
@@ -30,6 +30,7 @@ use crate::cli_utils::{
     STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
     STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH,
 };
+use crate::tests::cli::metadata::blob_metadata_hash;
 use crate::{pipeline_name, ResolcVersion};
 
 const JSON_OPTION: &str = "--standard-json";
@@ -1010,6 +1011,56 @@ fn invalid_debug_input_settings() {
         let output = to_solc_standard_json_output(&result.stdout);
         assert_standard_json_errors_contain(&output, error_message);
     }
+}
+
+/// `settings.metadata.bytecodeHash` set to `none` omits the metadata hash,
+/// which is embedded by default.
+#[test]
+fn metadata_hash_input_setting() {
+    let default =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NEWYORK_DISABLED_PATH);
+    assert_command_success(&default, "the default standard JSON input should build");
+    let none =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_METADATA_HASH_NONE_PATH);
+    assert_command_success(
+        &none,
+        "the `none` bytecode hash standard JSON input should build",
+    );
+
+    let default_output = to_solc_standard_json_output(&default.stdout);
+    let none_output = to_solc_standard_json_output(&none.stdout);
+    assert_no_errors(&default_output);
+    assert_no_errors(&none_output);
+
+    assert!(
+        !blob_metadata_hash(&bytecode_object(&default_output, "C.sol", "C")).is_empty(),
+        "the blob should embed a metadata hash by default"
+    );
+    assert!(
+        blob_metadata_hash(&bytecode_object(&none_output, "C.sol", "C")).is_empty(),
+        "settings.metadata.bytecodeHash `none` should omit the metadata hash"
+    );
+}
+
+/// `settings.metadata.bytecodeHash` set to `keccak256` is not forwarded to solc,
+/// which rejects it, and embeds the metadata hash.
+#[test]
+fn metadata_hash_keccak256_input_setting() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        crate::cli_utils::STANDARD_JSON_METADATA_HASH_KECCAK256_PATH,
+    );
+    assert_command_success(
+        &result,
+        "the `keccak256` bytecode hash standard JSON input should build",
+    );
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+    assert!(
+        !blob_metadata_hash(&bytecode_object(&output, "C.sol", "C")).is_empty(),
+        "settings.metadata.bytecodeHash `keccak256` should embed the metadata hash"
+    );
 }
 
 /// A source whose content does not match its keccak256 hash is rejected.

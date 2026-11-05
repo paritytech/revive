@@ -112,8 +112,8 @@ test-book:
 # Reports accumulate under coverage-reports/<stamp>/.
 COVERAGE_REPORTS_DIR = coverage-reports/$$(cat target/llvm-cov-target/coverage-stamp)
 
-LLVM_IS_INSTRUMENTED = "$(LLVM_SYS_221_PREFIX)/bin/llvm-objdump" -h \
-	"$(LLVM_SYS_221_PREFIX)/lib/libLLVMCore.a" 2>/dev/null \
+LLVM_IS_INSTRUMENTED = "$(LLVM_SYS_231_PREFIX)/bin/llvm-objdump" -h \
+	"$(LLVM_SYS_231_PREFIX)/lib/libLLVMCore.a" 2>/dev/null \
 	| grep -q __llvm_covmap
 
 # Build instrumented resolc against the existing LLVM build and run coverage.
@@ -178,12 +178,12 @@ coverage: install-cargo-llvm-cov
 # prevent blending LLVM percentages into resolc's own coverage numbers.
 coverage-llvm-report:
 	@$(LLVM_IS_INSTRUMENTED) || { \
-		echo "error: no instrumented LLVM at LLVM_SYS_221_PREFIX='$(LLVM_SYS_221_PREFIX)'" \
+		echo "error: no instrumented LLVM at LLVM_SYS_231_PREFIX='$(LLVM_SYS_231_PREFIX)'" \
 			"('make install-llvm-coverage' enables it)."; \
 		exit 1; \
 	}
-	@"$(LLVM_SYS_221_PREFIX)/bin/llvm-config" --system-libs | grep -q -- -lz || { \
-		echo "error: the instrumented LLVM at LLVM_SYS_221_PREFIX lacks zlib." \
+	@"$(LLVM_SYS_231_PREFIX)/bin/llvm-config" --system-libs | grep -q -- -lz || { \
+		echo "error: the instrumented LLVM at LLVM_SYS_231_PREFIX lacks zlib." \
 			"Install it and rebuild LLVM with 'make install-llvm-coverage'."; \
 		exit 1; \
 	}
@@ -198,11 +198,11 @@ coverage-llvm-report:
 	mkdir -p target/coverage-llvm
 # Raw llvm-profdata/llvm-cov is used (rather than `cargo llvm-cov`) since
 # that allows include-only filtering (e.g. "only llvm/").
-	"$(LLVM_SYS_221_PREFIX)/bin/llvm-profdata" merge -sparse \
+	"$(LLVM_SYS_231_PREFIX)/bin/llvm-profdata" merge -sparse \
 		--failure-mode=all \
 		$$(find target/llvm-cov-target -name '*.profraw') \
 		-o target/coverage-llvm/llvm.profdata
-	"$(LLVM_SYS_221_PREFIX)/bin/llvm-cov" show -format=html \
+	"$(LLVM_SYS_231_PREFIX)/bin/llvm-cov" show -format=html \
 		-output-dir $(COVERAGE_REPORTS_DIR)/llvm/html \
 		-instr-profile target/coverage-llvm/llvm.profdata \
 		target/llvm-cov-target/debug/resolc \

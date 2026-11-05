@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.agent-guidance-loader/load.sh claude",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

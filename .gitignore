@@ -25,3 +25,5 @@ emsdk
 docs-tmp
 coverage-reports
 workdir
+/.agent-guidance/
+/.agent-guidance.tmp.*/

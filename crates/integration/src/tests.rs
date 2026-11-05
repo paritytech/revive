@@ -5171,6 +5171,18 @@ fn masked_free_pointer_copy() {
     run_differential(actions);
 }
 
+/// A free pointer relative copy destination masked to 64 bits can wrap onto the free memory
+/// pointer word, so the free memory pointer must count as unbounded.
+#[test]
+fn masked_free_pointer_wrap() {
+    let mut actions = instantiate_yul(
+        "contracts/MaskedFreePointerWrap.yul",
+        "MaskedFreePointerWrap",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0x11; 64]);
+    run_differential(actions);
+}
+
 /// Reproducer from paritytech/security_findings#118.
 #[test]
 fn calldata_copy_over_free_pointer() {

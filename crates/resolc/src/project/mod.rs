@@ -49,22 +49,51 @@ pub struct Project {
 
 impl Project {
     /// A shortcut constructor.
+    ///
+    /// Nested factory dependency objects not otherwise part of `contracts` are added as contracts.
+    /// A nested object whose path is already taken by another contract is an error.
     pub fn new(
         version: Option<SolcVersion>,
-        contracts: BTreeMap<String, Contract>,
+        mut contracts: BTreeMap<String, Contract>,
         libraries: SolcStandardJsonInputSettingsLibraries,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let mut identifier_paths = BTreeMap::new();
         for (path, contract) in contracts.iter() {
             identifier_paths.insert(contract.object_identifier().to_owned(), path.to_owned());
         }
 
-        Self {
+        let mut unresolved_contracts: Vec<Contract> = contracts
+            .values()
+            .flat_map(|contract| contract.unresolved_factory_dependencies(&identifier_paths))
+            .collect();
+        while let Some(contract) = unresolved_contracts.pop() {
+            if identifier_paths.contains_key(contract.object_identifier()) {
+                continue;
+            }
+            if contracts.contains_key(contract.identifier.full_path.as_str()) {
+                anyhow::bail!(
+                    "the nested object `{}` can not be emitted as `{}`, which is the path of another \
+                     contract. Adding the source file of `{}` to the output selection avoids this.",
+                    contract.object_identifier(),
+                    contract.identifier.full_path,
+                    contract.object_identifier(),
+                );
+            }
+            identifier_paths.insert(
+                contract.object_identifier().to_owned(),
+                contract.identifier.full_path.to_owned(),
+            );
+            unresolved_contracts
+                .extend(contract.unresolved_factory_dependencies(&identifier_paths));
+            contracts.insert(contract.identifier.full_path.to_owned(), contract);
+        }
+
+        Ok(Self {
             version,
             contracts,
             identifier_paths,
             libraries,
-        }
+        })
     }
 
     /// Compiles all contracts, returning their build artifacts.
@@ -175,7 +204,7 @@ impl Project {
                         contract
                             .ir
                             .factory_dependencies()
-                            .iter()
+                            .keys()
                             .filter_map(|identifier| self.identifier_paths.get(identifier))
                             .map(String::as_str),
                     );
@@ -259,7 +288,7 @@ impl Project {
                 },
             }
         }
-        Ok(Self::new(None, contracts, libraries))
+        Self::new(None, contracts, libraries)
     }
 
     /// Converts the `solc` JSON output into a convenient project.
@@ -310,11 +339,7 @@ impl Project {
                 Err(error) => solc_output.push_error(Some(path), error),
             }
         }
-        Ok(Project::new(
-            Some(solc_version.clone()),
-            contracts,
-            libraries,
-        ))
+        Project::new(Some(solc_version.clone()), contracts, libraries)
     }
 }
 

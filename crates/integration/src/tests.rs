@@ -5150,6 +5150,39 @@ fn fmp_loop_mstore8() {
     run_differential(actions);
 }
 
+/// Reproducer from paritytech/security_findings#119.
+#[test]
+fn masked_free_pointer_copy() {
+    let mut actions = instantiate(
+        "contracts/MaskedFreePointerCopy.sol",
+        "MaskedFreePointerCopy",
+    );
+    let mut data = U256::from(1u64 << 40).to_be_bytes::<32>().to_vec();
+    data.extend(U256::from(0x10).to_be_bytes::<32>());
+    data.extend([0; 32]);
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// A free pointer relative copy destination masked to 64 bits can wrap onto the free memory
+/// pointer word, so the free memory pointer must count as unbounded.
+#[test]
+fn masked_free_pointer_wrap() {
+    let mut actions = instantiate_yul(
+        "contracts/MaskedFreePointerWrap.yul",
+        "MaskedFreePointerWrap",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0x11; 64]);
+    run_differential(actions);
+}
+
 /// Reproducer from paritytech/security_findings#118.
 #[test]
 fn calldata_copy_over_free_pointer() {

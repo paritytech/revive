@@ -146,9 +146,10 @@ pub struct TypeInference {
     uses: BTreeMap<u32, BTreeSet<UseContext>>,
     /// Whether any constraint changed in the last iteration.
     changed: bool,
-    /// Function return value IDs, keyed by FunctionId.
+    /// Per return position, the value IDs of every return path (the fall-through
+    /// `return_values` and each early `leave`), keyed by FunctionId.
     /// Used during the forward pass to propagate return value widths to call sites.
-    function_returns: BTreeMap<u32, Vec<ValueId>>,
+    function_returns: BTreeMap<u32, Vec<Vec<ValueId>>>,
     /// Per-value refined function-argument demand: the widest narrowed parameter width
     /// across all call sites where this value is passed as an argument.
     /// Set by `refine_demands_from_parameters` after parameter narrowing.
@@ -250,7 +251,17 @@ impl TypeInference {
     /// particular, `MemoryOffset` deliberately stays at I256 — see the
     /// `MemoryOffset` arm of `max_width_needed` for why narrowing offsets
     /// here would bypass the use-site bounds check.
+    ///
+    /// The result never drops below the value's forward `min_width`, and signed values (whose
+    /// `min_width` is a magnitude) stay at I256. A narrowed parameter relies on its call sites to
+    /// check that the argument fits, and that check traps on a wide argument. Truncating the
+    /// argument where it is defined would drop the high bits before the call site could see them,
+    /// so a demand only ever narrows a value that already fits.
     pub fn use_demand_width(&self, id: ValueId) -> BitWidth {
+        let constraint = self.get(id);
+        if constraint.is_signed {
+            return BitWidth::I256;
+        }
         if let Some(uses) = self.uses.get(&id.0) {
             if uses.is_empty() {
                 return BitWidth::I256;
@@ -269,7 +280,7 @@ impl TypeInference {
                     widest_needed = needed;
                 }
             }
-            widest_needed
+            widest_needed.max(constraint.min_width)
         } else {
             BitWidth::I256
         }
@@ -331,9 +342,9 @@ impl TypeInference {
     /// out-of-range semantics are preserved.
     pub fn infer_object(&mut self, object: &Object) {
         for (function_id, function) in &object.functions {
-            if !function.return_values.is_empty() {
+            if !function.returns.is_empty() {
                 self.function_returns
-                    .insert(function_id.0, function.return_values.clone());
+                    .insert(function_id.0, return_path_value_ids(function));
             }
         }
 
@@ -756,31 +767,15 @@ impl TypeInference {
     /// A function returns via the fall-through `return_values` *and* via every early
     /// `leave`, which carries its own snapshot of the return variables. Narrowing must
     /// account for all of them — a `leave` can return a full-width value even when the
-    /// fall-through value is narrow — so the loop below collects every return path's value
-    /// id per position and narrows to the widest min_width across all of them. A signed return
+    /// fall-through value is narrow — so `return_path_value_ids` collects every return path's
+    /// value id per position and this narrows to the widest min_width across all of them. A signed return
     /// path keeps the type full width — a narrow magnitude can still be a full-width negative value.
     ///
     /// Returns true if any return type was narrowed.
     pub fn narrow_function_returns(&self, object: &mut Object) -> bool {
         let mut changed = false;
         for function in object.functions.values_mut() {
-            let num_returns = function.returns.len();
-
-            let mut return_path_ids: Vec<Vec<ValueId>> = vec![Vec::new(); num_returns];
-            for (index, slot) in return_path_ids.iter_mut().enumerate() {
-                if let Some(id) = function.return_values.get(index) {
-                    slot.push(*id);
-                }
-            }
-            crate::ir::for_each_statement(&function.body.statements, &mut |statement| {
-                if let Statement::Leave { return_values } = statement {
-                    for (index, value) in return_values.iter().enumerate() {
-                        if let Some(slot) = return_path_ids.get_mut(index) {
-                            slot.push(value.id);
-                        }
-                    }
-                }
-            });
+            let return_path_ids = return_path_value_ids(function);
 
             for (index, ret_ty) in function.returns.iter_mut().enumerate() {
                 if !matches!(ret_ty, Type::Int(BitWidth::I256)) {
@@ -1393,10 +1388,6 @@ impl TypeInference {
             Expression::BlockHash { number } => {
                 self.record_use(number.id, UseContext::ExternalCall);
             }
-            Expression::BlobHash { index: number } => {
-                self.record_use(number.id, UseContext::MemoryOffset);
-                self.narrow_from_use(number.id, BitWidth::I64);
-            }
             _ => {}
         }
     }
@@ -1845,11 +1836,7 @@ impl TypeInference {
                 BitWidth::I64
             }
             Expression::Difficulty | Expression::ChainId | Expression::BaseFee => BitWidth::I256,
-            Expression::SelfBalance | Expression::BlobBaseFee => BitWidth::I256,
-            Expression::BlobHash { index } => {
-                self.widen(index.id, BitWidth::I64);
-                BitWidth::I256
-            }
+            Expression::SelfBalance => BitWidth::I256,
             Expression::Balance { address } => {
                 self.widen(address.id, BitWidth::I160);
                 BitWidth::I256
@@ -1876,9 +1863,12 @@ impl TypeInference {
                 function,
                 arguments: _,
             } => {
-                if let Some(ret_ids) = self.function_returns.get(&function.0).cloned() {
+                if let Some(return_paths) = self.function_returns.get(&function.0).cloned() {
+                    // The callee may return through an early `leave` as well as through
+                    // the fall-through, so the call result must be as wide as the widest
+                    // value on any return path, not just the fall-through one.
                     let mut max_ret_width = BitWidth::I1;
-                    for ret_id in &ret_ids {
+                    for ret_id in return_paths.iter().flatten() {
                         let ret_width = self.get(*ret_id).min_width;
                         max_ret_width = max_ret_width.max(ret_width);
                     }
@@ -2008,6 +1998,51 @@ pub fn double_width(width: BitWidth) -> BitWidth {
     }
 }
 
+/// Widens every integer parameter and return type in an object tree back to full width.
+///
+/// Signature narrowing never widens a type again, so a re-inference under weaker assumptions
+/// (see `reinfer_for_unbounded_fmp`) must start from full-width signatures. Otherwise a type
+/// narrowed under the previous, stronger assumptions would keep truncating values that the
+/// new inference proves can be wide.
+pub(crate) fn widen_function_signatures(object: &mut Object) {
+    for function in object.functions.values_mut() {
+        let parameter_types = function
+            .parameters
+            .iter_mut()
+            .map(|(_, value_type)| value_type);
+        for value_type in parameter_types.chain(function.returns.iter_mut()) {
+            if matches!(value_type, Type::Int(_)) {
+                *value_type = Type::Int(BitWidth::I256);
+            }
+        }
+    }
+
+    for subobject in &mut object.subobjects {
+        widen_function_signatures(subobject);
+    }
+}
+
+/// Collects, per return position, the value IDs of every path out of `function`.
+///
+/// A function returns via its fall-through `return_values` and via every early `leave`,
+/// each of which carries its own snapshot of the return variables. Any analysis that
+/// reasons about what a function returns must consider all of these paths, since a
+/// `leave` can return a full-width value even when the fall-through value is narrow.
+fn return_path_value_ids(function: &Function) -> Vec<Vec<ValueId>> {
+    let mut return_path_ids: Vec<Vec<ValueId>> = vec![Vec::new(); function.returns.len()];
+    for (slot, id) in return_path_ids.iter_mut().zip(&function.return_values) {
+        slot.push(*id);
+    }
+    for_each_statement(&function.body.statements, &mut |statement| {
+        if let Statement::Leave { return_values } = statement {
+            for (slot, value) in return_path_ids.iter_mut().zip(return_values) {
+                slot.push(value.id);
+            }
+        }
+    });
+    return_path_ids
+}
+
 /// Maximum number of param/return narrowing iterations.
 ///
 /// Each iteration narrows function signatures, re-runs full type inference with the new widths so
@@ -2021,10 +2056,15 @@ pub(crate) const PARAM_NARROW_ITERATIONS: u32 = 4;
 /// param, forward return, demand-driven return — and re-runs full type inference
 /// so the new signature widths cascade through every function body before the next
 /// iteration. Bounded by [`PARAM_NARROW_ITERATIONS`] but exits early on a fixed point.
+///
+/// Every re-inference keeps the free memory pointer assumption of the given `type_info`.
+/// Dropping it after an unbounded re-inference would narrow free memory pointer loads, and
+/// everything derived from them, as if the pointer were bounded.
 pub(crate) fn narrow_signatures_to_fixed_point(
     ir_object: &mut Object,
     mut type_info: TypeInference,
 ) -> TypeInference {
+    let fmp_could_be_unbounded = type_info.fmp_could_be_unbounded;
     for _ in 0..PARAM_NARROW_ITERATIONS {
         let mut changed = type_info.narrow_function_parameters(ir_object);
         changed |= type_info.narrow_function_parameters_from_callers(ir_object);
@@ -2034,6 +2074,7 @@ pub(crate) fn narrow_signatures_to_fixed_point(
             break;
         }
         type_info = TypeInference::new();
+        type_info.set_fmp_could_be_unbounded(fmp_could_be_unbounded);
         type_info.infer_object_tree(ir_object);
         type_info.refine_demands_from_parameters(ir_object);
     }
@@ -2135,6 +2176,32 @@ mod tests {
         inference.apply_backward_constraints();
 
         assert_eq!(inference.get(key).max_width, BitWidth::I256);
+    }
+
+    /// A narrowed parameter's demand only narrows an argument that already fits. A wider
+    /// argument keeps its width so the call site can trap on it.
+    #[test]
+    fn narrowed_parameter_demand_never_truncates_wider_argument() {
+        let mut inference = TypeInference::new();
+        let fitting = ValueId(0);
+        let wide = ValueId(1);
+        let signed = ValueId(2);
+        for argument in [fitting, wide, signed] {
+            inference.record_use(argument, UseContext::FunctionArg);
+            inference
+                .fn_argument_demand
+                .insert(argument.0, BitWidth::I64);
+        }
+        inference.widen(fitting, BitWidth::I32);
+        inference.widen(wide, BitWidth::I256);
+        inference.widen(signed, BitWidth::I32);
+        let mut signed_constraint = inference.get(signed);
+        signed_constraint.is_signed = true;
+        inference.constraints.insert(signed.0, signed_constraint);
+
+        assert_eq!(inference.use_demand_width(fitting), BitWidth::I64);
+        assert_eq!(inference.use_demand_width(wide), BitWidth::I256);
+        assert_eq!(inference.use_demand_width(signed), BitWidth::I256);
     }
 
     /// Builds a `Statement::Let` binding `id` to the literal `value`.

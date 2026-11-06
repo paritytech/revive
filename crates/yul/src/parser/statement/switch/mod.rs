@@ -112,7 +112,7 @@ impl Switch {
 
     /// Get the list of missing deployable libraries.
     pub fn get_missing_libraries(&self) -> BTreeSet<String> {
-        let mut libraries = BTreeSet::new();
+        let mut libraries = self.expression.get_missing_libraries();
         for case in self.cases.iter() {
             libraries.extend(case.get_missing_libraries());
         }

@@ -25,7 +25,7 @@ use crate::ir::{
     for_each_statement, word_align, Block, Expression, FunctionId, MemoryRegion, Object, Statement,
     Value, ValueId,
 };
-use revive_common::BYTE_LENGTH_WORD;
+use revive_common::{BIT_LENGTH_WORD, BYTE_LENGTH_WORD};
 
 /// Maximum number of words to iterate when marking escaping/tainted ranges.
 /// Contracts with `return(0, 320000000000)` or similar huge constants would
@@ -187,6 +187,12 @@ pub struct HeapAnalysis {
     /// comes from a sbrk-style allocator pattern. Only populated for
     /// bindings of size 1.
     value_expressions: BTreeMap<u32, Expression>,
+    /// `and` bindings that provably leave their masked operand unchanged, mapped to that operand.
+    /// Guard narrowing masks a value with `2^k - 1` after a terminating `gt(value, 2^k - 1)` guard,
+    /// where the mask is a no-op, so [`Self::is_free_pointer_relative`] forwards through it like a
+    /// `Var`. Without such a proof a mask can wrap a free pointer relative value modulo `2^k` onto
+    /// the FMP word. Collected by [`Self::collect_no_op_masks`].
+    no_op_masks: BTreeMap<u32, u32>,
     /// Functions of the currently analyzed object that can exit — by `leave` or by body
     /// fall-through — with the free-memory-pointer word corrupted by an overlapping store.
     /// Computed to a fixed point by [`Self::detect_observed_fmp_corruption`] and consulted at
@@ -194,8 +200,9 @@ pub struct HeapAnalysis {
     /// to the caller's observation scan.
     fmp_corrupting_functions: BTreeSet<FunctionId>,
     /// Dynamic destinations of writes that may cover the FMP word unless they are free pointer
-    /// relative. They are checked once the whole object is analyzed, because a destination
-    /// derived from a function parameter or a call result depends on every call site.
+    /// relative, and trusted values stored to the FMP word, which must be free pointer relative
+    /// for `mload(0x40)` to be. They are checked once the whole object is analyzed, because a
+    /// value derived from a function parameter or a call result depends on every call site.
     deferred_write_destinations: Vec<u32>,
     /// Parameters for which every call site passes a free pointer relative argument.
     free_pointer_relative_parameters: BTreeSet<u32>,
@@ -410,6 +417,7 @@ impl HeapAnalysis {
             variable_accessed_offsets: BTreeSet::new(),
             fmp_could_be_unbounded: false,
             value_expressions: BTreeMap::new(),
+            no_op_masks: BTreeMap::new(),
             fmp_corrupting_functions: BTreeSet::new(),
             deferred_write_destinations: Vec::new(),
             free_pointer_relative_parameters: BTreeSet::new(),
@@ -431,6 +439,7 @@ impl HeapAnalysis {
     /// caller-observable data, so a return covering 0x40 there is a genuine FMP
     /// escape.
     fn analyze_object_inner(&mut self, object: &Object, is_root: bool) {
+        self.collect_no_op_masks(object);
         self.analyze_block(&object.code, false, is_root);
 
         for function in object.functions.values() {
@@ -443,6 +452,7 @@ impl HeapAnalysis {
         for subobject in &object.subobjects {
             self.offset_values.clear();
             self.value_expressions.clear();
+            self.no_op_masks.clear();
             self.analyze_object_inner(subobject, false);
         }
 
@@ -494,9 +504,12 @@ impl HeapAnalysis {
                         }
                     }
                 }
-                let is_fmp_store = region.is_free_pointer_slot(static_offset);
-                if is_fmp_store && !self.is_trusted_fmp_source(value.id.0) {
-                    self.fmp_could_be_unbounded = true;
+                if region.is_free_pointer_slot(static_offset) {
+                    if !self.is_trusted_fmp_source(value.id.0) {
+                        self.fmp_could_be_unbounded = true;
+                    } else if !self.is_free_pointer_relative(value.id.0) {
+                        self.deferred_write_destinations.push(value.id.0);
+                    }
                 }
                 if static_offset.is_none()
                     && (*region == MemoryRegion::Scratch
@@ -528,7 +541,7 @@ impl HeapAnalysis {
                 let destination_start = self.extract_static_offset(destination);
                 let source_start = self.extract_static_offset(source);
                 let len = self.extract_static_offset(length);
-                self.flag_write_covering_fmp(destination, length, true);
+                self.flag_write_covering_fmp(destination, length);
                 self.taint_range(destination_start, len);
                 self.taint_range(source_start, len);
             }
@@ -542,7 +555,7 @@ impl HeapAnalysis {
             } => {
                 self.mark_escaping_range(args_offset, args_length);
                 self.note_fmp_coverage(args_offset, args_length);
-                self.flag_write_covering_fmp(ret_offset, ret_length, true);
+                self.flag_write_covering_fmp(ret_offset, ret_length);
                 self.mark_escaping_and_tainted_range(ret_offset, ret_length);
                 self.note_fmp_coverage(ret_offset, ret_length);
             }
@@ -816,25 +829,15 @@ impl HeapAnalysis {
     /// bytes to `destination` can cover `[0x40, 0x60)`. A zero length never covers it,
     /// and neither does a dynamic destination that is free pointer relative, or a
     /// loop-varying destination that never drops below `0x60`. A static destination below
-    /// `0x60` with a dynamic length is flagged when `any_dynamic_length` is set or the length
-    /// is loop-varying. Copy opcodes leave it unset, so `calldatacopy(0, 0, calldatasize())`
-    /// is not flagged although a length above `0x40` overwrites the pointer (a known gap).
-    fn flag_write_covering_fmp(
-        &mut self,
-        destination: &Value,
-        length: &Value,
-        any_dynamic_length: bool,
-    ) {
+    /// `0x60` with a dynamic length is flagged.
+    fn flag_write_covering_fmp(&mut self, destination: &Value, length: &Value) {
         let destination_start = self.extract_static_offset(destination);
         let len = self.extract_static_offset(length);
-        let dynamic_length_covers = any_dynamic_length || self.loop_varying(length);
 
         let covers_fmp = match (destination_start, len) {
             (_, Some(0)) => false,
             (Some(address), Some(size)) => address < 0x60 && address.saturating_add(size) > 0x40,
-            (Some(address), None) => {
-                (0x40..0x60).contains(&address) || (dynamic_length_covers && address < 0x60)
-            }
+            (Some(address), None) => address < 0x60,
             (None, _) if self.loop_varying(destination) => {
                 self.loop_offset_may_reach_fmp_word(destination)
             }
@@ -981,7 +984,7 @@ impl HeapAnalysis {
         let len = self.extract_static_offset(length);
 
         let loop_length = self.loop_varying(length);
-        self.flag_write_covering_fmp(destination, length, false);
+        self.flag_write_covering_fmp(destination, length);
 
         match (destination_start, len) {
             (Some(address), Some(size)) => {
@@ -1068,10 +1071,14 @@ impl HeapAnalysis {
     /// `fmp_could_be_unbounded` so the corrupted `mload(0x40)` skips the `FMP < heap_size` range
     /// proof. Recognized as at-or-above the free pointer: `mload(0x40)`, a literal base `>= 0x60`
     /// that fits in 64 bits (`mem_opt` constant-forwards `mload(0x40)` to its `0x80` literal), an
-    /// `add` with such an operand, `Var` forwarding chains, and the parameters and call results
-    /// trusted by [`Self::check_deferred_write_destinations`]. (The adversarial `add(mload(0x40),
-    /// k)` / `add(0x80, k)` that wraps mod 2^256 back to `0x40` is the same solc-unreachable residual
-    /// as the dynamic full-word `MStore` gap; see the `fmp_could_be_unbounded` field docs.)
+    /// `add` with such an operand, an `and` of such an operand with a mask that clears only bits
+    /// below `0x20` (`not(31)`), `Var` forwarding chains and the masks in [`Self::no_op_masks`]
+    /// (such as those inserted by guard narrowing), and the parameters and call results trusted by
+    /// [`Self::check_deferred_write_destinations`]. Any other mask, such as a 64-bit mask without
+    /// a guard, can wrap its operand modulo `2^64` onto the FMP word. (The adversarial
+    /// `add(mload(0x40), k)` / `add(0x80, k)` that wraps mod 2^256 back to `0x40` is the same
+    /// solc-unreachable residual as the dynamic full-word `MStore` gap; see the
+    /// `fmp_could_be_unbounded` field docs.)
     fn is_free_pointer_relative(&self, value_id: u32) -> bool {
         const MAX_DEPTH: u32 = 32;
         let mut current = value_id;
@@ -1100,10 +1107,49 @@ impl HeapAnalysis {
                     return self.is_free_pointer_relative(lhs.id.0)
                         || self.is_free_pointer_relative(rhs.id.0);
                 }
+                Some(Expression::Binary {
+                    operation: crate::ir::BinaryOperation::And,
+                    lhs,
+                    rhs,
+                }) => {
+                    if let Some(&masked) = self.no_op_masks.get(&current) {
+                        current = masked;
+                        continue;
+                    }
+                    let clears_only_low_bits =
+                        |mask: &Value| match self.value_expressions.get(&mask.id.0) {
+                            Some(Expression::Literal { value, .. }) => {
+                                (value | BigUint::from(0x1fu64)).count_ones()
+                                    == BIT_LENGTH_WORD as u64
+                            }
+                            _ => false,
+                        };
+                    return (clears_only_low_bits(rhs) && self.is_free_pointer_relative(lhs.id.0))
+                        || (clears_only_low_bits(lhs) && self.is_free_pointer_relative(rhs.id.0));
+                }
                 _ => return false,
             }
         }
         false
+    }
+
+    /// Collects [`Self::no_op_masks`] for the code and functions of `object`.
+    fn collect_no_op_masks(&mut self, object: &Object) {
+        let noreturn = crate::guard_narrow::detect_noreturn_functions(object);
+        let mut collector = NoOpMaskCollector {
+            noreturn: &noreturn,
+            literals: BTreeMap::new(),
+            upper_bounds: BTreeMap::new(),
+            sums: BTreeMap::new(),
+            guard_bounds: BTreeMap::new(),
+            guard_no_wrap_sums: BTreeMap::new(),
+            no_op_masks: BTreeMap::new(),
+        };
+        collector.collect(&object.code.statements, &BTreeMap::new());
+        for function in object.functions.values() {
+            collector.collect(&function.body.statements, &BTreeMap::new());
+        }
+        self.no_op_masks = collector.no_op_masks;
     }
 
     /// Taints every word a static, non-word-aligned full-word access (`mload`/`mstore`) covers.
@@ -1845,6 +1891,211 @@ impl HeapAnalysis {
             static_accesses,
             tainted_regions: self.tainted_regions.len(),
             escaping_regions: self.escaping_regions.len(),
+        }
+    }
+}
+
+/// The walk behind [`HeapAnalysis::collect_no_op_masks`]. Every map is keyed by SSA value, so a
+/// bound proven where a value is defined holds wherever the value is used.
+struct NoOpMaskCollector<'a> {
+    /// Functions that never return, whose calls terminate a region.
+    noreturn: &'a BTreeSet<u32>,
+    /// Literal values.
+    literals: BTreeMap<u32, BigUint>,
+    /// Inclusive upper bounds that values have by their definition.
+    upper_bounds: BTreeMap<u32, BigUint>,
+    /// The operands of `add` results.
+    sums: BTreeMap<u32, [u32; 2]>,
+    /// The inclusive upper bounds a condition proves for values when it is false. `gt(value,
+    /// bound)` proves `bound`, and `or(a, b)` proves what both `a` and `b` prove.
+    guard_bounds: BTreeMap<u32, Vec<(u32, BigUint)>>,
+    /// The `add` results a condition proves not to wrap when it is false. `lt(sum, addend)` with
+    /// `addend` an operand of `sum` is the overflow check of solc's allocator, and `or(a, b)`
+    /// proves what both `a` and `b` prove. A sum that does not wrap bounds both of its operands.
+    guard_no_wrap_sums: BTreeMap<u32, Vec<u32>>,
+    /// The `and` bindings found to leave their masked operand unchanged, mapped to that operand.
+    no_op_masks: BTreeMap<u32, u32>,
+}
+
+impl NoOpMaskCollector<'_> {
+    /// Walks `statements` in order. `guarded` holds the inclusive upper bounds proven by the
+    /// terminating guards that dominate `statements`. A guard extends it for the statements
+    /// following the guard in the same block, and nested regions inherit it.
+    fn collect(&mut self, statements: &[Statement], guarded: &BTreeMap<u32, BigUint>) {
+        let mut guarded = guarded.clone();
+        for statement in statements {
+            match statement {
+                Statement::Let { bindings, value } if bindings.len() == 1 => {
+                    self.record_binding(bindings[0].0, value, &guarded);
+                }
+                Statement::If {
+                    condition,
+                    then_region,
+                    else_region,
+                    outputs,
+                    ..
+                } => {
+                    self.collect(&then_region.statements, &guarded);
+                    if let Some(region) = else_region {
+                        self.collect(&region.statements, &guarded);
+                    }
+                    if else_region.is_none()
+                        && outputs.is_empty()
+                        && crate::guard_narrow::region_terminates(then_region, self.noreturn)
+                    {
+                        for (value, bound) in
+                            self.guard_bounds.get(&condition.id.0).into_iter().flatten()
+                        {
+                            self.tighten(&mut guarded, *value, bound);
+                        }
+                        for sum in self
+                            .guard_no_wrap_sums
+                            .get(&condition.id.0)
+                            .into_iter()
+                            .flatten()
+                        {
+                            let Some(bound) = self.upper_bound(*sum, &guarded) else {
+                                continue;
+                            };
+                            for operand in self.sums[sum] {
+                                self.tighten(&mut guarded, operand, &bound);
+                            }
+                        }
+                    }
+                }
+                Statement::Switch { cases, default, .. } => {
+                    for case in cases {
+                        self.collect(&case.body.statements, &guarded);
+                    }
+                    if let Some(region) = default {
+                        self.collect(&region.statements, &guarded);
+                    }
+                }
+                Statement::For {
+                    condition_statements,
+                    body,
+                    post,
+                    ..
+                } => {
+                    self.collect(condition_statements, &guarded);
+                    self.collect(&body.statements, &guarded);
+                    self.collect(&post.statements, &guarded);
+                }
+                Statement::Block(region) => self.collect(&region.statements, &guarded),
+                _ => {}
+            }
+        }
+    }
+
+    /// Records what the definition `binding = value` proves, where `guarded` holds.
+    fn record_binding(
+        &mut self,
+        binding: u32,
+        value: &Expression,
+        guarded: &BTreeMap<u32, BigUint>,
+    ) {
+        match value {
+            Expression::Literal { value, .. } => {
+                self.literals.insert(binding, value.clone());
+                self.upper_bounds.insert(binding, value.clone());
+            }
+            Expression::Var(inner) => {
+                if let Some(bound) = self.upper_bound(inner.0, guarded) {
+                    self.upper_bounds.insert(binding, bound);
+                }
+            }
+            Expression::Binary {
+                operation: crate::ir::BinaryOperation::And,
+                lhs,
+                rhs,
+            } => {
+                let (operand, mask) =
+                    match (self.literals.get(&lhs.id.0), self.literals.get(&rhs.id.0)) {
+                        (_, Some(mask)) => (lhs.id.0, mask.clone()),
+                        (Some(mask), None) => (rhs.id.0, mask.clone()),
+                        (None, None) => return,
+                    };
+                let operand_bound = self.upper_bound(operand, guarded);
+                let is_low_bit_mask = ((&mask + 1u32) & &mask) == BigUint::ZERO;
+                if is_low_bit_mask && operand_bound.as_ref().is_some_and(|bound| *bound <= mask) {
+                    self.no_op_masks.insert(binding, operand);
+                }
+                let bound = operand_bound.map_or(mask.clone(), |bound| bound.min(mask));
+                self.upper_bounds.insert(binding, bound);
+            }
+            Expression::Binary {
+                operation: crate::ir::BinaryOperation::Add,
+                lhs,
+                rhs,
+            } => {
+                self.sums.insert(binding, [lhs.id.0, rhs.id.0]);
+            }
+            Expression::Binary {
+                operation: crate::ir::BinaryOperation::Gt,
+                lhs,
+                rhs,
+            } => {
+                if let Some(bound) = self.literals.get(&rhs.id.0) {
+                    self.guard_bounds
+                        .insert(binding, vec![(lhs.id.0, bound.clone())]);
+                }
+            }
+            Expression::Binary {
+                operation: crate::ir::BinaryOperation::Lt,
+                lhs,
+                rhs,
+            } => {
+                if self
+                    .sums
+                    .get(&lhs.id.0)
+                    .is_some_and(|operands| operands.contains(&rhs.id.0))
+                {
+                    self.guard_no_wrap_sums.insert(binding, vec![lhs.id.0]);
+                }
+            }
+            Expression::Binary {
+                operation: crate::ir::BinaryOperation::Or,
+                lhs,
+                rhs,
+            } => {
+                let operands = [lhs.id.0, rhs.id.0];
+                let bounds: Vec<(u32, BigUint)> = operands
+                    .iter()
+                    .filter_map(|operand| self.guard_bounds.get(operand))
+                    .flatten()
+                    .cloned()
+                    .collect();
+                if !bounds.is_empty() {
+                    self.guard_bounds.insert(binding, bounds);
+                }
+                let no_wrap_sums: Vec<u32> = operands
+                    .iter()
+                    .filter_map(|operand| self.guard_no_wrap_sums.get(operand))
+                    .flatten()
+                    .copied()
+                    .collect();
+                if !no_wrap_sums.is_empty() {
+                    self.guard_no_wrap_sums.insert(binding, no_wrap_sums);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Records in `guarded` that `value` is at most `bound`, unless a tighter bound is known.
+    fn tighten(&self, guarded: &mut BTreeMap<u32, BigUint>, value: u32, bound: &BigUint) {
+        let tighter = match self.upper_bound(value, guarded) {
+            Some(known) if known < *bound => known,
+            _ => bound.clone(),
+        };
+        guarded.insert(value, tighter);
+    }
+
+    /// The tightest inclusive upper bound known for `value` where `guarded` holds.
+    fn upper_bound(&self, value: u32, guarded: &BTreeMap<u32, BigUint>) -> Option<BigUint> {
+        match (self.upper_bounds.get(&value), guarded.get(&value)) {
+            (Some(defined), Some(guard)) => Some(defined.min(guard).clone()),
+            (defined, guard) => defined.or(guard).cloned(),
         }
     }
 }
@@ -3752,13 +4003,13 @@ mod tests {
         );
     }
 
-    /// A non-inlined `finalize_allocation(memPtr, size)` stores `add(memPtr, and(add(size, 31),
-    /// not(31)))` with both arguments parameters, so only the literal 31 marks the rounded size
-    /// as bounded; it must keep the range proof although 31 is below the dynamic heap base.
-    #[test]
-    fn fmp_allocation_from_parameters_is_trusted() {
-        use crate::ir::{BinaryOperation, ValueId};
-        let mut statements = vec![
+    /// Builds an object calling `finalize_allocation(memPtr, size)` with `mload(0x40)` and
+    /// `calldataload(0)`, which stores `add(memPtr, and(add(size, 31), not(31)))` and reads it back.
+    fn object_with_finalize_allocation() -> Object {
+        use crate::ir::{BinaryOperation, Function, FunctionId, Type, ValueId};
+        let mut function = Function::new(FunctionId(0), "finalize_allocation".to_string());
+        function.parameters = vec![(ValueId(0), Type::default()), (ValueId(1), Type::default())];
+        let mut body = vec![
             literal_binding(2, 31),
             binary_binding(3, BinaryOperation::Add, 1, 2),
             big_literal_binding(4, not_0x1f()),
@@ -3771,11 +4022,184 @@ mod tests {
                 region: MemoryRegion::FreePointerSlot,
             },
         ];
-        statements.extend(observe_fmp_statements(8));
-        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        body.extend(observe_fmp_statements(8));
+        function.body = Block { statements: body };
+        let mut statements = free_pointer_binding(20);
+        statements.push(calldata_binding(22));
+        statements.push(Statement::Expression(Expression::Call {
+            function: FunctionId(0),
+            arguments: vec![Value::int(ValueId(20)), Value::int(ValueId(22))],
+        }));
+        object_with_code(statements, vec![function])
+    }
+
+    /// A non-inlined `finalize_allocation(memPtr, size)` gets both arguments as parameters, so only
+    /// the literal 31 marks the rounded size as bounded; it must keep the range proof although 31
+    /// is below the dynamic heap base.
+    #[test]
+    fn fmp_allocation_from_parameters_is_trusted() {
+        let results = object_with_finalize_allocation().analyze_heap(TEST_HEAP_SIZE);
         assert!(
             !results.fmp_could_be_unbounded(),
             "an allocation rounded up with the literal 31 must stay trusted"
+        );
+    }
+
+    /// `mstore(0x40, and(calldataload(0), 0x1f))` can drop the FMP below `0x60`, so a copy to
+    /// `add(mload(0x40), k)` can land on the FMP word and the FMP must count as unbounded.
+    #[test]
+    fn fmp_masked_below_free_memory_is_untrusted() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = vec![
+            calldata_binding(1),
+            literal_binding(2, 0x1f),
+            binary_binding(3, BinaryOperation::And, 1, 2),
+            literal_binding(4, 0x40),
+            Statement::MStore {
+                offset: Value::int(ValueId(4)),
+                value: Value::int(ValueId(3)),
+                region: MemoryRegion::FreePointerSlot,
+            },
+        ];
+        statements.extend(observe_fmp_statements(5));
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    /// Binds `add(mload(0x40), calldataload(0))` (id 4), a free pointer relative value that may
+    /// exceed 64 bits, and the 64-bit mask `2^64 - 1` (id 5).
+    fn wide_free_pointer_offset_statements() -> Vec<Statement> {
+        use crate::ir::BinaryOperation;
+        let mut statements = free_pointer_binding(1);
+        statements.push(calldata_binding(3));
+        statements.push(binary_binding(4, BinaryOperation::Add, 1, 3));
+        statements.push(literal_binding(5, u64::MAX));
+        statements
+    }
+
+    /// Builds the terminating guard `if gt(v4, v5) { panic }`, using id 6 for the comparison.
+    fn wide_offset_guard_statements() -> Vec<Statement> {
+        use crate::ir::{BinaryOperation, Region, ValueId};
+        vec![
+            binary_binding(6, BinaryOperation::Gt, 4, 5),
+            Statement::If {
+                condition: Value::int(ValueId(6)),
+                inputs: vec![],
+                then_region: Region {
+                    statements: vec![Statement::PanicRevert { code: 0x41 }],
+                    yields: vec![],
+                },
+                else_region: None,
+                outputs: vec![],
+            },
+        ]
+    }
+
+    /// A free pointer relative copy destination masked to 64 bits without a guard can wrap onto
+    /// the FMP word, as `and(add(mload(0x40), sub(2^64, 0x40)), 2^64 - 1)` does with the FMP at
+    /// `0x80`.
+    #[test]
+    fn unguarded_64_bit_masked_copy_destination_is_unbounded() {
+        use crate::ir::BinaryOperation;
+        let mut dest_setup = wide_free_pointer_offset_statements();
+        dest_setup.push(binary_binding(10, BinaryOperation::And, 4, 5));
+        let results = object_with_dynamic_copy(dest_setup).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "an unguarded 64-bit mask can wrap the destination onto the FMP word"
+        );
+    }
+
+    /// Guard narrowing masks a value with `2^64 - 1` after a terminating `gt(value, 2^64 - 1)`
+    /// guard, possibly repeatedly, and such masks cannot change the value, so the destination stays
+    /// free pointer relative.
+    #[test]
+    fn guarded_64_bit_masked_copy_destination_is_trusted() {
+        use crate::ir::BinaryOperation;
+        let mut dest_setup = wide_free_pointer_offset_statements();
+        dest_setup.extend(wide_offset_guard_statements());
+        dest_setup.push(binary_binding(9, BinaryOperation::And, 4, 5));
+        dest_setup.push(binary_binding(10, BinaryOperation::And, 9, 5));
+        let results = object_with_dynamic_copy(dest_setup).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "a 64-bit mask behind a guard keeps the destination free pointer relative"
+        );
+    }
+
+    /// Builds solc's `allocate_memory` guard `if or(gt(sum, 2^64 - 1), lt(sum, memPtr))` on `sum =
+    /// add(memPtr, size)`, with the overflow check `lt` only `with_overflow_check`, followed by the
+    /// copy destination `and(memPtr, 2^64 - 1)` (id 10) that guard narrowing derives from it.
+    /// `memPtr` (id 4) is free pointer relative but may exceed 64 bits, and `size` (id 12) is
+    /// unbounded.
+    fn allocation_guarded_pointer_statements(with_overflow_check: bool) -> Vec<Statement> {
+        use crate::ir::{BinaryOperation, Region, ValueId};
+        let mut statements = wide_free_pointer_offset_statements();
+        statements.push(calldata_binding(12));
+        statements.push(binary_binding(13, BinaryOperation::Add, 4, 12));
+        statements.push(binary_binding(14, BinaryOperation::Gt, 13, 5));
+        statements.push(binary_binding(15, BinaryOperation::Lt, 13, 4));
+        statements.push(binary_binding(16, BinaryOperation::Or, 14, 15));
+        let condition = if with_overflow_check { 16 } else { 14 };
+        statements.push(Statement::If {
+            condition: Value::int(ValueId(condition)),
+            inputs: vec![],
+            then_region: Region {
+                statements: vec![Statement::PanicRevert { code: 0x41 }],
+                yields: vec![],
+            },
+            else_region: None,
+            outputs: vec![],
+        });
+        statements.push(binary_binding(10, BinaryOperation::And, 4, 5));
+        statements
+    }
+
+    /// A sum that is at most `2^64 - 1` and does not wrap bounds its operands too, so masking the
+    /// allocation's base pointer with `2^64 - 1` keeps it free pointer relative.
+    #[test]
+    fn allocation_overflow_check_trusts_masked_base_pointer() {
+        let results = object_with_dynamic_copy(allocation_guarded_pointer_statements(true))
+            .analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "the overflow checked sum bounds the base pointer below 2^64"
+        );
+    }
+
+    /// Without the overflow check the sum may have wrapped, so bounding it says nothing about the
+    /// base pointer and its 64-bit mask may still wrap onto the FMP word.
+    #[test]
+    fn allocation_without_overflow_check_does_not_trust_masked_base_pointer() {
+        let results = object_with_dynamic_copy(allocation_guarded_pointer_statements(false))
+            .analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "a possibly wrapped sum does not bound the base pointer"
+        );
+    }
+
+    /// A guard on a conditional path does not bound the value after it, so the mask may still wrap.
+    #[test]
+    fn guard_on_conditional_path_does_not_trust_64_bit_mask() {
+        use crate::ir::{BinaryOperation, Region, ValueId};
+        let mut dest_setup = wide_free_pointer_offset_statements();
+        dest_setup.push(calldata_binding(7));
+        dest_setup.push(Statement::If {
+            condition: Value::int(ValueId(7)),
+            inputs: vec![],
+            then_region: Region {
+                statements: wide_offset_guard_statements(),
+                yields: vec![],
+            },
+            else_region: None,
+            outputs: vec![],
+        });
+        dest_setup.push(binary_binding(10, BinaryOperation::And, 4, 5));
+        let results = object_with_dynamic_copy(dest_setup).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "a guard that does not dominate the mask must not trust it"
         );
     }
 

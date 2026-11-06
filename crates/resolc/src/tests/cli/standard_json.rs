@@ -7,20 +7,38 @@ use revive_solc_json_interface::{
 
 use crate::cli_utils::{
     assert_command_success, assert_equal_exit_codes, execute_resolc_with_stdin_input,
-    execute_solc_with_stdin_input, STANDARD_JSON_ALL_OUTPUTS_PATH, STANDARD_JSON_CONTRACTS_PATH,
+    execute_solc_with_stdin_input, PVM_BLOB_START, STANDARD_JSON_ALL_OUTPUTS_PATH,
+    STANDARD_JSON_CONTRACTS_PATH, STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH,
+    STANDARD_JSON_DEBUG_INFO_EMPTY_PATH, STANDARD_JSON_EMPTY_OPTIMIZER_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH, STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH,
+    STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH, STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
     STANDARD_JSON_LIBRARY_ESCAPED_PATH, STANDARD_JSON_LIBRARY_ESCAPED_PATH_NEWYORK,
-    STANDARD_JSON_LIBRARY_ESCAPED_PATH_UNLINKED, STANDARD_JSON_NEWYORK_DISABLED_PATH,
+    STANDARD_JSON_LIBRARY_ESCAPED_PATH_UNLINKED, STANDARD_JSON_METADATA_HASH_NONE_PATH,
+    STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
     STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
-    STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
-    STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH,
-    STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH,
-    STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH, STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH,
-    STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
+    STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_OPTIMIZER_PATH,
+    STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
+    STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH,
+    STANDARD_JSON_REMAPPINGS_ORDER_PATH, STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH,
+    STANDARD_JSON_REVERT_STRINGS_STRIP_PATH, STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH,
+    STANDARD_JSON_SOURCE_KECCAK256_MATCH_PATH, STANDARD_JSON_SOURCE_KECCAK256_MISMATCH_PATH,
+    STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH, STANDARD_JSON_TRANSIENT_STORAGE_LAYOUT_PATH,
+    STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH, STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH,
+    STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
+    STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH,
 };
+use crate::tests::cli::metadata::blob_metadata_hash;
 use crate::{pipeline_name, ResolcVersion};
 
 const JSON_OPTION: &str = "--standard-json";
 const MULTIPLE_MODES_ERROR: &str = "Only one mode is allowed at the same time";
+/// The `require` reason literal of the revert strings fixtures as the Yul code spells it.
+const REVERT_STRING_LITERAL: &str = r#""too small""#;
+const SOURCE_LOCATION_ANNOTATION: &str = "@src";
+const TRANSIENT_COUNTER_SOURCE_PATH: &str = "TransientCounter.sol";
+const TRANSIENT_COUNTER_CONTRACT_NAME: &str = "TransientCounter";
+const SOURCE_HASH_MISMATCH_ERROR: &str = "Mismatch between content and supplied hash";
 
 /// A subset of contracts and sources expected to exist in the JSON output.
 struct ExpectedOutput {
@@ -486,6 +504,52 @@ fn yul_no_pvm_codegen_requested() {
 }
 
 #[test]
+fn mixes_all_wildcard_and_individual_file_selection() {
+    let file = STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH;
+    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], file);
+    assert_command_success(&result, &format!("the `{file}` input fixture"));
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+
+    let expected_contract_fields_all = &["evm", "evm.bytecode"];
+    let expected = ExpectedOutput {
+        contracts: vec![
+            ExpectedContract {
+                path: "a.sol",
+                name: "A",
+                fields: [&expected_contract_fields_all[..], &["abi"]].concat(),
+            },
+            ExpectedContract {
+                path: "b.sol",
+                name: "B",
+                fields: expected_contract_fields_all.into(),
+            },
+            ExpectedContract {
+                path: "c.sol",
+                name: "C",
+                fields: [&expected_contract_fields_all[..], &["metadata"]].concat(),
+            },
+        ],
+        sources: vec![
+            ExpectedSource {
+                path: "a.sol",
+                fields: vec!["id", "ast"],
+            },
+            ExpectedSource {
+                path: "b.sol",
+                fields: vec!["id", "ast"],
+            },
+            ExpectedSource {
+                path: "c.sol",
+                fields: vec!["id", "ast"],
+            },
+        ],
+    };
+    assert_output_matches(&output, &expected);
+}
+
+#[test]
 fn invalid_extra_arguments() {
     struct TestCase<'a> {
         arguments: Vec<&'a str>,
@@ -540,6 +604,11 @@ fn invalid_extra_arguments() {
             error_message: "EVM version must be passed via standard JSON input",
         },
         TestCase {
+            arguments: vec![JSON_OPTION, "--revert-strings", "strip"],
+            error_message:
+                "Revert strings mode must be specified in standard JSON input debug settings",
+        },
+        TestCase {
             arguments: vec![JSON_OPTION, "--output-dir", "tmp"],
             error_message: "Output directory cannot be used in standard JSON mode",
         },
@@ -585,6 +654,18 @@ fn invalid_extra_arguments() {
         let output = to_solc_standard_json_output(&result.stdout);
         assert_standard_json_errors_contain(&output, case.error_message);
     }
+}
+
+/// Immutable data above 4096 bytes is reported in the standard JSON `errors`.
+#[test]
+fn immutables_over_limit_error() {
+    let result =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH);
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_standard_json_errors_contain(
+        &output,
+        "immutable data size of 4128 bytes exceeds the limit of 4096 bytes",
+    );
 }
 
 /// Extracts the hex PVM bytecode object of `path`/`name` from a standard JSON output.
@@ -642,6 +723,20 @@ fn reports_missing_library_with_escaped_path() {
     let contract = &output["contracts"]["ü.sol"]["C"];
     assert_eq!(contract["objectFormat"], "ELF");
     assert_eq!(contract["missingLibraries"], serde_json::json!(["ü.sol:L"]));
+}
+
+/// Extracts the optimized Yul IR of `path`/`name` from a standard JSON output.
+fn ir_optimized(output: &SolcStandardJsonOutput, path: &str, name: &str) -> String {
+    let contract = output
+        .contracts
+        .get(path)
+        .and_then(|file| file.get(name))
+        .unwrap_or_else(|| panic!("the contract `{name}` in `{path}` should exist"));
+    assert!(
+        !contract.ir_optimized.is_empty(),
+        "the optimized Yul IR should be present"
+    );
+    contract.ir_optimized.to_owned()
 }
 
 /// The `settings.polkavm.newyork` standard JSON input field selects the newyork
@@ -729,4 +824,276 @@ fn populates_output_metadata_fields() {
             "Standard JSON output for `{path}` should populate `long_version`"
         );
     }
+}
+
+/// Missing libraries of a created contract are reported for its creator too.
+#[test]
+fn missing_libraries_include_factory_dependencies() {
+    for path in [
+        STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH,
+        STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH,
+    ] {
+        let result = execute_resolc_with_stdin_input(&[JSON_OPTION], path);
+        assert_command_success(&result, "Compiling with standard JSON");
+        assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+        let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+        for name in ["K", "P"] {
+            assert_eq!(
+                output["contracts"]["Ch.sol"][name]["missingLibraries"],
+                serde_json::json!(["Ch.sol:L"]),
+                "`{name}` in `{path}` should miss the library `L`"
+            );
+        }
+    }
+}
+
+/// A heap size outside the PVM memory map is reported in the standard JSON errors.
+#[test]
+fn heap_size_out_of_range() {
+    let result =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH);
+    assert_command_success(&result, "Providing an out of range heap size");
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_standard_json_errors_contain(&output, "do not fit into the PVM memory map");
+}
+
+/// A polkavm linker failure is reported in the standard JSON errors.
+#[test]
+fn heap_size_linker_failure() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH,
+    );
+    assert_command_success(&result, "Providing a heap size the linker rejects");
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_standard_json_errors_contain(&output, "polkavm linker failed");
+}
+
+/// A library used only in a switch expression is reported as missing.
+#[test]
+fn switch_expression_missing_libraries() {
+    for arguments in [
+        vec![JSON_OPTION],
+        vec![JSON_OPTION, "--detect-missing-libraries"],
+    ] {
+        let result = execute_resolc_with_stdin_input(
+            &arguments,
+            STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH,
+        );
+        assert_command_success(&result, "the switch missing libraries input fixture");
+        assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+        let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+        assert_eq!(
+            output["contracts"]["sw.sol"]["C"]["missingLibraries"],
+            serde_json::json!(["sw.sol:L"]),
+            "the library `sw.sol:L` should be reported as missing with arguments {arguments:?}"
+        );
+    }
+}
+
+/// The last of two remappings for the same prefix wins, as in solc.
+#[test]
+fn remappings_last_one_wins() {
+    let result =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_REMAPPINGS_ORDER_PATH);
+    assert_command_success(&result, "the remappings order input fixture");
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    assert_eq!(
+        output["contracts"]["main.sol"]["Main"]["abi"][0]["name"],
+        "second"
+    );
+}
+
+#[test]
+fn revert_strings_input_setting() {
+    let default =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH);
+    assert_command_success(&default, "the default revert strings standard JSON input");
+    let default_output = to_solc_standard_json_output(&default.stdout);
+    assert_no_errors(&default_output);
+    assert!(
+        ir_optimized(&default_output, "C.sol", "C").contains(REVERT_STRING_LITERAL),
+        "the default settings.debug.revertStrings should keep the revert string"
+    );
+
+    let strip =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_REVERT_STRINGS_STRIP_PATH);
+    assert_command_success(&strip, "the strip revert strings standard JSON input");
+    let strip_output = to_solc_standard_json_output(&strip.stdout);
+    assert_no_errors(&strip_output);
+    assert!(
+        !ir_optimized(&strip_output, "C.sol", "C").contains(REVERT_STRING_LITERAL),
+        "the strip settings.debug.revertStrings should remove the revert string"
+    );
+
+    assert!(
+        bytecode_object(&strip_output, "C.sol", "C").len()
+            < bytecode_object(&default_output, "C.sol", "C").len(),
+        "the strip settings.debug.revertStrings should yield smaller bytecode than the default"
+    );
+}
+
+#[test]
+fn debug_info_input_setting() {
+    let default =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH);
+    assert_command_success(&default, "the default debug info standard JSON input");
+    let default_output = to_solc_standard_json_output(&default.stdout);
+    assert_no_errors(&default_output);
+    assert!(
+        ir_optimized(&default_output, "C.sol", "C").contains(SOURCE_LOCATION_ANNOTATION),
+        "the Yul IR should carry source locations by default"
+    );
+
+    let empty =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_DEBUG_INFO_EMPTY_PATH);
+    assert_command_success(&empty, "the empty debug info standard JSON input");
+    let empty_output = to_solc_standard_json_output(&empty.stdout);
+    assert_no_errors(&empty_output);
+    assert!(
+        !ir_optimized(&empty_output, "C.sol", "C").contains(SOURCE_LOCATION_ANNOTATION),
+        "an empty settings.debug.debugInfo should remove the source locations"
+    );
+}
+
+#[test]
+fn invalid_debug_input_settings() {
+    for (path, error_message) in [
+        (
+            STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH,
+            "unknown variant `verboseDebug`, expected one of `default`, `strip`, `debug`",
+        ),
+        (
+            STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH,
+            r#"Field "settings.debug.revertStrings" cannot be used for Yul."#,
+        ),
+    ] {
+        let result = execute_resolc_with_stdin_input(&[JSON_OPTION], path);
+        let output = to_solc_standard_json_output(&result.stdout);
+        assert_standard_json_errors_contain(&output, error_message);
+    }
+}
+
+/// `settings.metadata.bytecodeHash` set to `none` omits the metadata hash,
+/// which is embedded by default.
+#[test]
+fn metadata_hash_input_setting() {
+    let default =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_NEWYORK_DISABLED_PATH);
+    assert_command_success(&default, "the default standard JSON input should build");
+    let none =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_METADATA_HASH_NONE_PATH);
+    assert_command_success(
+        &none,
+        "the `none` bytecode hash standard JSON input should build",
+    );
+
+    let default_output = to_solc_standard_json_output(&default.stdout);
+    let none_output = to_solc_standard_json_output(&none.stdout);
+    assert_no_errors(&default_output);
+    assert_no_errors(&none_output);
+
+    assert!(
+        !blob_metadata_hash(&bytecode_object(&default_output, "C.sol", "C")).is_empty(),
+        "the blob should embed a metadata hash by default"
+    );
+    assert!(
+        blob_metadata_hash(&bytecode_object(&none_output, "C.sol", "C")).is_empty(),
+        "settings.metadata.bytecodeHash `none` should omit the metadata hash"
+    );
+}
+
+/// `settings.metadata.bytecodeHash` set to `keccak256` is not forwarded to solc,
+/// which rejects it, and embeds the metadata hash.
+#[test]
+fn metadata_hash_keccak256_input_setting() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        crate::cli_utils::STANDARD_JSON_METADATA_HASH_KECCAK256_PATH,
+    );
+    assert_command_success(
+        &result,
+        "the `keccak256` bytecode hash standard JSON input should build",
+    );
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+    assert!(
+        !blob_metadata_hash(&bytecode_object(&output, "C.sol", "C")).is_empty(),
+        "settings.metadata.bytecodeHash `keccak256` should embed the metadata hash"
+    );
+}
+
+/// A source whose content does not match its keccak256 hash is rejected.
+#[test]
+fn source_keccak256_mismatch() {
+    let mismatch = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_SOURCE_KECCAK256_MISMATCH_PATH,
+    );
+    let mismatch_output = to_solc_standard_json_output(&mismatch.stdout);
+    assert_standard_json_errors_contain(&mismatch_output, SOURCE_HASH_MISMATCH_ERROR);
+
+    let matching =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_SOURCE_KECCAK256_MATCH_PATH);
+    assert_command_success(&matching, "a source matching its keccak256 hash");
+    let matching_output = to_solc_standard_json_output(&matching.stdout);
+    assert_no_errors(&matching_output);
+    assert!(bytecode_object(
+        &matching_output,
+        TRANSIENT_COUNTER_SOURCE_PATH,
+        TRANSIENT_COUNTER_CONTRACT_NAME
+    )
+    .starts_with(PVM_BLOB_START));
+}
+
+/// Settings with an omitted or empty optimizer compile.
+#[test]
+fn optimizer_input_setting_omitted() {
+    for path in [
+        STANDARD_JSON_NO_OPTIMIZER_PATH,
+        STANDARD_JSON_EMPTY_OPTIMIZER_PATH,
+    ] {
+        let result = execute_resolc_with_stdin_input(&[JSON_OPTION], path);
+        assert_command_success(&result, path);
+        let output = to_solc_standard_json_output(&result.stdout);
+        assert_no_errors(&output);
+        assert!(bytecode_object(
+            &output,
+            TRANSIENT_COUNTER_SOURCE_PATH,
+            TRANSIENT_COUNTER_CONTRACT_NAME
+        )
+        .starts_with(PVM_BLOB_START));
+    }
+}
+
+/// The transient storage layout output is passed through from solc.
+#[test]
+fn transient_storage_layout_requested() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_TRANSIENT_STORAGE_LAYOUT_PATH,
+    );
+    assert_command_success(&result, "requesting the transient storage layout");
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_no_errors(&output);
+
+    let contract = output
+        .contracts
+        .get(TRANSIENT_COUNTER_SOURCE_PATH)
+        .and_then(|file| file.get(TRANSIENT_COUNTER_CONTRACT_NAME))
+        .expect("the transient counter contract should exist");
+    let storage_label = contract
+        .transient_storage_layout
+        .get("storage")
+        .and_then(|storage| storage.get(0))
+        .and_then(|slot| slot.get("label"))
+        .and_then(|label| label.as_str());
+    assert_eq!(storage_label, Some("counter"));
 }

@@ -174,14 +174,12 @@ impl<'ctx> Function<'ctx> {
         declaration: Declaration<'ctx>,
         optimizer: &Optimizer,
     ) {
-        if optimizer.settings().level_middle_end_size == SizeLevel::Z {
-            Self::set_attributes(
-                llvm,
-                declaration,
-                &[Attribute::OptimizeForSize, Attribute::MinSize],
-                false,
-            );
-        }
+        let size_attributes: &[Attribute] = match optimizer.settings().level_middle_end_size {
+            SizeLevel::Zero => &[],
+            SizeLevel::S => &[Attribute::OptimizeForSize],
+            SizeLevel::Z => &[Attribute::OptimizeForSize, Attribute::MinSize],
+        };
+        Self::set_attributes(llvm, declaration, size_attributes, false);
 
         // `NoFree` and `NoUnwind` are facts about the PVM target, not optimization heuristics:
         //   * PVM has no `free` (the heap is bump-allocated via `sbrk`), so no Solidity-emitted

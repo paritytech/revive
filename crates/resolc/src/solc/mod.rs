@@ -23,7 +23,7 @@ pub mod version;
 pub const FIRST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 0);
 
 /// The last supported version of `solc`.
-pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 37);
+pub const LAST_SUPPORTED_VERSION: semver::Version = semver::Version::new(0, 8, 38);
 
 /// The Solidity compiler.
 pub trait Compiler {
@@ -42,6 +42,10 @@ pub trait Compiler {
         &self,
         paths: &[PathBuf],
         selectors: HashSet<CombinedJsonSelector>,
+        base_path: Option<String>,
+        include_paths: Vec<String>,
+        allow_paths: Option<String>,
+        remappings: Vec<String>,
     ) -> anyhow::Result<CombinedJson>;
 
     /// Validates the Yul project as paths and libraries.
@@ -52,7 +56,7 @@ pub trait Compiler {
         messages: &mut Vec<SolcStandardJsonOutputError>,
     ) -> anyhow::Result<SolcStandardJsonOutput> {
         let mut solc_input =
-            SolcStandardJsonInput::from_yul_paths(paths, libraries, Default::default(), vec![]);
+            SolcStandardJsonInput::from_yul_paths(paths, libraries, Default::default(), vec![])?;
         self.validate_yul_standard_json(&mut solc_input, messages)
     }
 

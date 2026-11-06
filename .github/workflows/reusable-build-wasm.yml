@@ -79,7 +79,7 @@ jobs:
           # For nightly Wasm releases, this URI is currently broken (see https://github.com/paritytech/revive/issues/542).
           RELEASE_RESOLC_WASM_URI: ${{ inputs.is_release && format('https://github.com/paritytech/revive/releases/download/{0}/resolc.wasm', github.ref_name) || '' }}
         run: |
-          export LLVM_SYS_221_PREFIX=$PWD/llvm-${{ env.HOST_TARGET }}
+          export LLVM_SYS_231_PREFIX=$PWD/llvm-${{ env.HOST_TARGET }}
           export REVIVE_LLVM_TARGET_PREFIX=$PWD/llvm-${{ env.EMSCRIPTEN_TARGET }}
           source emsdk/emsdk_env.sh
           make install-wasm
@@ -101,7 +101,7 @@ jobs:
       - name: Basic Sanity Check
         run: |
           mkdir -p solc
-          curl -sSLo solc/soljson.js https://github.com/argotorg/solidity/releases/download/v0.8.37/soljson.js
+          curl -sSLo solc/soljson.js https://github.com/argotorg/solidity/releases/download/v0.8.38/soljson.js
           node -e "
           // Make sure to require './solc/soljson' and not 'solc/soljson' in order to use
           // the explicitly downloaded solc, rather than resolving an npm package potentially

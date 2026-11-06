@@ -2,12 +2,15 @@
 
 use std::collections::HashSet;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 
 use revive_common::deserialize_from_slice;
 use revive_solc_json_interface::combined_json::CombinedJson;
+use revive_solc_json_interface::standard_json::input::source::STDIN_PATH;
 use revive_solc_json_interface::CombinedJsonSelector;
 use revive_solc_json_interface::SolcStandardJsonInput;
+use revive_solc_json_interface::SolcStandardJsonInputSource;
 use revive_solc_json_interface::SolcStandardJsonOutput;
 use revive_solc_json_interface::SolcStandardJsonOutputError;
 
@@ -127,6 +130,10 @@ impl Compiler for SolcCompiler {
         &self,
         paths: &[PathBuf],
         mut selectors: HashSet<CombinedJsonSelector>,
+        base_path: Option<String>,
+        include_paths: Vec<String>,
+        allow_paths: Option<String>,
+        remappings: Vec<String>,
     ) -> anyhow::Result<CombinedJson> {
         selectors.retain(|selector| selector.is_source_solc());
         if selectors.is_empty() {
@@ -139,7 +146,18 @@ impl Compiler for SolcCompiler {
         let mut command = std::process::Command::new(executable.as_str());
         command.stdout(std::process::Stdio::piped());
         command.stderr(std::process::Stdio::piped());
-        command.args(paths);
+        for include_path in include_paths.into_iter() {
+            command.arg("--include-path");
+            command.arg(include_path);
+        }
+        if let Some(base_path) = base_path {
+            command.arg("--base-path");
+            command.arg(base_path);
+        }
+        if let Some(allow_paths) = allow_paths {
+            command.arg("--allow-paths");
+            command.arg(allow_paths);
+        }
         command.arg("--combined-json");
         command.arg(
             selectors
@@ -148,10 +166,28 @@ impl Compiler for SolcCompiler {
                 .collect::<Vec<String>>()
                 .join(","),
         );
+        command.arg("--");
+        command.args(remappings);
+        command.args(paths);
 
-        let process = command
+        let stdin_source = if paths.iter().any(|path| path.as_os_str() == STDIN_PATH) {
+            command.stdin(std::process::Stdio::piped());
+            SolcStandardJsonInputSource::try_read(Path::new(STDIN_PATH))?.take_content()
+        } else {
+            None
+        };
+
+        let mut process = command
             .spawn()
             .map_err(|error| anyhow::anyhow!("{executable} subprocess spawning: {error:?}"))?;
+        if let Some(stdin_source) = stdin_source {
+            process
+                .stdin
+                .take()
+                .ok_or_else(|| anyhow::anyhow!("{executable} stdin getting error"))?
+                .write_all(stdin_source.as_bytes())
+                .map_err(|error| anyhow::anyhow!("{executable} stdin writing: {error:?}"))?;
+        }
 
         let result = process.wait_with_output().map_err(|error| {
             anyhow::anyhow!("{} subprocess output reading: {error:?}", self.executable)

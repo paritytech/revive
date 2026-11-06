@@ -20,6 +20,8 @@ use crate::standard_json::input::settings::optimizer::Optimizer as SolcStandardJ
 #[cfg(feature = "resolc")]
 use crate::standard_json::input::settings::selection::Selection as SolcStandardJsonInputSettingsSelection;
 #[cfg(feature = "resolc")]
+use crate::SolcStandardJsonInputSettingsDebug;
+#[cfg(feature = "resolc")]
 use crate::SolcStandardJsonInputSettingsLibraries;
 #[cfg(feature = "resolc")]
 use crate::SolcStandardJsonInputSettingsPolkaVM;
@@ -71,18 +73,23 @@ impl Input {
         evm_version: Option<revive_common::EVMVersion>,
         paths: &[PathBuf],
         libraries: &[String],
-        remappings: BTreeSet<String>,
+        remappings: Vec<String>,
         output_selection: SolcStandardJsonInputSettingsSelection,
         optimizer: SolcStandardJsonInputSettingsOptimizer,
         metadata: SolcStandardJsonInputSettingsMetadata,
+        debug: Option<SolcStandardJsonInputSettingsDebug>,
         suppressed_warnings: Vec<Warning>,
         polkavm: SolcStandardJsonInputSettingsPolkaVM,
         llvm_arguments: Vec<String>,
         detect_missing_libraries: bool,
     ) -> anyhow::Result<Self> {
         let mut paths: BTreeSet<PathBuf> = paths.iter().cloned().collect();
+        let reads_stdin = paths.contains(Path::new(self::source::STDIN_PATH));
         let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
         for library_file in libraries.as_inner().keys() {
+            if reads_stdin && library_file == self::source::STDIN_SOURCE_NAME {
+                continue;
+            }
             paths.insert(PathBuf::from(library_file));
         }
 
@@ -94,7 +101,7 @@ impl Input {
         let sources = iter
             .map(|path| {
                 let source = Source::try_read(path.as_path())?;
-                Ok((path.to_string_lossy().to_string(), source))
+                Ok((Source::name(path.as_path()), source))
             })
             .collect::<anyhow::Result<BTreeMap<String, Source>>>()?;
 
@@ -106,6 +113,7 @@ impl Input {
             output_selection,
             optimizer,
             metadata,
+            debug,
             suppressed_warnings,
             polkavm,
             llvm_arguments,
@@ -119,10 +127,11 @@ impl Input {
         evm_version: Option<revive_common::EVMVersion>,
         sources: BTreeMap<String, Source>,
         libraries: SolcStandardJsonInputSettingsLibraries,
-        remappings: BTreeSet<String>,
+        remappings: Vec<String>,
         output_selection: SolcStandardJsonInputSettingsSelection,
         optimizer: SolcStandardJsonInputSettingsOptimizer,
         metadata: SolcStandardJsonInputSettingsMetadata,
+        debug: Option<SolcStandardJsonInputSettingsDebug>,
         suppressed_warnings: Vec<Warning>,
         polkavm: SolcStandardJsonInputSettingsPolkaVM,
         llvm_arguments: Vec<String>,
@@ -138,6 +147,7 @@ impl Input {
                 output_selection,
                 optimizer,
                 metadata,
+                debug,
                 polkavm,
                 suppressed_warnings.clone(),
                 llvm_arguments,
@@ -153,17 +163,24 @@ impl Input {
         libraries: SolcStandardJsonInputSettingsLibraries,
         optimizer: SolcStandardJsonInputSettingsOptimizer,
         llvm_options: Vec<String>,
-    ) -> Self {
+    ) -> anyhow::Result<Self> {
         let sources = paths
             .iter()
             .map(|path| {
-                (
-                    path.to_string_lossy().to_string(),
-                    Source::from(path.as_path()),
-                )
+                let source = if path.as_os_str() == self::source::STDIN_PATH {
+                    Source::try_read(path.as_path())?
+                } else {
+                    Source::from(path.as_path())
+                };
+                Ok((Source::name(path.as_path()), source))
             })
-            .collect();
-        Self::from_yul_sources(sources, libraries, optimizer, llvm_options)
+            .collect::<anyhow::Result<BTreeMap<String, Source>>>()?;
+        Ok(Self::from_yul_sources(
+            sources,
+            libraries,
+            optimizer,
+            llvm_options,
+        ))
     }
 
     /// A shortcut constructor from Yul source code.
@@ -185,6 +202,7 @@ impl Input {
                 output_selection,
                 optimizer,
                 Default::default(),
+                None,
                 Default::default(),
                 vec![],
                 llvm_arguments,

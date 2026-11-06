@@ -1,19 +1,20 @@
 //! The `solc --standard-json` input settings.
 
+pub mod debug;
 pub mod libraries;
 pub mod metadata;
 pub mod metadata_hash;
 pub mod optimizer;
 pub mod polkavm;
+pub mod revert_strings;
 pub mod selection;
 #[cfg(feature = "resolc")]
 pub mod warning;
 
-use std::collections::BTreeSet;
-
 use serde::Deserialize;
 use serde::Serialize;
 
+use self::debug::Debug;
 use self::libraries::Libraries;
 use self::metadata::Metadata;
 use self::optimizer::Optimizer;
@@ -32,9 +33,9 @@ pub struct Settings {
     /// The linker library addresses.
     #[serde(default, skip_serializing_if = "Libraries::is_empty")]
     pub libraries: Libraries,
-    /// The sorted list of remappings.
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub remappings: BTreeSet<String>,
+    /// The list of remappings, in the order given.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remappings: Vec<String>,
     /// The output selection filters.
     #[serde(default)]
     pub output_selection: Selection,
@@ -46,10 +47,14 @@ pub struct Settings {
     )]
     pub via_ir: Option<bool>,
     /// The optimizer settings.
-    pub optimizer: Optimizer,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub optimizer: Option<Optimizer>,
     /// The metadata settings.
     #[serde(default)]
     pub metadata: Metadata,
+    /// The debugging settings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub debug: Option<Debug>,
     /// The resolc custom PolkaVM settings.
     #[serde(default, skip_serializing)]
     pub polkavm: PolkaVM,
@@ -76,10 +81,11 @@ impl Settings {
     pub fn new(
         evm_version: Option<revive_common::EVMVersion>,
         libraries: Libraries,
-        remappings: BTreeSet<String>,
+        remappings: Vec<String>,
         output_selection: Selection,
         optimizer: Optimizer,
         metadata: Metadata,
+        debug: Option<Debug>,
         polkavm: PolkaVM,
         suppressed_warnings: Vec<Warning>,
         llvm_arguments: Vec<String>,
@@ -90,9 +96,10 @@ impl Settings {
             libraries,
             remappings,
             output_selection,
-            optimizer,
+            optimizer: Some(optimizer),
             metadata,
             via_ir: Some(true),
+            debug,
             polkavm,
             suppressed_warnings,
             llvm_arguments,

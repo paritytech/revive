@@ -68,6 +68,10 @@ impl Project {
     }
 
     /// Compiles all contracts, returning their build artifacts.
+    ///
+    /// Every nested object other than the `_deployed` runtime code is taken for a contract the
+    /// enclosing one deploys, so it has to be compiled as a contract of its own. A contract with
+    /// a nested object that is not one is reported as an error.
     pub fn compile(
         self,
         messages: &mut Vec<SolcStandardJsonOutputError>,
@@ -77,7 +81,9 @@ impl Project {
         llvm_arguments: &[String],
         memory_config: SolcStandardJsonInputSettingsPolkaVMMemory,
     ) -> anyhow::Result<Build> {
-        let deployed_libraries = self.libraries.as_paths();
+        let missing_libraries = self
+            .get_missing_libraries(&self.libraries.as_paths())
+            .contract_libraries;
 
         #[cfg(feature = "parallel")]
         let iter = self.contracts.into_par_iter();
@@ -86,18 +92,39 @@ impl Project {
 
         let results = iter
             .map(|(path, mut contract)| {
-                let factory_dependencies = contract
-                    .ir
-                    .drain_factory_dependencies()
+                let dependencies = contract.ir.drain_factory_dependencies();
+                let unresolved = dependencies
+                    .iter()
+                    .filter(|identifier| !self.identifier_paths.contains_key(*identifier))
+                    .cloned()
+                    .collect::<Vec<String>>();
+                if !unresolved.is_empty() {
+                    let error = SolcStandardJsonOutputError::new_error(
+                        format!(
+                            "{path}: the nested object(s) `{}` are not contracts. `resolc` treats \
+                             every nested Yul object other than the `_deployed` runtime code as a \
+                             contract to deploy, and does not support nested objects of any other \
+                             kind.",
+                            unresolved.join("`, `"),
+                        ),
+                        None,
+                        None,
+                    );
+                    return (path, Err(error));
+                }
+                let factory_dependencies = dependencies
                     .iter()
                     .map(|identifier| {
                         self.identifier_paths
                             .get(identifier)
                             .cloned()
-                            .expect("Always exists")
+                            .expect("checked above")
                     })
                     .collect();
-                let missing_libraries = contract.get_missing_libraries(&deployed_libraries);
+                let missing_libraries = missing_libraries
+                    .get(path.as_str())
+                    .cloned()
+                    .expect("Always exists");
                 let input = ProcessInput::new(
                     contract,
                     self.version.clone(),
@@ -128,15 +155,32 @@ impl Project {
     }
 
     /// Get the list of missing deployable libraries.
+    ///
+    /// The libraries of the factory dependencies are included transitively.
     pub fn get_missing_libraries(&self, deployed_libraries: &BTreeSet<String>) -> MissingLibraries {
         let missing_libraries = self
             .contracts
-            .iter()
-            .map(|(path, contract)| {
-                (
-                    path.to_owned(),
-                    contract.get_missing_libraries(deployed_libraries),
-                )
+            .keys()
+            .map(|path| {
+                let mut libraries = BTreeSet::new();
+                let mut visited = BTreeSet::new();
+                let mut pending = vec![path.as_str()];
+                while let Some(path) = pending.pop() {
+                    if !visited.insert(path) {
+                        continue;
+                    }
+                    let contract = self.contracts.get(path).expect("Always exists");
+                    libraries.extend(contract.get_missing_libraries(deployed_libraries));
+                    pending.extend(
+                        contract
+                            .ir
+                            .factory_dependencies()
+                            .iter()
+                            .filter_map(|identifier| self.identifier_paths.get(identifier))
+                            .map(String::as_str),
+                    );
+                }
+                (path.to_owned(), libraries)
             })
             .collect();
         MissingLibraries::new(missing_libraries)
@@ -158,7 +202,7 @@ impl Project {
             .iter()
             .map(|path| {
                 let source = SolcStandardJsonInputSource::from(path.as_path());
-                (path.to_string_lossy().to_string(), source)
+                (SolcStandardJsonInputSource::name(path.as_path()), source)
             })
             .collect::<BTreeMap<String, SolcStandardJsonInputSource>>();
         Self::try_from_yul_sources(sources, libraries, solc_output, debug_config, use_newyork)

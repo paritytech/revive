@@ -14,7 +14,7 @@ env:
   # The compiler modes allowed to run during e2e test execution by retester.
   # E.g. this can be updated to allow only `"Y, NY Mz S+"` (all Yul modes + newyork with -Oz and solc optimizer enabled).
   E2E_ALLOWED_MODES: "Y, NY"
-  SOLC_VERSION: "0.8.37"
+  SOLC_VERSION: "0.8.38"
 
 jobs:
   build-linux:
@@ -77,9 +77,11 @@ jobs:
     steps:
       # For some deeply nested contracts in `resolc-compiler-tests`, Windows
       # will generate a "Filename too long" error. This step enables long paths.
-      - name: Enable Git Long Paths (Windows)
+      - name: Configure Git (Windows)
         if: ${{ runner.os == 'Windows' }}
-        run: git config --system core.longpaths true
+        run: |
+          git config --system core.longpaths true
+          git config --system core.autocrlf false
 
       - name: Checkout revive
         uses: actions/checkout@v6
@@ -156,8 +158,8 @@ jobs:
       # Commit SHA that produced the polkadot-sdk crate pinned in Cargo.toml,
       # obtained from the crate's .cargo_vcs_info.json via:
       # curl -sL -A "user-agent" https://crates.io/api/v1/crates/polkadot-sdk/<VERSION>/download | tar xzO polkadot-sdk-<VERSION>/.cargo_vcs_info.json
-      # Current version: 2604.2.0
-      POLKADOT_SDK_REF: "54095b130013902aaaa33a69dbbf980144764afb"
+      # Current version: 2609.0.0
+      POLKADOT_SDK_REF: "a4150438b8027b94f712f29e3c014239a7f1a362"
       RUSTFLAGS: "-Awarnings"
     steps:
       - name: Checkout revive

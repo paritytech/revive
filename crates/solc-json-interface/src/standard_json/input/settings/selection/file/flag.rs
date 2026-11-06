@@ -24,6 +24,9 @@ pub enum Flag {
     /// The storage layout.
     #[serde(rename = "storageLayout")]
     StorageLayout,
+    /// The transient storage layout.
+    #[serde(rename = "transientStorageLayout")]
+    TransientStorageLayout,
     /// The AST JSON.
     #[serde(rename = "ast")]
     AST,
@@ -58,6 +61,7 @@ impl Flag {
             Self::Userdoc,
             Self::MethodIdentifiers,
             Self::StorageLayout,
+            Self::TransientStorageLayout,
             Self::AST,
             Self::Yul,
             Self::EVM,

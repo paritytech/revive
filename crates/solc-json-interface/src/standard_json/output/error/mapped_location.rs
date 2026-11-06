@@ -63,24 +63,24 @@ impl<'a> MappedLocation<'a> {
         let start = source_location.start as usize;
         let end = source_location.end as usize;
 
-        let mut cursor = 1;
-        for (line, source_line) in source_code.lines().enumerate() {
-            let cursor_next = cursor + source_line.len() + 1;
+        let mut line_start = 0;
+        for (line, source_line) in source_code.split_inclusive('\n').enumerate() {
+            let line_end = line_start + source_line.len();
 
-            if cursor <= start && start <= cursor_next {
+            if start < line_end {
                 let line = line + 1;
-                let column = start - cursor;
+                let column = start - line_start + 1;
                 let length = end - start;
                 return Self::new_with_location(
                     source_location.file.to_owned(),
                     line,
                     column,
                     length,
-                    Some(source_line),
+                    Some(source_line.trim_end_matches(['\r', '\n'])),
                 );
             }
 
-            cursor = cursor_next;
+            line_start = line_end;
         }
 
         Self::new(source_location.file.to_owned())
@@ -102,12 +102,16 @@ impl std::fmt::Display for MappedLocation<'_> {
                     writeln!(f, "{} --> {path}", " ".repeat(line_number_length))?;
                     writeln!(f, " {} |", " ".repeat(line_number_length))?;
                     writeln!(f, " {line} | {source_code_line}")?;
+                    let caret_offset = column.saturating_sub(1);
                     writeln!(
                         f,
-                        " {} | {} {}",
+                        " {} | {}{}",
                         " ".repeat(line_number_length),
-                        " ".repeat(column),
-                        "^".repeat(std::cmp::min(length, source_code_line.len() - column))
+                        " ".repeat(caret_offset),
+                        "^".repeat(std::cmp::min(
+                            length,
+                            source_code_line.len().saturating_sub(caret_offset)
+                        ))
                     )?;
                 }
             }

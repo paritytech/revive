@@ -1,0 +1,31 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "a.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\ncontract A { function f() external pure returns (uint256) { return 1; } }"
+    },
+    "b.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\ncontract B { function g() external pure returns (uint256) { return 2; } }"
+    },
+    "c.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.28;\ncontract C { function h() external pure returns (uint256) { return 3; } }"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true
+    },
+    "outputSelection": {
+      "*": {
+        "*": ["evm.bytecode"],
+        "": ["ast"]
+      },
+      "a.sol": {
+        "*": ["abi"]
+      },
+      "c.sol": {
+        "*": ["metadata"]
+      }
+    }
+  }
+}

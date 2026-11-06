@@ -9,6 +9,7 @@ use std::rc::Rc;
 use inkwell::debug_info::AsDIScope;
 use inkwell::debug_info::DIScope;
 use inkwell::types::BasicType;
+use inkwell::values::AsValueRef;
 use inkwell::values::BasicValue;
 use inkwell::values::InstructionOpcode;
 use revive_solc_json_interface::PolkaVMDefaultHeapMemorySize;
@@ -216,6 +217,14 @@ impl<'ctx> Context<'ctx> {
 
     fn link_immutable_data(&self, contract_path: &str) -> anyhow::Result<()> {
         let size = self.solidity().immutables_size() as u32;
+        if size > revive_runtime_api::immutable_data::IMMUTABLE_DATA_MAX_SIZE {
+            anyhow::bail!(
+                "The contract `{}` immutable data size of {} bytes exceeds the limit of {} bytes",
+                contract_path,
+                size,
+                revive_runtime_api::immutable_data::IMMUTABLE_DATA_MAX_SIZE
+            );
+        }
         let immutables = revive_runtime_api::immutable_data::module(self.llvm(), size);
 
         self.module.link_in_module(immutables).map_err(|error| {
@@ -385,6 +394,10 @@ impl<'ctx> Context<'ctx> {
             )
         })?;
 
+        if let Some(metadata_hash) = metadata_hash.as_ref() {
+            self.embed_metadata_hash(metadata_hash.as_bytes());
+        }
+
         let buffer = target_machine
             .write_to_memory_buffer(self.module())
             .map_err(|error| {
@@ -405,6 +418,32 @@ impl<'ctx> Context<'ctx> {
                 .as_ref()
                 .map(|hash| hash.as_bytes().try_into().unwrap()),
         )
+    }
+
+    /// Embeds the `metadata_hash` into an excluded section of the contract object.
+    ///
+    /// Keeping the hash in the object rather than handing it to the linker directly
+    /// lets deploy time linking of an unlinked object emit it too.
+    fn embed_metadata_hash(&self, metadata_hash: &[u8]) {
+        let initializer = self.llvm.const_string(metadata_hash, false);
+        let global = self.module().add_global(
+            initializer.get_type(),
+            None,
+            crate::polkavm::GLOBAL_METADATA_HASH,
+        );
+        global.set_initializer(&initializer);
+        global.set_constant(true);
+        global.set_linkage(inkwell::module::Linkage::Private);
+        let section = std::ffi::CString::new(crate::polkavm::METADATA_HASH_SECTION)
+            .expect("the section name should not contain a null byte");
+        unsafe {
+            inkwell::llvm_sys::core::LLVMSetSection(global.as_value_ref(), section.as_ptr());
+        }
+        global.set_metadata(
+            self.llvm.metadata_node(&[]),
+            self.llvm
+                .get_kind_id(crate::polkavm::LLVM_METADATA_KIND_EXCLUDE),
+        );
     }
 
     /// Verifies the current LLVM IR module.

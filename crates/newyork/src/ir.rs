@@ -349,10 +349,6 @@ pub enum Expression {
     ChainId,
     SelfBalance,
     BaseFee,
-    BlobHash {
-        index: Value,
-    },
-    BlobBaseFee,
     Gas,
     MSize,
     Address,
@@ -1495,7 +1491,6 @@ impl Expression {
             | Expression::ExtCodeHash { address }
             | Expression::Balance { address } => visit(address.id),
             Expression::BlockHash { number } => visit(number.id),
-            Expression::BlobHash { index } => visit(index.id),
             Expression::SLoad { key, .. } | Expression::TLoad { key } => visit(key.id),
             Expression::Call { arguments, .. } => {
                 for argument in arguments {
@@ -1534,7 +1529,6 @@ impl Expression {
             | Expression::ChainId
             | Expression::SelfBalance
             | Expression::BaseFee
-            | Expression::BlobBaseFee
             | Expression::Gas
             | Expression::MSize
             | Expression::Address
@@ -1566,7 +1560,6 @@ impl Expression {
             | Expression::ExtCodeHash { address }
             | Expression::Balance { address } => visit(&mut address.id),
             Expression::BlockHash { number } => visit(&mut number.id),
-            Expression::BlobHash { index } => visit(&mut index.id),
             Expression::SLoad { key, .. } | Expression::TLoad { key } => visit(&mut key.id),
             Expression::Call { arguments, .. } => {
                 for argument in arguments {
@@ -1605,7 +1598,6 @@ impl Expression {
             | Expression::ChainId
             | Expression::SelfBalance
             | Expression::BaseFee
-            | Expression::BlobBaseFee
             | Expression::Gas
             | Expression::MSize
             | Expression::Address

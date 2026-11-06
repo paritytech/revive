@@ -3,8 +3,12 @@
 use revive_solc_json_interface::{combined_json::CombinedJson, CombinedJsonInvalidSelectorMessage};
 
 use crate::cli_utils::{
-    assert_command_failure, assert_command_success, assert_equal_exit_codes, execute_resolc,
-    execute_solc, SOLIDITY_CONTRACT_PATH, YUL_CONTRACT_PATH,
+    absolute_path, assert_command_failure, assert_command_success, assert_equal_exit_codes,
+    execute_resolc, execute_resolc_in_directory, execute_resolc_with_stdin_input, execute_solc,
+    DASH_SOURCE_NAMES, PVM_BLOB_START, SOLIDITY_CONTRACT_PATH, SOLIDITY_INCLUDED_IMPORT_PATH,
+    SOLIDITY_REMAPPED_IMPORT_PATH, SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY,
+    SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH, SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY,
+    SOLIDITY_TWO_CONTRACTS_PATH, YUL_CONTRACT_PATH,
 };
 use crate::ResolcVersion;
 
@@ -137,4 +141,151 @@ fn populates_output_metadata_fields() {
         !combined_json.version.is_empty(),
         "Combined JSON output should populate `version`"
     );
+}
+
+/// Asserts that resolc and solc both emit `expected` contracts for `arguments`.
+fn assert_combined_json_contracts(arguments: &[&str], expected: &[&str]) {
+    let resolc_result = execute_resolc(arguments);
+    assert_command_success(&resolc_result, "Compiling with combined JSON");
+
+    let combined_json: CombinedJson = serde_json::from_str(&resolc_result.stdout)
+        .expect("Combined JSON output should deserialize");
+    let contracts = combined_json
+        .contracts
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    assert_eq!(contracts, expected);
+
+    let solc_result = execute_solc(arguments);
+    assert_equal_exit_codes(&solc_result, &resolc_result);
+}
+
+#[test]
+fn resolves_imports_with_remappings() {
+    let arguments = &[
+        "@solidity/=src/tests/data/solidity/",
+        SOLIDITY_REMAPPED_IMPORT_PATH,
+        JSON_OPTION,
+        "abi,bin",
+    ];
+    assert_combined_json_contracts(
+        arguments,
+        &[
+            "src/tests/data/solidity/contract.sol:C",
+            "src/tests/data/solidity/remapped_import.sol:U",
+        ],
+    );
+}
+
+/// The last of two remappings for the same prefix wins, as in solc.
+#[test]
+fn remappings_last_one_wins() {
+    let first_remapping = format!("target/={SOLIDITY_REMAPPINGS_ORDER_FIRST_DIRECTORY}");
+    let second_remapping = format!("target/={SOLIDITY_REMAPPINGS_ORDER_SECOND_DIRECTORY}");
+    let arguments = &[
+        first_remapping.as_str(),
+        second_remapping.as_str(),
+        SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH,
+        JSON_OPTION,
+        "abi",
+    ];
+    let result = execute_resolc(arguments);
+    assert_command_success(&result, "Compiling with combined JSON");
+
+    let combined_json: CombinedJson =
+        serde_json::from_str(&result.stdout).expect("Combined JSON output should deserialize");
+    let main = &combined_json.contracts[&format!("{SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH}:Main")];
+    assert_eq!(main.abi[0]["name"], "second");
+}
+
+#[test]
+fn resolves_imports_with_base_and_include_paths() {
+    let arguments = &[
+        SOLIDITY_INCLUDED_IMPORT_PATH,
+        "--base-path",
+        ".",
+        "--include-path",
+        "src/tests/data",
+        JSON_OPTION,
+        "abi,bin",
+    ];
+    assert_combined_json_contracts(
+        arguments,
+        &[
+            "solidity/contract.sol:C",
+            "src/tests/data/solidity/included_import.sol:U",
+        ],
+    );
+}
+
+/// Contracts in a source whose path contains a colon keep their own entries.
+#[test]
+fn keeps_contracts_of_source_path_with_colon_apart() {
+    const SOURCE_PATH_WITH_COLON: &str = "directory:file.sol";
+
+    let directory = tempfile::tempdir().unwrap();
+    std::fs::copy(
+        SOLIDITY_TWO_CONTRACTS_PATH,
+        directory.path().join(SOURCE_PATH_WITH_COLON),
+    )
+    .unwrap();
+
+    let result = execute_resolc_in_directory(
+        &[SOURCE_PATH_WITH_COLON, JSON_OPTION, "bin"],
+        directory.path(),
+    );
+    assert_command_success(&result, "Compiling a source path with a colon");
+
+    let combined_json: serde_json::Value =
+        serde_json::from_str(&result.stdout).expect("Combined JSON output should deserialize");
+    let bytecode = |name: &str| {
+        combined_json["contracts"][format!("{SOURCE_PATH_WITH_COLON}:{name}")]["bin"]
+            .as_str()
+            .unwrap_or_else(|| panic!("Combined JSON output should contain `{name}` bytecode"))
+            .to_owned()
+    };
+    let first = bytecode("First");
+    let second = bytecode("Second");
+    assert!(!first.is_empty() && !second.is_empty());
+    assert_ne!(first, second);
+}
+
+/// Asserts that the combined JSON `stdout` contains the bytecode of the `contract`.
+fn assert_contract_bytecode(stdout: &str, contract: &str) {
+    let combined_json: serde_json::Value = serde_json::from_str(stdout).unwrap();
+    let bytecode = combined_json["contracts"][contract]["bin"].as_str();
+    assert!(
+        bytecode.is_some_and(|bytecode| bytecode.starts_with(PVM_BLOB_START)),
+        "expected bytecode for `{contract}` in the output: {stdout}"
+    );
+}
+
+/// Sources whose names start with a dash compile in the combined JSON mode.
+#[test]
+fn compiles_dash_source_names() {
+    let directory = tempfile::tempdir().unwrap();
+    for name in DASH_SOURCE_NAMES {
+        std::fs::copy(
+            absolute_path(SOLIDITY_CONTRACT_PATH),
+            directory.path().join(name),
+        )
+        .unwrap();
+
+        let result =
+            execute_resolc_in_directory(&[JSON_OPTION, "abi,bin", "--", name], directory.path());
+        assert_command_success(&result, "Compiling a source name starting with a dash");
+        assert_contract_bytecode(&result.stdout, &format!("{name}:C"));
+    }
+}
+
+/// A source read from the standard input compiles to bytecode in the combined JSON mode.
+#[test]
+fn compiles_stdin_source() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION, "abi,bin", "-"],
+        &absolute_path(SOLIDITY_CONTRACT_PATH),
+    );
+    assert_command_success(&result, "Compiling the standard input");
+    assert_contract_bytecode(&result.stdout, "<stdin>:C");
 }

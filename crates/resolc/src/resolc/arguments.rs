@@ -1,18 +1,19 @@
 //! Solidity to PolkaVM compiler arguments.
 
-use std::collections::BTreeSet;
 use std::path::Path;
 use std::path::PathBuf;
 
 use clap::{parser::ValueSource, ArgMatches, CommandFactory, Parser};
 use path_slash::PathExt;
 use revive_common::MetadataHash;
+use revive_solc_json_interface::standard_json::input::source::{STDIN_PATH, STDIN_SOURCE_NAME};
 use revive_solc_json_interface::{
-    PolkaVMDefaultHeapMemorySize, PolkaVMDefaultStackMemorySize, SolcStandardJsonOutputError,
+    PolkaVMDefaultHeapMemorySize, PolkaVMDefaultStackMemorySize,
+    SolcStandardJsonInputSettingsRevertStrings, SolcStandardJsonOutputError,
 };
 
-/// Compiles the provided Solidity input files (or use the standard input if no files
-/// are given or "-" is specified as a file name). Outputs the components based on the
+/// Compiles the provided input files (or uses the standard input if
+/// "-" is specified as a file name). Outputs the components based on the
 /// chosen options, either to the standard output or to files within the designated
 /// output directory.
 /// Example: resolc ERC20.sol -O3 --bin --output-dir './build/'
@@ -88,6 +89,11 @@ pub struct Arguments {
     /// See https://github.com/paritytech/revive/blob/main/crates/common/src/evm_version.rs for reference.
     #[arg(long = "evm-version")]
     pub evm_version: Option<String>,
+
+    /// Strip revert and require reason strings or add additional debugging information.
+    /// Available arguments: `default`, `strip`, `debug`.
+    #[arg(long = "revert-strings")]
+    pub revert_strings: Option<SolcStandardJsonInputSettingsRevertStrings>,
 
     /// Specify addresses of deployable libraries. Syntax: `<libraryName>=<address> [, or whitespace] ...`.
     /// Addresses are interpreted as hexadecimal strings prefixed with `0x`.
@@ -267,6 +273,20 @@ impl Arguments {
             ));
         }
 
+        if !self.link
+            && self.inputs.iter().any(|input| input.trim() == STDIN_PATH)
+            && self
+                .inputs
+                .iter()
+                .any(|input| input.trim() == STDIN_SOURCE_NAME)
+        {
+            messages.push(SolcStandardJsonOutputError::new_error(
+                format!("The file `{STDIN_SOURCE_NAME}` cannot be compiled together with the standard input `{STDIN_PATH}`, which has the same source name."),
+                None,
+                None,
+            ));
+        }
+
         if self.yul && !self.libraries.is_empty() {
             messages.push(SolcStandardJsonOutputError::new_error(
                 "Libraries are not supported in Yul and linker modes.",
@@ -300,6 +320,13 @@ impl Arguments {
             if self.evm_version.is_some() {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "`evm-version` is not used in Yul and linker modes.",
+                    None,
+                    None,
+                ));
+            }
+            if self.revert_strings.is_some() {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "`revert-strings` is not used in Yul and linker modes.",
                     None,
                     None,
                 ));
@@ -347,6 +374,13 @@ impl Arguments {
             if self.evm_version.is_some() {
                 messages.push(SolcStandardJsonOutputError::new_error(
                     "EVM version must be passed via standard JSON input.",
+                    None,
+                    None,
+                ));
+            }
+            if self.revert_strings.is_some() {
+                messages.push(SolcStandardJsonOutputError::new_error(
+                    "Revert strings mode must be specified in standard JSON input debug settings.",
                     None,
                     None,
                 ));
@@ -442,11 +476,9 @@ impl Arguments {
     }
 
     /// Returns remappings from input paths.
-    pub fn split_input_files_and_remappings(
-        &self,
-    ) -> anyhow::Result<(Vec<PathBuf>, BTreeSet<String>)> {
+    pub fn split_input_files_and_remappings(&self) -> anyhow::Result<(Vec<PathBuf>, Vec<String>)> {
         let mut input_files = Vec::with_capacity(self.inputs.len());
-        let mut remappings = BTreeSet::new();
+        let mut remappings = Vec::new();
 
         for input in self.inputs.iter() {
             if input.contains('=') {
@@ -465,7 +497,7 @@ impl Arguments {
                         input
                     );
                 }
-                remappings.insert(parts.join("="));
+                remappings.push(parts.join("="));
             } else {
                 let path = PathBuf::from(input.trim());
                 let path = Self::path_to_posix(path.as_path())?;

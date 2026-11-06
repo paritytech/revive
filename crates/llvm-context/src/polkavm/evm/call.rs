@@ -158,13 +158,14 @@ pub fn linker_symbol<'ctx>(
     context: &mut Context<'ctx>,
     path: &str,
 ) -> anyhow::Result<inkwell::values::BasicValueEnum<'ctx>> {
+    let symbol_name = crate::polkavm::library_address_symbol(path);
     context.declare_global(
-        path,
+        &symbol_name,
         context.integer_type(revive_common::BIT_LENGTH_ETH_ADDRESS),
         Default::default(),
     );
 
-    let symbol = context.get_global(path)?;
+    let symbol = context.get_global(&symbol_name)?;
     let value = context.build_load(symbol.into(), path)?;
     let value = context.builder().build_int_z_extend(
         value.into_int_value(),

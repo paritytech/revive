@@ -1,0 +1,19 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "C.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\ncontract C { function h(uint256 x) external pure returns (uint256) { require(x > 1, \"too small\"); return x; } }"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "mode": "z"
+    },
+    "outputSelection": {
+      "*": {
+        "*": ["irOptimized"]
+      }
+    }
+  }
+}

@@ -94,24 +94,26 @@ impl FunctionCall {
         })
     }
 
+    /// Returns the library path of a `linkersymbol` call, decoded from its string literal.
+    pub fn linker_symbol_path(&self) -> anyhow::Result<String> {
+        match self.arguments.first() {
+            Some(Expression::Literal(Literal {
+                inner: LexicalLiteral::String(path),
+                ..
+            })) => path
+                .unescape()
+                .map_err(|error| anyhow::anyhow!("{} {error}", self.location)),
+            _ => anyhow::bail!("{} Linker symbol literal is missing", self.location),
+        }
+    }
+
     /// Get the list of missing deployable libraries.
     pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         let mut libraries = BTreeSet::new();
 
         if let Name::LinkerSymbol = self.name {
-            let _argument = self.arguments.first().expect("Always exists");
-            if let Expression::Literal(Literal {
-                inner: LexicalLiteral::String(library_path),
-                ..
-            }) = self.arguments.first().expect("Always exists")
-            {
-                libraries.insert(
-                    library_path
-                        .unescape()
-                        .unwrap_or_else(|_| library_path.to_string()),
-                );
-            }
-            return libraries;
+            // A malformed literal is reported by the code generation, which rejects it.
+            return self.linker_symbol_path().into_iter().collect();
         }
 
         for argument in self.arguments.iter() {
@@ -886,13 +888,7 @@ impl FunctionCall {
             }
 
             Name::LinkerSymbol => {
-                let path = match self.arguments.first() {
-                    Some(Expression::Literal(Literal {
-                        inner: LexicalLiteral::String(path),
-                        ..
-                    })) => path.unescape()?,
-                    _ => anyhow::bail!("{} Linker symbol literal is missing", location),
-                };
+                let path = self.linker_symbol_path()?;
                 revive_llvm_context::polkavm_evm_call::linker_symbol(context, &path).map(Some)
             }
             Name::MemoryGuard => {

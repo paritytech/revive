@@ -456,19 +456,9 @@ impl YulTranslator {
                 ));
             }
             FunctionName::LinkerSymbol => {
-                let path = match call.arguments.first() {
-                    Some(YulExpression::Literal(YulLiteral {
-                        inner: LexicalLiteral::String(path),
-                        ..
-                    })) => path
-                        .unescape()
-                        .map_err(|error| TranslationError::InvalidLiteral(error.to_string()))?,
-                    _ => {
-                        return Err(TranslationError::Unsupported(
-                            "Expected string literal argument".to_string(),
-                        ))
-                    }
-                };
+                let path = call
+                    .linker_symbol_path()
+                    .map_err(|error| TranslationError::InvalidLiteral(error.to_string()))?;
                 return Ok((vec![], Expression::LinkerSymbol { path }));
             }
             _ => {}

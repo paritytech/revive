@@ -14,7 +14,8 @@ use crate::cli_utils::{
     STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH, STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH,
     STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH, STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
     STANDARD_JSON_LIBRARY_ESCAPED_PATH, STANDARD_JSON_LIBRARY_ESCAPED_PATH_NEWYORK,
-    STANDARD_JSON_LIBRARY_ESCAPED_PATH_UNLINKED, STANDARD_JSON_METADATA_HASH_NONE_PATH,
+    STANDARD_JSON_LIBRARY_ESCAPED_PATH_UNLINKED, STANDARD_JSON_LIBRARY_LINE_BREAK_PATH_UNLINKED,
+    STANDARD_JSON_LIBRARY_NUL_PATH, STANDARD_JSON_METADATA_HASH_NONE_PATH,
     STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
     STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_OPTIMIZER_PATH,
@@ -723,6 +724,49 @@ fn reports_missing_library_with_escaped_path() {
     let contract = &output["contracts"]["ü.sol"]["C"];
     assert_eq!(contract["objectFormat"], "ELF");
     assert_eq!(contract["missingLibraries"], serde_json::json!(["ü.sol:L"]));
+}
+
+/// A missing library in a source file whose path contains a line break stays unlinked
+/// instead of failing to link.
+#[test]
+fn reports_missing_library_with_line_break_in_path() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_LIBRARY_LINE_BREAK_PATH_UNLINKED,
+    );
+    assert_command_success(&result, "The unlinked line break path input");
+
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    let contract = &output["contracts"]["a\nb.sol"]["C"];
+    assert_eq!(contract["objectFormat"], "ELF");
+    assert_eq!(
+        contract["missingLibraries"],
+        serde_json::json!(["a\nb.sol:L"])
+    );
+}
+
+/// Libraries whose paths only differ after a NUL get distinct linker symbols, so the
+/// address of one is not linked into a contract calling the other.
+#[test]
+fn keeps_libraries_with_nul_in_path_apart() {
+    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_LIBRARY_NUL_PATH);
+    assert_command_success(&result, "The NUL path input");
+
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    let linked = &output["contracts"]["x1.sol"]["X1"];
+    assert_eq!(linked["objectFormat"], "PVM");
+    assert_eq!(linked["missingLibraries"], serde_json::json!([]));
+
+    let unlinked = &output["contracts"]["x2.sol"]["X2"];
+    assert_eq!(unlinked["objectFormat"], "ELF");
+    assert_eq!(
+        unlinked["missingLibraries"],
+        serde_json::json!(["a\0c.sol:L"])
+    );
 }
 
 /// Extracts the optimized Yul IR of `path`/`name` from a standard JSON output.

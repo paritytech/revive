@@ -109,8 +109,26 @@ pub fn link(
 }
 
 /// Returns the linker symbol name of the library address at `path`.
+///
+/// The path is escaped the way solc escapes it in the `linkersymbol` literal, which
+/// keeps the symbol name printable ASCII: a NUL would cut the name short in LLVM and
+/// merge distinct libraries into one symbol, and a line break would split the polkavm
+/// linker's undefined symbol diagnostic over several lines. Unlinked objects emitted
+/// by earlier versions, which used the escaped literal verbatim, keep linking.
 pub fn library_address_symbol(path: &str) -> String {
-    format!("{GLOBAL_LIBRARY_ADDRESS_PREFIX}{path}")
+    let mut symbol = String::from(GLOBAL_LIBRARY_ADDRESS_PREFIX);
+    for byte in path.bytes() {
+        match byte {
+            b'\\' => symbol.push_str(r"\\"),
+            b'"' => symbol.push_str(r#"\""#),
+            b'\n' => symbol.push_str(r"\n"),
+            b'\r' => symbol.push_str(r"\r"),
+            b'\t' => symbol.push_str(r"\t"),
+            byte if byte.is_ascii_graphic() || byte == b' ' => symbol.push(char::from(byte)),
+            byte => symbol.push_str(&format!(r"\x{byte:02x}")),
+        }
+    }
+    symbol
 }
 
 /// The returned module defines given `linker_symbols` and `factory_dependencies` global values.
@@ -228,4 +246,29 @@ fn metadata_hash(bytecode: &[u8]) -> anyhow::Result<Option<Vec<u8>>> {
         }
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::library_address_symbol;
+    use super::GLOBAL_LIBRARY_ADDRESS_PREFIX;
+
+    /// The expected names are what solc prints in the `linkersymbol` literal of each path.
+    #[test]
+    fn library_address_symbol_escapes_like_solc() {
+        for (path, escaped) in [
+            ("a'b c.sol:L", "a'b c.sol:L"),
+            ("ü.sol:L", r"\xc3\xbc.sol:L"),
+            ("a\0b.sol:L", r"a\x00b.sol:L"),
+            ("a\x1b\x7fb.sol:L", r"a\x1b\x7fb.sol:L"),
+            ("a\nb\rc\td.sol:L", r"a\nb\rc\td.sol:L"),
+            (r#"a"b\c.sol:L"#, r#"a\"b\\c.sol:L"#),
+        ] {
+            assert_eq!(
+                library_address_symbol(path),
+                format!("{GLOBAL_LIBRARY_ADDRESS_PREFIX}{escaped}"),
+                "{path:?}"
+            );
+        }
+    }
 }

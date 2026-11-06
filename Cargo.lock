@@ -12616,6 +12616,7 @@ dependencies = [
  "revive-common",
  "revive-llvm-context",
  "serde",
+ "serde_json",
  "thiserror 2.0.21",
 ]
 

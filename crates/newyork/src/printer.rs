@@ -1145,7 +1145,8 @@ impl<'a> Printer<'a> {
             }
 
             Expression::LinkerSymbol { path } => {
-                let _ = write!(self.output, "linkersymbol(\"{}\")", path);
+                // The path is decoded, so it is quoted with escapes to keep the output readable.
+                let _ = write!(self.output, "linkersymbol({path:?})");
             }
         }
     }
@@ -1664,5 +1665,14 @@ mod tests {
         assert!(output.contains("object \"Test\""));
         assert!(output.contains("code {"));
         assert!(output.contains("let v0 := 0x0"));
+    }
+
+    /// A quote or line break in the decoded library path stays inside the quoted literal.
+    #[test]
+    fn linker_symbol_path_is_escaped() {
+        let output = print_expression(&Expression::LinkerSymbol {
+            path: "a\"b\nc.sol:L".to_string(),
+        });
+        assert_eq!(output, r#"linkersymbol("a\"b\nc.sol:L")"#);
     }
 }

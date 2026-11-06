@@ -200,6 +200,22 @@ pub const STANDARD_JSON_YUL_PVM_CODEGEN_PATH: &str =
 /// PVM bytecode generation and only validate the Yul.
 pub const STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/yul_no_pvm_codegen.json";
+/// A library in `ü.sol`, whose path solc escapes in `linkersymbol`, with the library address set.
+pub const STANDARD_JSON_LIBRARY_ESCAPED_PATH: &str =
+    "src/tests/data/standard_json/library_escaped_path.json";
+/// The same input as [`STANDARD_JSON_LIBRARY_ESCAPED_PATH`] compiled with the newyork pipeline.
+pub const STANDARD_JSON_LIBRARY_ESCAPED_PATH_NEWYORK: &str =
+    "src/tests/data/standard_json/library_escaped_path_newyork.json";
+/// The same source as [`STANDARD_JSON_LIBRARY_ESCAPED_PATH`] without the library address.
+pub const STANDARD_JSON_LIBRARY_ESCAPED_PATH_UNLINKED: &str =
+    "src/tests/data/standard_json/library_escaped_path_unlinked.json";
+/// A library in `a\nb.sol`, whose path contains a line break, without the library address.
+pub const STANDARD_JSON_LIBRARY_LINE_BREAK_PATH_UNLINKED: &str =
+    "src/tests/data/standard_json/library_line_break_path_unlinked.json";
+/// Two libraries in `a\0b.sol` and `a\0c.sol`, whose paths share the prefix before
+/// the NUL, with only the address of the first one set.
+pub const STANDARD_JSON_LIBRARY_NUL_PATH: &str =
+    "src/tests/data/standard_json/library_nul_path.json";
 /// The standard JSON input from paritytech/revive#623 with a heap size outside the PVM memory map.
 pub const STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH: &str =
     "src/tests/data/standard_json/heap_size_out_of_range.json";

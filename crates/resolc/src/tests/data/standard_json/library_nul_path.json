@@ -1,0 +1,39 @@
+{
+    "language": "Solidity",
+    "sources": {
+        "a\u0000b.sol": {
+            "content": "library L { function f(uint256 x) external pure returns (uint256) { return x * 3; } }\n"
+        },
+        "a\u0000c.sol": {
+            "content": "library L { function f(uint256 x) external pure returns (uint256) { return x * 5; } }\n"
+        },
+        "x1.sol": {
+            "content": "import {L} from \"a\\x00b.sol\";\ncontract X1 { function g(uint256 x) external pure returns (uint256) { return L.f(x); } }\n"
+        },
+        "x2.sol": {
+            "content": "import {L} from \"a\\x00c.sol\";\ncontract X2 { function g(uint256 x) external pure returns (uint256) { return L.f(x); } }\n"
+        }
+    },
+    "settings": {
+        "optimizer": {
+            "enabled": true
+        },
+        "libraries": {
+            "a\u0000b.sol": {
+                "L": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+            }
+        },
+        "outputSelection": {
+            "x1.sol": {
+                "*": [
+                    "evm.bytecode"
+                ]
+            },
+            "x2.sol": {
+                "*": [
+                    "evm.bytecode"
+                ]
+            }
+        }
+    }
+}

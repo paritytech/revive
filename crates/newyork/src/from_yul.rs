@@ -456,7 +456,9 @@ impl YulTranslator {
                 ));
             }
             FunctionName::LinkerSymbol => {
-                let path = self.extract_string_literal(&call.arguments)?;
+                let path = call
+                    .linker_symbol_path()
+                    .map_err(|error| TranslationError::InvalidLiteral(error.to_string()))?;
                 return Ok((vec![], Expression::LinkerSymbol { path }));
             }
             _ => {}

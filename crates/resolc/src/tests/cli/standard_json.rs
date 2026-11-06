@@ -16,19 +16,21 @@ use crate::cli_utils::{
     STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH,
     STANDARD_JSON_FACTORY_DEPENDENCY_PATH_COLLISION_PATH,
     STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH, STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH,
-    STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_METADATA_HASH_NONE_PATH,
-    STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH, STANDARD_JSON_NEWYORK_DISABLED_PATH,
-    STANDARD_JSON_NEWYORK_ENABLED_PATH, STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH,
-    STANDARD_JSON_NO_EVM_CODEGEN_PATH, STANDARD_JSON_NO_OPTIMIZER_PATH,
-    STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH,
-    STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH, STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH,
-    STANDARD_JSON_REMAPPINGS_ORDER_PATH, STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH,
-    STANDARD_JSON_REVERT_STRINGS_STRIP_PATH, STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH,
-    STANDARD_JSON_SOURCE_KECCAK256_MATCH_PATH, STANDARD_JSON_SOURCE_KECCAK256_MISMATCH_PATH,
-    STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH, STANDARD_JSON_TRANSIENT_STORAGE_LAYOUT_PATH,
-    STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH, STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH,
-    STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_PVM_CODEGEN_PATH,
-    STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH,
+    STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_LIBRARY_ESCAPED_PATH,
+    STANDARD_JSON_LIBRARY_ESCAPED_PATH_NEWYORK, STANDARD_JSON_LIBRARY_ESCAPED_PATH_UNLINKED,
+    STANDARD_JSON_LIBRARY_LINE_BREAK_PATH_UNLINKED, STANDARD_JSON_LIBRARY_NUL_PATH,
+    STANDARD_JSON_METADATA_HASH_NONE_PATH, STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH,
+    STANDARD_JSON_NEWYORK_DISABLED_PATH, STANDARD_JSON_NEWYORK_ENABLED_PATH,
+    STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
+    STANDARD_JSON_NO_OPTIMIZER_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
+    STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH,
+    STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_REMAPPINGS_ORDER_PATH,
+    STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH, STANDARD_JSON_REVERT_STRINGS_STRIP_PATH,
+    STANDARD_JSON_REVERT_STRINGS_VERBOSE_DEBUG_PATH, STANDARD_JSON_SOURCE_KECCAK256_MATCH_PATH,
+    STANDARD_JSON_SOURCE_KECCAK256_MISMATCH_PATH, STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH,
+    STANDARD_JSON_TRANSIENT_STORAGE_LAYOUT_PATH, STANDARD_JSON_YUL_NEWYORK_DISABLED_PATH,
+    STANDARD_JSON_YUL_NEWYORK_ENABLED_PATH, STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH,
+    STANDARD_JSON_YUL_PVM_CODEGEN_PATH, STANDARD_JSON_YUL_REVERT_STRINGS_STRIP_PATH,
 };
 use crate::tests::cli::metadata::blob_metadata_hash;
 use crate::{pipeline_name, ResolcVersion};
@@ -685,6 +687,89 @@ fn bytecode_object(output: &SolcStandardJsonOutput, path: &str, name: &str) -> S
         .and_then(|object| object.as_str())
         .expect("the bytecode object should be present")
         .to_owned()
+}
+
+/// A library in a source file whose path solc escapes gets linked.
+#[test]
+fn links_library_with_escaped_path() {
+    for path in [
+        STANDARD_JSON_LIBRARY_ESCAPED_PATH,
+        STANDARD_JSON_LIBRARY_ESCAPED_PATH_NEWYORK,
+    ] {
+        let result = execute_resolc_with_stdin_input(&[JSON_OPTION], path);
+        assert_command_success(&result, path);
+
+        assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+        let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+        let contract = &output["contracts"]["ü.sol"]["C"];
+        assert_eq!(contract["objectFormat"], "PVM", "{path}");
+        assert_eq!(
+            contract["missingLibraries"],
+            serde_json::json!([]),
+            "{path}"
+        );
+    }
+}
+
+/// A missing library in a source file whose path solc escapes is reported unescaped.
+#[test]
+fn reports_missing_library_with_escaped_path() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_LIBRARY_ESCAPED_PATH_UNLINKED,
+    );
+    assert_command_success(&result, "The unlinked escaped path input");
+
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    let contract = &output["contracts"]["ü.sol"]["C"];
+    assert_eq!(contract["objectFormat"], "ELF");
+    assert_eq!(contract["missingLibraries"], serde_json::json!(["ü.sol:L"]));
+}
+
+/// A missing library in a source file whose path contains a line break stays unlinked
+/// instead of failing to link.
+#[test]
+fn reports_missing_library_with_line_break_in_path() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_LIBRARY_LINE_BREAK_PATH_UNLINKED,
+    );
+    assert_command_success(&result, "The unlinked line break path input");
+
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    let contract = &output["contracts"]["a\nb.sol"]["C"];
+    assert_eq!(contract["objectFormat"], "ELF");
+    assert_eq!(
+        contract["missingLibraries"],
+        serde_json::json!(["a\nb.sol:L"])
+    );
+}
+
+/// Libraries whose paths only differ after a NUL get distinct linker symbols, so the
+/// address of one is not linked into a contract calling the other.
+#[test]
+fn keeps_libraries_with_nul_in_path_apart() {
+    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_LIBRARY_NUL_PATH);
+    assert_command_success(&result, "The NUL path input");
+
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    let linked = &output["contracts"]["x1.sol"]["X1"];
+    assert_eq!(linked["objectFormat"], "PVM");
+    assert_eq!(linked["missingLibraries"], serde_json::json!([]));
+
+    let unlinked = &output["contracts"]["x2.sol"]["X2"];
+    assert_eq!(unlinked["objectFormat"], "ELF");
+    assert_eq!(
+        unlinked["missingLibraries"],
+        serde_json::json!(["a\0c.sol:L"])
+    );
 }
 
 /// Extracts the optimized Yul IR of `path`/`name` from a standard JSON output.

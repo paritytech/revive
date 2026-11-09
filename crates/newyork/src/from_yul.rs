@@ -1455,15 +1455,11 @@ impl YulTranslator {
                                 b'u' => {
                                     if index + 4 < bytes.len() {
                                         let code_point_string = &string[index + 1..index + 5];
-                                        if let Ok(codepoint) =
-                                            u32::from_str_radix(code_point_string, 16)
+                                        if let Ok(code_point) =
+                                            u16::from_str_radix(code_point_string, 16)
                                         {
-                                            if let Some(character) = char::from_u32(codepoint) {
-                                                let mut buffer = [0u8; 4];
-                                                let encoded = character.encode_utf8(&mut buffer);
-                                                for byte in encoded.bytes() {
-                                                    hex.push_str(&format!("{byte:02x}"));
-                                                }
+                                            for byte in encode_unicode_escape(code_point) {
+                                                hex.push_str(&format!("{byte:02x}"));
                                             }
                                         }
                                     }
@@ -1510,6 +1506,45 @@ impl YulTranslator {
                     .ok_or_else(|| TranslationError::InvalidLiteral(string.clone()))
             }
         }
+    }
+}
+
+/// The largest code point encoded as a single byte.
+const UTF8_ONE_BYTE_MAX: u16 = 0x7F;
+/// The largest code point encoded as two bytes.
+const UTF8_TWO_BYTE_MAX: u16 = 0x7FF;
+/// The marker bits of the leading byte of a two byte sequence.
+const UTF8_TWO_BYTE_LEAD: u16 = 0xC0;
+/// The marker bits of the leading byte of a three byte sequence.
+const UTF8_THREE_BYTE_LEAD: u16 = 0xE0;
+/// The marker bits of a continuation byte.
+const UTF8_CONTINUATION: u16 = 0x80;
+/// The number of code point bits carried by a continuation byte.
+const UTF8_CONTINUATION_BITS: u32 = 6;
+/// Selects the code point bits carried by a continuation byte.
+const UTF8_CONTINUATION_MASK: u16 = 0x3F;
+
+/// Encodes the code point of a `\u` string literal escape as UTF-8 bytes.
+/// This mirrors solc's `Scanner::addUnicodeAsUTF8`, which also encodes surrogate code points
+/// (U+D800 to U+DFFF) that a Rust `char` cannot represent.
+/// The escape has four hex digits, so the encoding is at most three bytes long.
+fn encode_unicode_escape(code_point: u16) -> Vec<u8> {
+    let continuation =
+        |shift: u32| (UTF8_CONTINUATION | ((code_point >> shift) & UTF8_CONTINUATION_MASK)) as u8;
+
+    if code_point <= UTF8_ONE_BYTE_MAX {
+        vec![code_point as u8]
+    } else if code_point <= UTF8_TWO_BYTE_MAX {
+        vec![
+            (UTF8_TWO_BYTE_LEAD | (code_point >> UTF8_CONTINUATION_BITS)) as u8,
+            continuation(0),
+        ]
+    } else {
+        vec![
+            (UTF8_THREE_BYTE_LEAD | (code_point >> (2 * UTF8_CONTINUATION_BITS))) as u8,
+            continuation(UTF8_CONTINUATION_BITS),
+            continuation(0),
+        ]
     }
 }
 

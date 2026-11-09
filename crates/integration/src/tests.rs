@@ -5955,3 +5955,15 @@ fn huge_offset_argument_store() {
     }
     run_differential(actions);
 }
+
+/// A `\u` escape of a surrogate code point must encode to the same three bytes as solc.
+#[cfg(feature = "newyork")]
+#[test]
+fn unicode_surrogate_escape() {
+    let mut actions = instantiate_yul(
+        "contracts/UnicodeSurrogateEscape.yul",
+        "UnicodeSurrogateEscape",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}

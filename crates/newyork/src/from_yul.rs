@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use num::BigUint;
 
+use revive_common::BYTE_LENGTH_WORD;
 use revive_yul::lexer::token::lexeme::literal::boolean::Boolean as BooleanLiteral;
 use revive_yul::lexer::token::lexeme::literal::integer::Integer as IntegerLiteral;
 use revive_yul::lexer::token::lexeme::literal::Literal as LexicalLiteral;
@@ -28,6 +29,9 @@ use crate::ir::{
     MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value,
 };
 use crate::ssa::SsaBuilder;
+
+/// The number of hexadecimal digits of a full word.
+const WORD_HEX_DIGITS: usize = BYTE_LENGTH_WORD * 2;
 
 /// Error type for Yul to IR translation.
 #[derive(Debug, thiserror::Error)]
@@ -1435,70 +1439,22 @@ impl YulTranslator {
                 let mut hex_string = if string_literal.is_hexadecimal {
                     string.clone()
                 } else {
-                    let mut hex = std::string::String::with_capacity(64);
-                    let mut index = 0;
-                    let bytes = string.as_bytes();
-                    while index < bytes.len() {
-                        if bytes[index] == b'\\' {
-                            index += 1;
-                            if index >= bytes.len() {
-                                break;
-                            }
-                            match bytes[index] {
-                                b'x' => {
-                                    if index + 2 < bytes.len() {
-                                        hex.push(bytes[index + 1] as char);
-                                        hex.push(bytes[index + 2] as char);
-                                    }
-                                    index += 3;
-                                }
-                                b'u' => {
-                                    if index + 4 < bytes.len() {
-                                        let code_point_string = &string[index + 1..index + 5];
-                                        if let Ok(code_point) =
-                                            u16::from_str_radix(code_point_string, 16)
-                                        {
-                                            for byte in encode_unicode_escape(code_point) {
-                                                hex.push_str(&format!("{byte:02x}"));
-                                            }
-                                        }
-                                    }
-                                    index += 5;
-                                }
-                                b't' => {
-                                    hex.push_str("09");
-                                    index += 1;
-                                }
-                                b'n' => {
-                                    hex.push_str("0a");
-                                    index += 1;
-                                }
-                                b'r' => {
-                                    hex.push_str("0d");
-                                    index += 1;
-                                }
-                                b'\n' => {
-                                    index += 1;
-                                }
-                                other => {
-                                    hex.push_str(&format!("{other:02x}"));
-                                    index += 1;
-                                }
-                            }
-                        } else {
-                            hex.push_str(&format!("{:02x}", bytes[index]));
-                            index += 1;
-                        }
-                    }
-                    hex
+                    string_literal
+                        .unescape_bytes()
+                        .map_err(|error| {
+                            TranslationError::InvalidLiteral(format!("`{string}`: {error}"))
+                        })?
+                        .iter()
+                        .map(|byte| format!("{byte:02x}"))
+                        .collect()
                 };
 
-                assert!(
-                    hex_string.len() <= 64,
-                    "ICE: string literal exceeds 32 bytes ({} hex digits)",
-                    hex_string.len()
-                );
-                while hex_string.len() < 64 {
+                if hex_string.len() > WORD_HEX_DIGITS {
+                    return Err(TranslationError::InvalidLiteral(format!(
+                        "`{string}` exceeds {BYTE_LENGTH_WORD} bytes"
+                    )));
+                }
+                while hex_string.len() < WORD_HEX_DIGITS {
                     hex_string.push('0');
                 }
 
@@ -1506,45 +1462,6 @@ impl YulTranslator {
                     .ok_or_else(|| TranslationError::InvalidLiteral(string.clone()))
             }
         }
-    }
-}
-
-/// The largest code point encoded as a single byte.
-const UTF8_ONE_BYTE_MAX: u16 = 0x7F;
-/// The largest code point encoded as two bytes.
-const UTF8_TWO_BYTE_MAX: u16 = 0x7FF;
-/// The marker bits of the leading byte of a two byte sequence.
-const UTF8_TWO_BYTE_LEAD: u16 = 0xC0;
-/// The marker bits of the leading byte of a three byte sequence.
-const UTF8_THREE_BYTE_LEAD: u16 = 0xE0;
-/// The marker bits of a continuation byte.
-const UTF8_CONTINUATION: u16 = 0x80;
-/// The number of code point bits carried by a continuation byte.
-const UTF8_CONTINUATION_BITS: u32 = 6;
-/// Selects the code point bits carried by a continuation byte.
-const UTF8_CONTINUATION_MASK: u16 = 0x3F;
-
-/// Encodes the code point of a `\u` string literal escape as UTF-8 bytes.
-/// This mirrors solc's `Scanner::addUnicodeAsUTF8`, which also encodes surrogate code points
-/// (U+D800 to U+DFFF) that a Rust `char` cannot represent.
-/// The escape has four hex digits, so the encoding is at most three bytes long.
-fn encode_unicode_escape(code_point: u16) -> Vec<u8> {
-    let continuation =
-        |shift: u32| (UTF8_CONTINUATION | ((code_point >> shift) & UTF8_CONTINUATION_MASK)) as u8;
-
-    if code_point <= UTF8_ONE_BYTE_MAX {
-        vec![code_point as u8]
-    } else if code_point <= UTF8_TWO_BYTE_MAX {
-        vec![
-            (UTF8_TWO_BYTE_LEAD | (code_point >> UTF8_CONTINUATION_BITS)) as u8,
-            continuation(0),
-        ]
-    } else {
-        vec![
-            (UTF8_THREE_BYTE_LEAD | (code_point >> (2 * UTF8_CONTINUATION_BITS))) as u8,
-            continuation(UTF8_CONTINUATION_BITS),
-            continuation(0),
-        ]
     }
 }
 
@@ -1715,6 +1632,39 @@ object "Test" {{
                 Err(TranslationError::Unsupported(rejected)) => assert_eq!(rejected, name),
                 Err(other) => panic!("unexpected error: {other}"),
                 Ok(_) => panic!("{name} must be rejected"),
+            }
+        }
+    }
+
+    /// solc rejects these string literals, so translation must fail instead of
+    /// dropping the escape or panicking.
+    #[test]
+    fn malformed_string_literals_are_rejected() {
+        for literal in [
+            r#""\q""#,
+            r#""\x4""#,
+            r#""\xg0""#,
+            r#""\u004""#,
+            r#""\u+0fc""#,
+            r#""aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa""#,
+        ] {
+            let source = format!(
+                r#"
+object "Test" {{
+    code {{
+        mstore(0, {literal})
+    }}
+}}
+"#
+            );
+            let mut lexer = Lexer::new(source);
+            let yul_object =
+                YulObject::parse(&mut lexer, None).expect("the Yul object should parse");
+
+            match YulTranslator::new().translate_object(&yul_object) {
+                Err(TranslationError::InvalidLiteral(_)) => {}
+                Err(other) => panic!("unexpected error for {literal}: {other}"),
+                Ok(_) => panic!("{literal} must be rejected"),
             }
         }
     }

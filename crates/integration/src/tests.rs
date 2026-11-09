@@ -5955,3 +5955,12 @@ fn huge_offset_argument_store() {
     }
     run_differential(actions);
 }
+
+/// Reproducer from paritytech/revive#708. A `\u` escape below U+0800 encodes to fewer
+/// than three UTF-8 bytes and must not leave zero padding inside the string literal.
+#[test]
+fn unicode_escape_string_literal() {
+    let mut actions = instantiate_yul("contracts/UnicodeEscape.yul", "UnicodeEscape");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}

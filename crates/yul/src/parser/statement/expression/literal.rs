@@ -166,10 +166,7 @@ impl Literal {
                                 let unicode_char = char::from_u32(codepoint).ok_or_else(|| {
                                     anyhow::anyhow!("Invalid codepoint {}", codepoint)
                                 })?;
-                                let mut unicode_bytes = vec![0u8; 3];
-                                unicode_char.encode_utf8(&mut unicode_bytes);
-
-                                for byte in unicode_bytes.into_iter() {
+                                for byte in unicode_char.to_string().bytes() {
                                     hex_string.push_str(format!("{byte:02x}").as_str());
                                 }
                                 index += 5;

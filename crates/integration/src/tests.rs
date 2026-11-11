@@ -5955,3 +5955,24 @@ fn huge_offset_argument_store() {
     }
     run_differential(actions);
 }
+
+/// A call used as a `for` loop condition counts as a call site when narrowing the callee's parameters.
+#[test]
+fn for_condition_call_argument_width() {
+    let mut actions = instantiate_yul(
+        "contracts/ForConditionCallArgumentWidth.yul",
+        "ForConditionCallArgumentWidth",
+    );
+    for argument in [
+        U256::from(5),
+        (U256::from(1) << 32) + U256::from(5),
+        U256::MAX,
+    ] {
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            words(&[argument]),
+        );
+    }
+    run_differential(actions);
+}

@@ -713,8 +713,9 @@ impl TypeInference {
     }
 
     /// Walks a block (and all nested regions) collecting argument min_widths
-    /// at call sites. For each call to a function, records the widest argument
-    /// seen across all callers — caller-driven narrowing uses the maximum.
+    /// at call sites, including a call that is a `for` loop condition. For each
+    /// call to a function, records the widest argument seen across all callers —
+    /// caller-driven narrowing uses the maximum.
     fn collect_argument_widths_block(
         &self,
         block: &Block,
@@ -734,7 +735,15 @@ impl TypeInference {
                 | Statement::Expression(Expression::Call {
                     function,
                     arguments,
-                }) => Some((function, arguments)),
+                })
+                | Statement::For {
+                    condition:
+                        Expression::Call {
+                            function,
+                            arguments,
+                        },
+                    ..
+                } => Some((function, arguments)),
                 _ => None,
             };
             if let Some((fid, arguments)) = call {

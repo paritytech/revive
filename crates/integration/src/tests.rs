@@ -5976,3 +5976,37 @@ fn for_condition_call_argument_width() {
     }
     run_differential(actions);
 }
+
+/// A memory offset used only after an `if` that may return does not narrow the parameter it comes from.
+#[test]
+fn return_before_offset_use() {
+    let mut actions = instantiate_yul(
+        "contracts/ReturnBeforeOffsetUse.yul",
+        "ReturnBeforeOffsetUse",
+    );
+    for offset in [U256::ZERO, U256::from(5), U256::from(1) << 64, U256::MAX] {
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            words(&[offset, U256::ZERO, U256::ZERO]),
+        );
+    }
+    run_differential(actions);
+}
+
+/// A memory offset used only after a loop that may return does not narrow the parameter it comes from.
+#[test]
+fn loop_return_before_offset_use() {
+    let mut actions = instantiate_yul(
+        "contracts/LoopReturnBeforeOffsetUse.yul",
+        "LoopReturnBeforeOffsetUse",
+    );
+    for offset in [U256::ZERO, U256::from(5), U256::from(1) << 64, U256::MAX] {
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            words(&[offset, U256::ZERO, U256::ZERO]),
+        );
+    }
+    run_differential(actions);
+}

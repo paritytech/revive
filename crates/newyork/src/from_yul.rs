@@ -30,9 +30,6 @@ use crate::ir::{
 };
 use crate::ssa::SsaBuilder;
 
-/// The number of hexadecimal digits of a full word.
-const WORD_HEX_DIGITS: usize = BYTE_LENGTH_WORD * 2;
-
 /// Error type for Yul to IR translation.
 #[derive(Debug, thiserror::Error)]
 pub enum TranslationError {
@@ -1436,30 +1433,19 @@ impl YulTranslator {
             },
             LexicalLiteral::String(string_literal) => {
                 let string = &string_literal.inner;
-                let mut hex_string = if string_literal.is_hexadecimal {
-                    string.clone()
-                } else {
-                    string_literal
-                        .unescape_bytes()
-                        .map_err(|error| {
-                            TranslationError::InvalidLiteral(format!("`{string}`: {error}"))
-                        })?
-                        .iter()
-                        .map(|byte| format!("{byte:02x}"))
-                        .collect()
-                };
+                let bytes = string_literal.to_bytes().map_err(|error| {
+                    TranslationError::InvalidLiteral(format!("`{string}`: {error}"))
+                })?;
 
-                if hex_string.len() > WORD_HEX_DIGITS {
+                if bytes.len() > BYTE_LENGTH_WORD {
                     return Err(TranslationError::InvalidLiteral(format!(
                         "`{string}` exceeds {BYTE_LENGTH_WORD} bytes"
                     )));
                 }
-                while hex_string.len() < WORD_HEX_DIGITS {
-                    hex_string.push('0');
-                }
 
-                BigUint::parse_bytes(hex_string.as_bytes(), 16)
-                    .ok_or_else(|| TranslationError::InvalidLiteral(string.clone()))
+                let mut word = [0; BYTE_LENGTH_WORD];
+                word[..bytes.len()].copy_from_slice(&bytes);
+                Ok(BigUint::from_bytes_be(&word))
             }
         }
     }
@@ -1647,6 +1633,7 @@ object "Test" {{
             r#""\u004""#,
             r#""\u+0fc""#,
             r#""aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa""#,
+            r#"hex"001""#,
         ] {
             let source = format!(
                 r#"

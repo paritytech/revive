@@ -132,89 +132,23 @@ impl Literal {
                 Ok(PolkaVMArgument::value(value).with_constant(constant))
             }
             LexicalLiteral::String(inner) => {
-                let string = inner.inner;
                 let r#type = self.yul_type.unwrap_or_default().into_llvm(context);
+                let bytes = inner.to_bytes()?;
+                let string = inner.inner;
 
-                let mut hex_string = if inner.is_hexadecimal {
-                    string.clone()
-                } else {
-                    let mut hex_string = String::with_capacity(BYTE_LENGTH_WORD * 2);
-                    let mut index = 0;
-                    loop {
-                        if index >= string.len() {
-                            break;
-                        }
-
-                        if string[index..].starts_with('\\') {
-                            index += 1;
-
-                            if string[index..].starts_with('x') {
-                                hex_string.push_str(&string[index + 1..index + 3]);
-                                index += 3;
-                            } else if string[index..].starts_with('u') {
-                                let codepoint_str = &string[index + 1..index + 5];
-                                let codepoint =
-                                    u32::from_str_radix(codepoint_str, BASE_HEXADECIMAL).map_err(
-                                        |error| {
-                                            anyhow::anyhow!(
-                                                "Invalid codepoint `{}`: {}",
-                                                codepoint_str,
-                                                error
-                                            )
-                                        },
-                                    )?;
-                                let unicode_char = char::from_u32(codepoint).ok_or_else(|| {
-                                    anyhow::anyhow!("Invalid codepoint {}", codepoint)
-                                })?;
-                                let mut unicode_bytes = vec![0u8; 3];
-                                unicode_char.encode_utf8(&mut unicode_bytes);
-
-                                for byte in unicode_bytes.into_iter() {
-                                    hex_string.push_str(format!("{byte:02x}").as_str());
-                                }
-                                index += 5;
-                            } else if string[index..].starts_with('t') {
-                                hex_string.push_str("09");
-                                index += 1;
-                            } else if string[index..].starts_with('n') {
-                                hex_string.push_str("0a");
-                                index += 1;
-                            } else if string[index..].starts_with('r') {
-                                hex_string.push_str("0d");
-                                index += 1;
-                            } else if string[index..].starts_with('\n') {
-                                index += 1;
-                            } else {
-                                hex_string
-                                    .push_str(format!("{:02x}", string.as_bytes()[index]).as_str());
-                                index += 1;
-                            }
-                        } else {
-                            hex_string
-                                .push_str(format!("{:02x}", string.as_bytes()[index]).as_str());
-                            index += 1;
-                        }
-                    }
-                    hex_string
-                };
-
-                if hex_string.len() > BYTE_LENGTH_WORD * 2 {
-                    return Ok(revive_llvm_context::PolkaVMArgument::value(
-                        r#type.const_zero().as_basic_value_enum(),
-                    )
-                    .with_original(string));
-                }
-
-                if hex_string.len() < BYTE_LENGTH_WORD * 2 {
-                    hex_string.push_str(
-                        "0".repeat((BYTE_LENGTH_WORD * 2) - hex_string.len())
-                            .as_str(),
+                if bytes.len() > BYTE_LENGTH_WORD {
+                    return Ok(
+                        PolkaVMArgument::value(r#type.const_zero().as_basic_value_enum())
+                            .with_original(string),
                     );
                 }
 
+                let mut word = [0; BYTE_LENGTH_WORD];
+                word[..bytes.len()].copy_from_slice(&bytes);
+                let hexadecimal: String = word.iter().map(|byte| format!("{byte:02x}")).collect();
                 let value = r#type
                     .const_int_from_string(
-                        hex_string.as_str(),
+                        hexadecimal.as_str(),
                         inkwell::types::StringRadix::Hexadecimal,
                     )
                     .expect("The value is valid")

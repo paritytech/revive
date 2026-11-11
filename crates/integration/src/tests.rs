@@ -5957,13 +5957,39 @@ fn huge_offset_argument_store() {
 }
 
 /// A `\u` escape of a surrogate code point must encode to the same three bytes as solc.
-#[cfg(feature = "newyork")]
 #[test]
 fn unicode_surrogate_escape() {
     let mut actions = instantiate_yul(
         "contracts/UnicodeSurrogateEscape.yul",
         "UnicodeSurrogateEscape",
     );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// A `\u` escape below U+0800 must not leave zero padding inside the string literal.
+#[test]
+fn unicode_escape_string_literal() {
+    let mut actions = instantiate_yul("contracts/UnicodeEscape.yul", "UnicodeEscape");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// A backslash before a CR LF line ending continues the string literal without the CR and LF.
+#[test]
+fn string_continuation_crlf() {
+    let mut actions = instantiate_yul(
+        "contracts/StringContinuationCrlf.yul",
+        "StringContinuationCrlf",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// The `_` separators of a `hex"…"` literal are not part of its bytes.
+#[test]
+fn hex_string_separator() {
+    let mut actions = instantiate_yul("contracts/HexStringSeparator.yul", "HexStringSeparator");
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }

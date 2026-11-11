@@ -10,10 +10,12 @@ use crate::lexer::token::lexeme::Literal;
 use crate::lexer::token::location::Location;
 use crate::lexer::token::Token;
 
-/// The number of hexadecimal digits of a `\x` byte escape.
-const BYTE_ESCAPE_DIGITS: usize = 2;
+/// The number of hexadecimal digits of a byte in a `\x` escape or a `hex"…"` literal.
+const BYTE_HEXADECIMAL_DIGITS: usize = 2;
 /// The number of hexadecimal digits of a `\u` codepoint escape.
 const CODEPOINT_ESCAPE_DIGITS: usize = 4;
+/// The separator solc allows between the bytes of a `hex"…"` literal.
+const HEXADECIMAL_SEPARATOR: char = '_';
 
 /// The largest code point encoded as a single byte.
 const UTF8_ONE_BYTE_MAX: u16 = 0x7F;
@@ -55,9 +57,29 @@ impl String {
             .map_err(|error| anyhow::anyhow!("Invalid UTF-8 in string `{}`: {error}", self.inner))
     }
 
+    /// Returns the bytes the literal denotes: the digits of a `hex"…"` literal, whose `_`
+    /// separators solc has already validated, or the decoded escapes of a plain string.
+    pub fn to_bytes(&self) -> anyhow::Result<Vec<u8>> {
+        if !self.is_hexadecimal {
+            return self.unescape_bytes();
+        }
+
+        let mut digits = self
+            .inner
+            .chars()
+            .filter(|character| *character != HEXADECIMAL_SEPARATOR)
+            .peekable();
+        let mut bytes = Vec::with_capacity(self.inner.len() / BYTE_HEXADECIMAL_DIGITS);
+        while digits.peek().is_some() {
+            let byte = Self::hexadecimal_digits(&mut digits, BYTE_HEXADECIMAL_DIGITS)?;
+            bytes.push(u8::try_from(byte).expect("two hexadecimal digits fit a byte"));
+        }
+        Ok(bytes)
+    }
+
     /// Returns the bytes the string denotes, with its escape sequences decoded like solc's
     /// `Scanner::scanEscape`, which rejects any escape it does not know.
-    pub fn unescape_bytes(&self) -> anyhow::Result<Vec<u8>> {
+    fn unescape_bytes(&self) -> anyhow::Result<Vec<u8>> {
         let mut bytes = Vec::with_capacity(self.inner.len());
         let mut characters = self.inner.chars().peekable();
         while let Some(character) = characters.next() {
@@ -68,12 +90,12 @@ impl String {
 
             match characters.next() {
                 Some('x') => {
-                    let byte = Self::hexadecimal_escape(&mut characters, BYTE_ESCAPE_DIGITS)?;
+                    let byte = Self::hexadecimal_digits(&mut characters, BYTE_HEXADECIMAL_DIGITS)?;
                     bytes.push(u8::try_from(byte).expect("two hexadecimal digits fit a byte"));
                 }
                 Some('u') => {
                     let code_point =
-                        Self::hexadecimal_escape(&mut characters, CODEPOINT_ESCAPE_DIGITS)?;
+                        Self::hexadecimal_digits(&mut characters, CODEPOINT_ESCAPE_DIGITS)?;
                     bytes.extend(Self::encode_code_point(
                         u16::try_from(code_point).expect("four hexadecimal digits fit 16 bits"),
                     ));
@@ -125,14 +147,14 @@ impl String {
         }
     }
 
-    /// Decodes the exactly `count` hexadecimal digits of a `\x` or `\u` escape.
-    fn hexadecimal_escape(
+    /// Decodes exactly `count` hexadecimal digits of an escape or a `hex"…"` literal.
+    fn hexadecimal_digits(
         characters: &mut impl Iterator<Item = char>,
         count: usize,
     ) -> anyhow::Result<u32> {
         let digits: std::string::String = characters.take(count).collect();
         if digits.len() != count || !digits.chars().all(|digit| digit.is_ascii_hexdigit()) {
-            anyhow::bail!("Expected {count} hexadecimal digits in an escape, found `{digits}`");
+            anyhow::bail!("Expected {count} hexadecimal digits, found `{digits}`");
         }
         Ok(u32::from_str_radix(&digits, BASE_HEXADECIMAL).expect("the digits are hexadecimal"))
     }
@@ -260,6 +282,31 @@ mod tests {
         ] {
             let unescaped = String::new(escaped.to_owned(), false).unescape_bytes();
             assert_eq!(unescaped.unwrap(), bytes, "{escaped:?}");
+        }
+    }
+
+    /// A `hex"…"` literal denotes its digit pairs, with the `_` separators dropped.
+    #[test]
+    fn to_bytes_decodes_hex_literals() {
+        for (digits, bytes) in [
+            ("", vec![]),
+            ("00_11", vec![0x00, 0x11]),
+            ("abCD", vec![0xab, 0xcd]),
+            ("0011_2233", vec![0x00, 0x11, 0x22, 0x33]),
+        ] {
+            let decoded = String::new(digits.to_owned(), true).to_bytes();
+            assert_eq!(decoded.unwrap(), bytes, "{digits:?}");
+        }
+    }
+
+    /// A `hex"…"` literal with an odd digit count or a non-digit is rejected.
+    #[test]
+    fn to_bytes_rejects_malformed_hex_literals() {
+        for digits in ["0", "001", "0g", "+1"] {
+            assert!(
+                String::new(digits.to_owned(), true).to_bytes().is_err(),
+                "{digits:?}"
+            );
         }
     }
 }

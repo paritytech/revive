@@ -10,10 +10,27 @@ use crate::lexer::token::lexeme::Literal;
 use crate::lexer::token::location::Location;
 use crate::lexer::token::Token;
 
-/// The number of hexadecimal digits of a `\x` byte escape.
-const BYTE_ESCAPE_DIGITS: usize = 2;
+/// The number of hexadecimal digits of a byte in a `\x` escape or a `hex"…"` literal.
+const BYTE_HEXADECIMAL_DIGITS: usize = 2;
 /// The number of hexadecimal digits of a `\u` codepoint escape.
 const CODEPOINT_ESCAPE_DIGITS: usize = 4;
+/// The separator solc allows between the bytes of a `hex"…"` literal.
+const HEXADECIMAL_SEPARATOR: char = '_';
+
+/// The largest code point encoded as a single byte.
+const UTF8_ONE_BYTE_MAX: u16 = 0x7F;
+/// The largest code point encoded as two bytes.
+const UTF8_TWO_BYTE_MAX: u16 = 0x7FF;
+/// The marker bits of the leading byte of a two byte sequence.
+const UTF8_TWO_BYTE_LEAD: u16 = 0xC0;
+/// The marker bits of the leading byte of a three byte sequence.
+const UTF8_THREE_BYTE_LEAD: u16 = 0xE0;
+/// The marker bits of a continuation byte.
+const UTF8_CONTINUATION: u16 = 0x80;
+/// The number of code point bits carried by a continuation byte.
+const UTF8_CONTINUATION_BITS: u32 = 6;
+/// Selects the code point bits carried by a continuation byte.
+const UTF8_CONTINUATION_MASK: u16 = 0x3F;
 
 /// The string literal lexeme.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
@@ -34,7 +51,35 @@ impl String {
     }
 
     /// Returns the string with its escape sequences decoded.
+    /// Fails if the decoded bytes are not valid UTF-8.
     pub fn unescape(&self) -> anyhow::Result<std::string::String> {
+        std::string::String::from_utf8(self.unescape_bytes()?)
+            .map_err(|error| anyhow::anyhow!("Invalid UTF-8 in string `{}`: {error}", self.inner))
+    }
+
+    /// Returns the bytes the literal denotes: the digits of a `hex"…"` literal, whose `_`
+    /// separators solc has already validated, or the decoded escapes of a plain string.
+    pub fn to_bytes(&self) -> anyhow::Result<Vec<u8>> {
+        if !self.is_hexadecimal {
+            return self.unescape_bytes();
+        }
+
+        let mut digits = self
+            .inner
+            .chars()
+            .filter(|character| *character != HEXADECIMAL_SEPARATOR)
+            .peekable();
+        let mut bytes = Vec::with_capacity(self.inner.len() / BYTE_HEXADECIMAL_DIGITS);
+        while digits.peek().is_some() {
+            let byte = Self::hexadecimal_digits(&mut digits, BYTE_HEXADECIMAL_DIGITS)?;
+            bytes.push(u8::try_from(byte).expect("two hexadecimal digits fit a byte"));
+        }
+        Ok(bytes)
+    }
+
+    /// Returns the bytes the string denotes, with its escape sequences decoded like solc's
+    /// `Scanner::scanEscape`, which rejects any escape it does not know.
+    fn unescape_bytes(&self) -> anyhow::Result<Vec<u8>> {
         let mut bytes = Vec::with_capacity(self.inner.len());
         let mut characters = self.inner.chars().peekable();
         while let Some(character) = characters.next() {
@@ -45,41 +90,71 @@ impl String {
 
             match characters.next() {
                 Some('x') => {
-                    let byte = Self::hexadecimal_escape(&mut characters, BYTE_ESCAPE_DIGITS)?;
+                    let byte = Self::hexadecimal_digits(&mut characters, BYTE_HEXADECIMAL_DIGITS)?;
                     bytes.push(u8::try_from(byte).expect("two hexadecimal digits fit a byte"));
                 }
                 Some('u') => {
-                    let codepoint =
-                        Self::hexadecimal_escape(&mut characters, CODEPOINT_ESCAPE_DIGITS)?;
-                    let unicode_character = char::from_u32(codepoint)
-                        .ok_or_else(|| anyhow::anyhow!("Invalid codepoint {codepoint}"))?;
-                    bytes.extend_from_slice(unicode_character.encode_utf8(&mut [0; 4]).as_bytes());
+                    let code_point =
+                        Self::hexadecimal_digits(&mut characters, CODEPOINT_ESCAPE_DIGITS)?;
+                    bytes.extend(Self::encode_code_point(
+                        u16::try_from(code_point).expect("four hexadecimal digits fit 16 bits"),
+                    ));
                 }
                 Some('t') => bytes.push(b'\t'),
                 Some('n') => bytes.push(b'\n'),
                 Some('r') => bytes.push(b'\r'),
+                Some(escaped @ ('\'' | '"' | '\\')) => {
+                    bytes.push(u8::try_from(escaped).expect("quotes and backslash are ASCII"))
+                }
                 // Like solc, a backslash before a CR, LF or CRLF line break continues the
                 // string on the next line.
                 Some('\r') => {
                     characters.next_if_eq(&'\n');
                 }
-                Some('\n') | None => {}
-                Some(other) => bytes.extend_from_slice(other.encode_utf8(&mut [0; 4]).as_bytes()),
+                Some('\n') => {}
+                Some(other) => {
+                    anyhow::bail!("Invalid escape `\\{other}` in string `{}`", self.inner)
+                }
+                None => anyhow::bail!("Unterminated escape in string `{}`", self.inner),
             }
         }
 
-        std::string::String::from_utf8(bytes)
-            .map_err(|error| anyhow::anyhow!("Invalid UTF-8 in string `{}`: {error}", self.inner))
+        Ok(bytes)
     }
 
-    /// Decodes the exactly `count` hexadecimal digits of a `\x` or `\u` escape.
-    fn hexadecimal_escape(
+    /// Encodes the code point of a `\u` escape as UTF-8 bytes.
+    /// This mirrors solc's `Scanner::addUnicodeAsUTF8`, which also encodes surrogate code points
+    /// (U+D800 to U+DFFF) that a Rust `char` cannot represent.
+    /// The escape has four hex digits, so the encoding is at most three bytes long.
+    fn encode_code_point(code_point: u16) -> Vec<u8> {
+        let continuation = |shift: u32| {
+            (UTF8_CONTINUATION | ((code_point >> shift) & UTF8_CONTINUATION_MASK)) as u8
+        };
+
+        if code_point <= UTF8_ONE_BYTE_MAX {
+            vec![code_point as u8]
+        } else if code_point <= UTF8_TWO_BYTE_MAX {
+            vec![
+                (UTF8_TWO_BYTE_LEAD | (code_point >> UTF8_CONTINUATION_BITS)) as u8,
+                continuation(0),
+            ]
+        } else {
+            vec![
+                (UTF8_THREE_BYTE_LEAD | (code_point >> (2 * UTF8_CONTINUATION_BITS))) as u8,
+                continuation(UTF8_CONTINUATION_BITS),
+                continuation(0),
+            ]
+        }
+    }
+
+    /// Decodes exactly `count` hexadecimal digits of an escape or a `hex"…"` literal.
+    fn hexadecimal_digits(
         characters: &mut impl Iterator<Item = char>,
         count: usize,
     ) -> anyhow::Result<u32> {
         let digits: std::string::String = characters.take(count).collect();
         if digits.len() != count || !digits.chars().all(|digit| digit.is_ascii_hexdigit()) {
-            anyhow::bail!("Expected {count} hexadecimal digits in an escape, found `{digits}`");
+            anyhow::bail!("Expected {count} hexadecimal digits, found `{digits}`");
         }
         Ok(u32::from_str_radix(&digits, BASE_HEXADECIMAL).expect("the digits are hexadecimal"))
     }
@@ -185,9 +260,53 @@ mod tests {
     #[test]
     fn unescape_rejects_malformed_escapes() {
         for escaped in [
-            r"\x", r"\x0", r"\xg0", r"\x+1", r"\u00f", r"\u+0fc", r"\ud800", r"\xc3",
+            r"\x", r"\x0", r"\xg0", r"\x+1", r"\u00f", r"\u+0fc", r"\ud800", r"\xc3", r"\q", r"\",
+            r"\u12é",
         ] {
             assert!(unescape(escaped).is_err(), "{escaped:?}");
+        }
+    }
+
+    /// solc encodes a `\u` escape by its numeric range, surrogate code points included.
+    #[test]
+    fn unescape_bytes_encodes_code_points_like_solc() {
+        for (escaped, bytes) in [
+            (r"\u0041", vec![0x41]),
+            (r"\u007f", vec![0x7f]),
+            (r"\u0080", vec![0xc2, 0x80]),
+            (r"\u07ff", vec![0xdf, 0xbf]),
+            (r"\u0800", vec![0xe0, 0xa0, 0x80]),
+            (r"\ud800", vec![0xed, 0xa0, 0x80]),
+            (r"\udfff", vec![0xed, 0xbf, 0xbf]),
+            (r"\uffff", vec![0xef, 0xbf, 0xbf]),
+        ] {
+            let unescaped = String::new(escaped.to_owned(), false).unescape_bytes();
+            assert_eq!(unescaped.unwrap(), bytes, "{escaped:?}");
+        }
+    }
+
+    /// A `hex"…"` literal denotes its digit pairs, with the `_` separators dropped.
+    #[test]
+    fn to_bytes_decodes_hex_literals() {
+        for (digits, bytes) in [
+            ("", vec![]),
+            ("00_11", vec![0x00, 0x11]),
+            ("abCD", vec![0xab, 0xcd]),
+            ("0011_2233", vec![0x00, 0x11, 0x22, 0x33]),
+        ] {
+            let decoded = String::new(digits.to_owned(), true).to_bytes();
+            assert_eq!(decoded.unwrap(), bytes, "{digits:?}");
+        }
+    }
+
+    /// A `hex"…"` literal with an odd digit count or a non-digit is rejected.
+    #[test]
+    fn to_bytes_rejects_malformed_hex_literals() {
+        for digits in ["0", "001", "0g", "+1"] {
+            assert!(
+                String::new(digits.to_owned(), true).to_bytes().is_err(),
+                "{digits:?}"
+            );
         }
     }
 }

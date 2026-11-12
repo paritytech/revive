@@ -18,6 +18,7 @@ use crate::ir::{
     FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value,
     ValueId,
 };
+use crate::mapping_access_outlining::is_memory_free_expression;
 
 /// Maximum value for 256-bit unsigned integer (2^256 - 1).
 fn max_u256() -> BigUint {
@@ -1399,7 +1400,9 @@ fn find_custom_error_pattern_backwards(
                     }
                 })
             }
-            Statement::Let { .. } | Statement::Expression(..) => true,
+            Statement::Let { value, .. } | Statement::Expression(value) => {
+                is_memory_free_expression(value)
+            }
             _ => false,
         });
     if !all_safe {

@@ -269,7 +269,7 @@ fn is_memory_free(statement: &Statement) -> bool {
 }
 
 /// Whether the expression certainly neither reads nor writes heap memory.
-fn is_memory_free_expression(expression: &Expression) -> bool {
+pub(crate) fn is_memory_free_expression(expression: &Expression) -> bool {
     matches!(
         expression,
         Expression::Literal { .. }

@@ -6107,3 +6107,26 @@ fn hex_string_separator() {
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }
+
+#[test]
+fn keccak_scratch_byte_order() {
+    let scratch_word = U256::from_be_bytes(hex!(
+        "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+    ));
+    for contract in [
+        "KeccakPairScratchByteOrder",
+        "KeccakSingleScratchByteOrder",
+        "MappingSLoadScratchByteOrder",
+        "MappingSStoreScratchByteOrder",
+    ] {
+        let mut actions = instantiate("contracts/KeccakScratchByteOrder.sol", contract);
+        for (iterations, branch) in [(0u64, 0u64), (3, 0), (0, 1)] {
+            push_call(
+                &mut actions,
+                TestAddress::Instantiated(0),
+                words(&[scratch_word, U256::from(iterations), U256::from(branch)]),
+            );
+        }
+        run_differential(actions);
+    }
+}

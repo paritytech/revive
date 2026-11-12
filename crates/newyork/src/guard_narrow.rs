@@ -967,7 +967,10 @@ fn is_wide_boundary_mask(value: &BigUint) -> bool {
 /// which indicates a call to a never-returning function (like panic helpers).
 /// After the simplifier's DCE pass, dead code after unreachable calls has
 /// been eliminated, so a trailing call with no yields is a reliable indicator.
-fn region_terminates(region: &Region, noreturn: &std::collections::BTreeSet<u32>) -> bool {
+pub(crate) fn region_terminates(
+    region: &Region,
+    noreturn: &std::collections::BTreeSet<u32>,
+) -> bool {
     region.statements.iter().any(|statement| {
         if matches!(
             statement,

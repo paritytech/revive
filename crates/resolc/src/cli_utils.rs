@@ -49,6 +49,12 @@ pub const SOLIDITY_LIBRARY_CALL_CONTRACT_PATH: &str = "src/tests/data/solidity/l
 pub const SOLIDITY_COLLISION_NESTED_PATH: &str = "src/tests/data/solidity/collision/a/c.sol";
 /// The paritytech/revive#622 reproducer contract at `a_c.sol`.
 pub const SOLIDITY_COLLISION_UNDERSCORE_PATH: &str = "src/tests/data/solidity/collision/a_c.sol";
+/// The verbatim reproducer from paritytech/revive#631: a contract creating another contract.
+pub const SOLIDITY_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH: &str =
+    "src/tests/data/solidity/factory_dependency_nested_object.sol";
+/// A contract created in both the constructor and the runtime code, with `leave` in its code.
+pub const SOLIDITY_FACTORY_DEPENDENCY_CONSTRUCTOR_AND_RUNTIME_PATH: &str =
+    "src/tests/data/solidity/factory_dependency_constructor_and_runtime.sol";
 /// A contract named `Duplicate` in a file named `Duplicate.sol` returning `1`.
 pub const SOLIDITY_DUPLICATE_FIRST_PATH: &str =
     "src/tests/data/solidity/duplicate/first/Duplicate.sol";
@@ -84,10 +90,15 @@ pub const YUL_DUPLICATE_FUNCTIONS_DEEP_NESTING_PATH: &str =
 pub const YUL_EMPTY_RUNTIME_OBJECT_PATH: &str = "src/tests/data/yul/empty_runtime_object.yul";
 /// Yul contract carrying deploy code only, without the `_deployed` runtime sub-object.
 pub const YUL_DEPLOY_ONLY_OBJECT_PATH: &str = "src/tests/data/yul/deploy_only_object.yul";
+/// The solc IR of [`SOLIDITY_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH`], with the dependency as a nested object.
+pub const YUL_FACTORY_DEPENDENCY_NESTED_OBJECT_PATH: &str =
+    "src/tests/data/yul/factory_dependency_nested_object.yul";
 /// Yul contract with a sibling object that is not a contract of its own.
 pub const YUL_SIBLING_OBJECTS_PATH: &str = "src/tests/data/yul/sibling_objects.yul";
 /// Yul contract addressing a nested object through the dotted notation.
 pub const YUL_DOTTED_OBJECT_PATH: &str = "src/tests/data/yul/dotted_object_path.yul";
+/// Yul contract with two different nested objects of the same name in different scopes.
+pub const YUL_DUPLICATE_OBJECT_NAME_PATH: &str = "src/tests/data/yul/duplicate_object_name.yul";
 
 /// The standard JSON contracts test fixture path.
 pub const STANDARD_JSON_CONTRACTS_PATH: &str =
@@ -111,6 +122,15 @@ pub const STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH: &str =
 /// The verbatim reproducer from paritytech/revive#627: a library address used only in a switch expression.
 pub const STANDARD_JSON_SWITCH_MISSING_LIBRARIES_PATH: &str =
     "src/tests/data/standard_json/switch_missing_libraries.json";
+/// The verbatim reproducer from paritytech/revive#631: a factory dependency outside the output selection.
+pub const STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH: &str =
+    "src/tests/data/standard_json/factory_dependency_outside_output_selection.json";
+/// A factory dependency outside the output selection calling a library.
+pub const STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_LIBRARIES_PATH: &str =
+    "src/tests/data/standard_json/factory_dependency_outside_output_selection_libraries.json";
+/// A factory dependency outside the output selection whose Yul name is a contract name in the creator's file.
+pub const STANDARD_JSON_FACTORY_DEPENDENCY_PATH_COLLISION_PATH: &str =
+    "src/tests/data/standard_json/factory_dependency_path_collision.json";
 /// The standard JSON fixture remapping `target/` to `b_first/` and then to `a_second/`.
 pub const STANDARD_JSON_REMAPPINGS_ORDER_PATH: &str =
     "src/tests/data/standard_json/remappings_order.json";
@@ -180,6 +200,22 @@ pub const STANDARD_JSON_YUL_PVM_CODEGEN_PATH: &str =
 /// PVM bytecode generation and only validate the Yul.
 pub const STANDARD_JSON_YUL_NO_PVM_CODEGEN_PATH: &str =
     "src/tests/data/standard_json/yul_no_pvm_codegen.json";
+/// A library in `ü.sol`, whose path solc escapes in `linkersymbol`, with the library address set.
+pub const STANDARD_JSON_LIBRARY_ESCAPED_PATH: &str =
+    "src/tests/data/standard_json/library_escaped_path.json";
+/// The same input as [`STANDARD_JSON_LIBRARY_ESCAPED_PATH`] compiled with the newyork pipeline.
+pub const STANDARD_JSON_LIBRARY_ESCAPED_PATH_NEWYORK: &str =
+    "src/tests/data/standard_json/library_escaped_path_newyork.json";
+/// The same source as [`STANDARD_JSON_LIBRARY_ESCAPED_PATH`] without the library address.
+pub const STANDARD_JSON_LIBRARY_ESCAPED_PATH_UNLINKED: &str =
+    "src/tests/data/standard_json/library_escaped_path_unlinked.json";
+/// A library in `a\nb.sol`, whose path contains a line break, without the library address.
+pub const STANDARD_JSON_LIBRARY_LINE_BREAK_PATH_UNLINKED: &str =
+    "src/tests/data/standard_json/library_line_break_path_unlinked.json";
+/// Two libraries in `a\0b.sol` and `a\0c.sol`, whose paths share the prefix before
+/// the NUL, with only the address of the first one set.
+pub const STANDARD_JSON_LIBRARY_NUL_PATH: &str =
+    "src/tests/data/standard_json/library_nul_path.json";
 /// The standard JSON input from paritytech/revive#623 with a heap size outside the PVM memory map.
 pub const STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH: &str =
     "src/tests/data/standard_json/heap_size_out_of_range.json";

@@ -49,10 +49,10 @@ which = "8.0"
 path-slash = "0.2"
 rayon = "1.11"
 clap = { version = "4", default-features = false, features = ["derive"] }
-polkavm-common = "0.37.0"
-polkavm-linker = "0.37.0"
-polkavm-disassembler = "0.37.0"
-polkavm = "0.37.0"
+polkavm-common = "0.38.0"
+polkavm-linker = "0.38.0"
+polkavm-disassembler = "0.38.0"
+polkavm = "0.38.0"
 alloy-primitives = { version = "1.4", features = ["serde"] }
 alloy-sol-types = "1.4"
 alloy-genesis = "2.5.0"
@@ -75,7 +75,7 @@ normpath = "1.5"
 # polkadot-sdk and friends
 codec = { version = "3.7.5", default-features = false, package = "parity-scale-codec" }
 scale-info = { version = "2.11.6", default-features = false }
-polkadot-sdk = { version = "=2609.0.0" }
+polkadot-sdk = { version = "=2610.0.0" }
 
 # llvm
 [workspace.dependencies.inkwell]

@@ -5150,6 +5150,39 @@ fn fmp_loop_mstore8() {
     run_differential(actions);
 }
 
+/// Reproducer from paritytech/security_findings#119.
+#[test]
+fn masked_free_pointer_copy() {
+    let mut actions = instantiate(
+        "contracts/MaskedFreePointerCopy.sol",
+        "MaskedFreePointerCopy",
+    );
+    let mut data = U256::from(1u64 << 40).to_be_bytes::<32>().to_vec();
+    data.extend(U256::from(0x10).to_be_bytes::<32>());
+    data.extend([0; 32]);
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
+/// A free pointer relative copy destination masked to 64 bits can wrap onto the free memory
+/// pointer word, so the free memory pointer must count as unbounded.
+#[test]
+fn masked_free_pointer_wrap() {
+    let mut actions = instantiate_yul(
+        "contracts/MaskedFreePointerWrap.yul",
+        "MaskedFreePointerWrap",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0x11; 64]);
+    run_differential(actions);
+}
+
 /// Reproducer from paritytech/security_findings#118.
 #[test]
 fn calldata_copy_over_free_pointer() {
@@ -6034,5 +6067,43 @@ fn huge_offset_argument_store() {
     for offset in [U256::from(0x40), (U256::from(1) << 64) + U256::from(0x40)] {
         push_call(&mut actions, TestAddress::Instantiated(0), words(&[offset]));
     }
+    run_differential(actions);
+}
+
+/// A `\u` escape of a surrogate code point must encode to the same three bytes as solc.
+#[test]
+fn unicode_surrogate_escape() {
+    let mut actions = instantiate_yul(
+        "contracts/UnicodeSurrogateEscape.yul",
+        "UnicodeSurrogateEscape",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// A `\u` escape below U+0800 must not leave zero padding inside the string literal.
+#[test]
+fn unicode_escape_string_literal() {
+    let mut actions = instantiate_yul("contracts/UnicodeEscape.yul", "UnicodeEscape");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// A backslash before a CR LF line ending continues the string literal without the CR and LF.
+#[test]
+fn string_continuation_crlf() {
+    let mut actions = instantiate_yul(
+        "contracts/StringContinuationCrlf.yul",
+        "StringContinuationCrlf",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// The `_` separators of a `hex"…"` literal are not part of its bytes.
+#[test]
+fn hex_string_separator() {
+    let mut actions = instantiate_yul("contracts/HexStringSeparator.yul", "HexStringSeparator");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }

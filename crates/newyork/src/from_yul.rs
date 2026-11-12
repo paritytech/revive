@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use num::BigUint;
 
+use revive_common::BYTE_LENGTH_WORD;
 use revive_yul::lexer::token::lexeme::literal::boolean::Boolean as BooleanLiteral;
 use revive_yul::lexer::token::lexeme::literal::integer::Integer as IntegerLiteral;
 use revive_yul::lexer::token::lexeme::literal::Literal as LexicalLiteral;
@@ -456,7 +457,9 @@ impl YulTranslator {
                 ));
             }
             FunctionName::LinkerSymbol => {
-                let path = self.extract_string_literal(&call.arguments)?;
+                let path = call
+                    .linker_symbol_path()
+                    .map_err(|error| TranslationError::InvalidLiteral(error.to_string()))?;
                 return Ok((vec![], Expression::LinkerSymbol { path }));
             }
             _ => {}
@@ -1430,82 +1433,19 @@ impl YulTranslator {
             },
             LexicalLiteral::String(string_literal) => {
                 let string = &string_literal.inner;
-                let mut hex_string = if string_literal.is_hexadecimal {
-                    string.clone()
-                } else {
-                    let mut hex = std::string::String::with_capacity(64);
-                    let mut index = 0;
-                    let bytes = string.as_bytes();
-                    while index < bytes.len() {
-                        if bytes[index] == b'\\' {
-                            index += 1;
-                            if index >= bytes.len() {
-                                break;
-                            }
-                            match bytes[index] {
-                                b'x' => {
-                                    if index + 2 < bytes.len() {
-                                        hex.push(bytes[index + 1] as char);
-                                        hex.push(bytes[index + 2] as char);
-                                    }
-                                    index += 3;
-                                }
-                                b'u' => {
-                                    if index + 4 < bytes.len() {
-                                        let code_point_string = &string[index + 1..index + 5];
-                                        if let Ok(codepoint) =
-                                            u32::from_str_radix(code_point_string, 16)
-                                        {
-                                            if let Some(character) = char::from_u32(codepoint) {
-                                                let mut buffer = [0u8; 4];
-                                                let encoded = character.encode_utf8(&mut buffer);
-                                                for byte in encoded.bytes() {
-                                                    hex.push_str(&format!("{byte:02x}"));
-                                                }
-                                            }
-                                        }
-                                    }
-                                    index += 5;
-                                }
-                                b't' => {
-                                    hex.push_str("09");
-                                    index += 1;
-                                }
-                                b'n' => {
-                                    hex.push_str("0a");
-                                    index += 1;
-                                }
-                                b'r' => {
-                                    hex.push_str("0d");
-                                    index += 1;
-                                }
-                                b'\n' => {
-                                    index += 1;
-                                }
-                                other => {
-                                    hex.push_str(&format!("{other:02x}"));
-                                    index += 1;
-                                }
-                            }
-                        } else {
-                            hex.push_str(&format!("{:02x}", bytes[index]));
-                            index += 1;
-                        }
-                    }
-                    hex
-                };
+                let bytes = string_literal.to_bytes().map_err(|error| {
+                    TranslationError::InvalidLiteral(format!("`{string}`: {error}"))
+                })?;
 
-                assert!(
-                    hex_string.len() <= 64,
-                    "ICE: string literal exceeds 32 bytes ({} hex digits)",
-                    hex_string.len()
-                );
-                while hex_string.len() < 64 {
-                    hex_string.push('0');
+                if bytes.len() > BYTE_LENGTH_WORD {
+                    return Err(TranslationError::InvalidLiteral(format!(
+                        "`{string}` exceeds {BYTE_LENGTH_WORD} bytes"
+                    )));
                 }
 
-                BigUint::parse_bytes(hex_string.as_bytes(), 16)
-                    .ok_or_else(|| TranslationError::InvalidLiteral(string.clone()))
+                let mut word = [0; BYTE_LENGTH_WORD];
+                word[..bytes.len()].copy_from_slice(&bytes);
+                Ok(BigUint::from_bytes_be(&word))
             }
         }
     }
@@ -1678,6 +1618,40 @@ object "Test" {{
                 Err(TranslationError::Unsupported(rejected)) => assert_eq!(rejected, name),
                 Err(other) => panic!("unexpected error: {other}"),
                 Ok(_) => panic!("{name} must be rejected"),
+            }
+        }
+    }
+
+    /// solc rejects these string literals, so translation must fail instead of
+    /// dropping the escape or panicking.
+    #[test]
+    fn malformed_string_literals_are_rejected() {
+        for literal in [
+            r#""\q""#,
+            r#""\x4""#,
+            r#""\xg0""#,
+            r#""\u004""#,
+            r#""\u+0fc""#,
+            r#""aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa""#,
+            r#"hex"001""#,
+        ] {
+            let source = format!(
+                r#"
+object "Test" {{
+    code {{
+        mstore(0, {literal})
+    }}
+}}
+"#
+            );
+            let mut lexer = Lexer::new(source);
+            let yul_object =
+                YulObject::parse(&mut lexer, None).expect("the Yul object should parse");
+
+            match YulTranslator::new().translate_object(&yul_object) {
+                Err(TranslationError::InvalidLiteral(_)) => {}
+                Err(other) => panic!("unexpected error for {literal}: {other}"),
+                Ok(_) => panic!("{literal} must be rejected"),
             }
         }
     }

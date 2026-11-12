@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "name": "agent-guidance",
+            "type": "command",
+            "command": "\"$GEMINI_PROJECT_DIR/.agent-guidance-loader/load.sh\" gemini",
+            "timeout": 15000
+          }
+        ]
+      }
+    ]
+  }
+}

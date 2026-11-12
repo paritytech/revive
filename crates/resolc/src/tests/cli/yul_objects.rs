@@ -7,7 +7,7 @@
 
 use crate::cli_utils::{
     absolute_path, assert_command_failure, execute_resolc, CommandResult, RESOLC_YUL_FLAG,
-    YUL_DOTTED_OBJECT_PATH, YUL_SIBLING_OBJECTS_PATH,
+    YUL_DOTTED_OBJECT_PATH, YUL_DUPLICATE_OBJECT_NAME_PATH, YUL_SIBLING_OBJECTS_PATH,
 };
 
 /// Asserts the command failed with a diagnostic rather than by aborting.
@@ -44,6 +44,19 @@ fn reports_the_dotted_object_notation() {
     assert!(
         result.stderr.contains("dotted"),
         "the diagnostic should explain the unsupported notation, got: {}",
+        result.stderr
+    );
+}
+
+#[test]
+fn reports_a_duplicate_object_name() {
+    let path = absolute_path(YUL_DUPLICATE_OBJECT_NAME_PATH);
+    let result = execute_resolc(&[&path, RESOLC_YUL_FLAG, "--bin"]);
+
+    assert_reported_not_aborted(&result, "Two different objects of the same name");
+    assert!(
+        result.stderr.contains("DuplicateObjectName"),
+        "the object should be named in the diagnostic, got: {}",
         result.stderr
     );
 }

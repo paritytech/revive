@@ -11,8 +11,14 @@ use crate::cli_utils::{
     STANDARD_JSON_CONTRACTS_PATH, STANDARD_JSON_DEBUG_INFO_DEFAULT_PATH,
     STANDARD_JSON_DEBUG_INFO_EMPTY_PATH, STANDARD_JSON_EMPTY_OPTIMIZER_PATH,
     STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_DETECT_PATH,
-    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH, STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH,
-    STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH, STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_LIBRARIES_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_LIBRARIES_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH,
+    STANDARD_JSON_FACTORY_DEPENDENCY_PATH_COLLISION_PATH,
+    STANDARD_JSON_HEAP_SIZE_LINKER_FAILURE_PATH, STANDARD_JSON_HEAP_SIZE_OUT_OF_RANGE_PATH,
+    STANDARD_JSON_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_LIBRARY_ESCAPED_PATH,
+    STANDARD_JSON_LIBRARY_ESCAPED_PATH_NEWYORK, STANDARD_JSON_LIBRARY_ESCAPED_PATH_UNLINKED,
+    STANDARD_JSON_LIBRARY_LINE_BREAK_PATH_UNLINKED, STANDARD_JSON_LIBRARY_NUL_PATH,
     STANDARD_JSON_METADATA_HASH_NONE_PATH, STANDARD_JSON_MIX_ALL_WILDCARD_AND_FILE_SELECTION_PATH,
     STANDARD_JSON_NEWYORK_DISABLED_PATH, STANDARD_JSON_NEWYORK_ENABLED_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
@@ -683,6 +689,89 @@ fn bytecode_object(output: &SolcStandardJsonOutput, path: &str, name: &str) -> S
         .to_owned()
 }
 
+/// A library in a source file whose path solc escapes gets linked.
+#[test]
+fn links_library_with_escaped_path() {
+    for path in [
+        STANDARD_JSON_LIBRARY_ESCAPED_PATH,
+        STANDARD_JSON_LIBRARY_ESCAPED_PATH_NEWYORK,
+    ] {
+        let result = execute_resolc_with_stdin_input(&[JSON_OPTION], path);
+        assert_command_success(&result, path);
+
+        assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+        let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+        let contract = &output["contracts"]["ü.sol"]["C"];
+        assert_eq!(contract["objectFormat"], "PVM", "{path}");
+        assert_eq!(
+            contract["missingLibraries"],
+            serde_json::json!([]),
+            "{path}"
+        );
+    }
+}
+
+/// A missing library in a source file whose path solc escapes is reported unescaped.
+#[test]
+fn reports_missing_library_with_escaped_path() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_LIBRARY_ESCAPED_PATH_UNLINKED,
+    );
+    assert_command_success(&result, "The unlinked escaped path input");
+
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    let contract = &output["contracts"]["ü.sol"]["C"];
+    assert_eq!(contract["objectFormat"], "ELF");
+    assert_eq!(contract["missingLibraries"], serde_json::json!(["ü.sol:L"]));
+}
+
+/// A missing library in a source file whose path contains a line break stays unlinked
+/// instead of failing to link.
+#[test]
+fn reports_missing_library_with_line_break_in_path() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_LIBRARY_LINE_BREAK_PATH_UNLINKED,
+    );
+    assert_command_success(&result, "The unlinked line break path input");
+
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    let contract = &output["contracts"]["a\nb.sol"]["C"];
+    assert_eq!(contract["objectFormat"], "ELF");
+    assert_eq!(
+        contract["missingLibraries"],
+        serde_json::json!(["a\nb.sol:L"])
+    );
+}
+
+/// Libraries whose paths only differ after a NUL get distinct linker symbols, so the
+/// address of one is not linked into a contract calling the other.
+#[test]
+fn keeps_libraries_with_nul_in_path_apart() {
+    let result = execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_LIBRARY_NUL_PATH);
+    assert_command_success(&result, "The NUL path input");
+
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    let linked = &output["contracts"]["x1.sol"]["X1"];
+    assert_eq!(linked["objectFormat"], "PVM");
+    assert_eq!(linked["missingLibraries"], serde_json::json!([]));
+
+    let unlinked = &output["contracts"]["x2.sol"]["X2"];
+    assert_eq!(unlinked["objectFormat"], "ELF");
+    assert_eq!(
+        unlinked["missingLibraries"],
+        serde_json::json!(["a\0c.sol:L"])
+    );
+}
+
 /// Extracts the optimized Yul IR of `path`/`name` from a standard JSON output.
 fn ir_optimized(output: &SolcStandardJsonOutput, path: &str, name: &str) -> String {
     let contract = output
@@ -851,6 +940,77 @@ fn switch_expression_missing_libraries() {
             "the library `sw.sol:L` should be reported as missing with arguments {arguments:?}"
         );
     }
+}
+
+/// A factory dependency outside the output selection is compiled too.
+#[test]
+fn factory_dependency_outside_output_selection() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_PATH,
+    );
+    assert_command_success(
+        &result,
+        "the factory dependency outside output selection fixture",
+    );
+    assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+    let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+    let factory_dependencies = output["contracts"]["A.sol"]["P"]["factoryDependencies"]
+        .as_object()
+        .expect("the contract `A.sol:P` should have factory dependencies");
+    assert_eq!(factory_dependencies.len(), 1);
+    for dependency in factory_dependencies.values() {
+        let (path, name) = dependency.as_str().unwrap().split_once(':').unwrap();
+        assert!(
+            output["contracts"][path][name]["evm"]["bytecode"]["object"]
+                .as_str()
+                .is_some_and(|bytecode| !bytecode.is_empty()),
+            "the dependency `{dependency}` should be compiled"
+        );
+    }
+}
+
+/// Missing libraries of a created contract outside the output selection are reported for its creator.
+#[test]
+fn factory_dependency_outside_output_selection_missing_libraries() {
+    for arguments in [
+        vec![JSON_OPTION],
+        vec![JSON_OPTION, "--detect-missing-libraries"],
+    ] {
+        let result = execute_resolc_with_stdin_input(
+            &arguments,
+            STANDARD_JSON_FACTORY_DEPENDENCY_OUTSIDE_OUTPUT_SELECTION_LIBRARIES_PATH,
+        );
+        assert_command_success(
+            &result,
+            "the factory dependency outside output selection libraries fixture",
+        );
+        assert_no_errors(&to_solc_standard_json_output(&result.stdout));
+
+        let output: serde_json::Value = serde_json::from_str(&result.stdout).unwrap();
+        assert_eq!(
+            output["contracts"]["A.sol"]["P"]["missingLibraries"],
+            serde_json::json!(["B.sol:L"]),
+            "`A.sol:P` should miss the library `B.sol:L` with arguments {arguments:?}"
+        );
+    }
+}
+
+/// A factory dependency outside the output selection must not replace a contract of the same path.
+#[test]
+fn factory_dependency_path_collision() {
+    let result = execute_resolc_with_stdin_input(
+        &[JSON_OPTION],
+        STANDARD_JSON_FACTORY_DEPENDENCY_PATH_COLLISION_PATH,
+    );
+    assert_command_success(&result, "the factory dependency path collision fixture");
+
+    let output = to_solc_standard_json_output(&result.stdout);
+    assert_standard_json_errors_contain(
+        &output,
+        "`B.sol:K_4`, which is the path of another contract",
+    );
 }
 
 /// The last of two remappings for the same prefix wins, as in solc.

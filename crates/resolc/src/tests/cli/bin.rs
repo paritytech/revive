@@ -6,6 +6,7 @@ use crate::{
         execute_resolc, execute_resolc_in_directory, execute_resolc_with_stdin_input,
         CommandResult, ResolcOptSettings, SolcOptSettings, DASH_SOURCE_NAMES, PVM_BLOB_START,
         SOLIDITY_BLOB_OPCODES_PATH, SOLIDITY_CONTRACT_PATH,
+        SOLIDITY_DEBUG_INFO_NESTED_FUNCTION_PATH,
         SOLIDITY_FACTORY_DEPENDENCY_CONSTRUCTOR_AND_RUNTIME_PATH,
         SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH, SOLIDITY_IMMUTABLES_AT_LIMIT_PATH,
         SOLIDITY_IMMUTABLES_OVER_LIMIT_PATH, STANDARD_JSON_CONTRACTS_PATH,
@@ -191,6 +192,16 @@ fn compiles_yul_to_binary_blob() {
 fn compiles_newyork_folded_guard_inlined_loop() {
     let path = absolute_path(SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH);
     let arguments = &[&path, "--newyork", "--disable-solc-optimizer", "--bin"];
+
+    let result = execute_resolc(arguments);
+    assert_pvm_blob(&result);
+}
+
+/// A Yul function defined in a block nested inside another function compiles with debug info.
+#[test]
+fn compiles_debug_info_nested_function() {
+    let path = absolute_path(SOLIDITY_DEBUG_INFO_NESTED_FUNCTION_PATH);
+    let arguments = &[&path, "--disable-solc-optimizer", "-O3", "-g", "--bin"];
 
     let result = execute_resolc(arguments);
     assert_pvm_blob(&result);

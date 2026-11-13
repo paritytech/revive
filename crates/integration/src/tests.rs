@@ -116,6 +116,24 @@ fn instantiate(path: &str, contract: &str) -> Vec<SpecsAction> {
     }]
 }
 
+/// Instantiates a Solidity contract compiled with the solc optimizer disabled.
+fn instantiate_solc_unoptimized(path: &str, contract: &str) -> Vec<SpecsAction> {
+    vec![Instantiate {
+        origin: TestAddress::Alice,
+        value: 0,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        code: Code::Solidity {
+            path: Some(path.into()),
+            contract: contract.to_string(),
+            solc_optimizer: Some(false),
+            libraries: Default::default(),
+        },
+        data: vec![],
+        salt: OptionalHex::default(),
+    }]
+}
+
 fn run_differential(actions: Vec<SpecsAction>) {
     Specs {
         differential: true,
@@ -6122,6 +6140,34 @@ fn loop_return_before_offset_use() {
             words(&[offset, U256::ZERO, U256::ZERO]),
         );
     }
+    run_differential(actions);
+}
+
+/// A call used as a `for` loop condition is rewritten when fuzzy deduplication merges its callee.
+#[test]
+fn for_condition_deduplicated_call() {
+    let mut actions = instantiate_solc_unoptimized(
+        "contracts/ForConditionDeduplicatedCall.sol",
+        "ForConditionDeduplicatedCall",
+    );
+    for argument in [U256::ZERO, U256::from(2), U256::from(3)] {
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            words(&[argument]),
+        );
+    }
+    run_differential(actions);
+}
+
+/// A function that writes the free memory pointer only from a `for` loop condition call is a writer.
+#[test]
+fn for_condition_free_pointer_writer() {
+    let mut actions = instantiate_solc_unoptimized(
+        "contracts/ForConditionFreePointerWriter.sol",
+        "ForConditionFreePointerWriter",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }
 

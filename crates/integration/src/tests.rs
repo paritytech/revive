@@ -6208,3 +6208,35 @@ fn hex_string_separator() {
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }
+
+#[test]
+fn data_copy_below_free_pointer() {
+    run_differential(instantiate_yul(
+        "contracts/DataCopyBelowFreePointer.yul",
+        "DataCopyBelowFreePointer",
+    ));
+}
+
+#[test]
+fn data_copy_zero_length() {
+    run_differential(instantiate_yul(
+        "contracts/DataCopyZeroLength.yul",
+        "DataCopyZeroLength",
+    ));
+}
+
+#[test]
+fn data_copy_overlapping_store() {
+    run_differential(instantiate_yul(
+        "contracts/DataCopyOverlappingStore.yul",
+        "DataCopyOverlappingStore",
+    ));
+}
+
+#[test]
+fn data_copy_in_branch_below_free_pointer() {
+    run_differential(instantiate_yul(
+        "contracts/DataCopyInBranchBelowFreePointer.yul",
+        "DataCopyInBranchBelowFreePointer",
+    ));
+}

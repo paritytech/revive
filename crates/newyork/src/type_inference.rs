@@ -185,9 +185,13 @@ pub struct TypeInference {
     /// [`Self::unconditionally_narrowed`] — narrowing it is sound for the same reason.
     unconditional_call_argument: BTreeSet<u32>,
     /// Walk state for [`Self::collect_uses_block`]: false while recursing into a
-    /// conditionally-executed region (`if`/`switch` branch, loop body). Gates insertion
-    /// into [`Self::unconditionally_narrowed`] and [`Self::unconditional_call_argument`].
+    /// conditionally-executed region (`if`/`switch` branch, loop body), and for the rest of a
+    /// statement sequence after a statement that may `leave` or end the call successfully. Gates
+    /// insertion into [`Self::unconditionally_narrowed`] and [`Self::unconditional_call_argument`].
     in_unconditional_context: bool,
+    /// Functions that may end the call successfully, directly or through a callee
+    /// (see [`statements_may_halt`]).
+    halting_functions: BTreeSet<u32>,
     /// When set, a `FreePointerSlot` `mload` (the FMP at 0x40) forward-infers to I256 instead
     /// of I32. The I32 width is only sound when the FMP holds a Solidity-allocator pointer
     /// (`< heap_size`); when `heap_opt` finds an FMP write that isn't provably sbrk-bounded,
@@ -213,6 +217,7 @@ impl TypeInference {
             unconditionally_narrowed: BTreeSet::new(),
             unconditional_call_argument: BTreeSet::new(),
             in_unconditional_context: true,
+            halting_functions: BTreeSet::new(),
             fmp_could_be_unbounded: false,
             sub_inferences: Vec::new(),
         }
@@ -362,6 +367,7 @@ impl TypeInference {
             }
         }
 
+        self.halting_functions = halting_functions(object);
         self.collect_uses_block(&object.code);
         for function in object.functions.values() {
             self.collect_uses_function(function);
@@ -713,8 +719,9 @@ impl TypeInference {
     }
 
     /// Walks a block (and all nested regions) collecting argument min_widths
-    /// at call sites. For each call to a function, records the widest argument
-    /// seen across all callers — caller-driven narrowing uses the maximum.
+    /// at call sites, including a call that is a `for` loop condition. For each
+    /// call to a function, records the widest argument seen across all callers —
+    /// caller-driven narrowing uses the maximum.
     fn collect_argument_widths_block(
         &self,
         block: &Block,
@@ -734,7 +741,15 @@ impl TypeInference {
                 | Statement::Expression(Expression::Call {
                     function,
                     arguments,
-                }) => Some((function, arguments)),
+                })
+                | Statement::For {
+                    condition:
+                        Expression::Call {
+                            function,
+                            arguments,
+                        },
+                    ..
+                } => Some((function, arguments)),
                 _ => None,
             };
             if let Some((fid, arguments)) = call {
@@ -1008,10 +1023,18 @@ impl TypeInference {
 
     /// Collects uses from a sequence of statements at the current conditional context,
     /// recursing into each statement's nested regions via [`Self::collect_uses_region`].
+    /// The statements after one that may `leave` or end the call successfully are not reached
+    /// on every path, so they are collected as conditional.
     fn collect_uses_statements(&mut self, statements: &[Statement]) {
         for statement in statements {
             self.collect_uses_statement(statement);
             self.collect_uses_region(statement);
+            let statement = std::slice::from_ref(statement);
+            if statements_may_leave(statement)
+                || statements_may_halt(statement, &self.halting_functions)
+            {
+                self.in_unconditional_context = false;
+            }
         }
     }
 
@@ -2041,6 +2064,58 @@ fn return_path_value_ids(function: &Function) -> Vec<Vec<ValueId>> {
         }
     });
     return_path_ids
+}
+
+/// Whether `statements` contain a `leave` at any nesting depth.
+fn statements_may_leave(statements: &[Statement]) -> bool {
+    let mut leaves = false;
+    for_each_statement(statements, &mut |statement| {
+        leaves |= matches!(statement, Statement::Leave { .. });
+    });
+    leaves
+}
+
+/// Whether `statements` may end the call successfully (`return`, `stop`, `selfdestruct`) at any
+/// nesting depth, directly or through a call to one of `halting_functions`.
+///
+/// A narrowed parameter traps at the call site on a wide argument. That matches EVM only if EVM
+/// would fail on it too, so a use after a possible successful exit does not justify narrowing.
+fn statements_may_halt(statements: &[Statement], halting_functions: &BTreeSet<u32>) -> bool {
+    let mut halts = false;
+    for_each_statement(statements, &mut |statement| {
+        halts |= match statement {
+            Statement::Return { .. } | Statement::Stop | Statement::SelfDestruct { .. } => true,
+            Statement::Let {
+                value: Expression::Call { function, .. },
+                ..
+            }
+            | Statement::Expression(Expression::Call { function, .. })
+            | Statement::For {
+                condition: Expression::Call { function, .. },
+                ..
+            } => halting_functions.contains(&function.0),
+            _ => false,
+        };
+    });
+    halts
+}
+
+/// The functions of `object` that may end the call successfully, directly or through a callee.
+fn halting_functions(object: &Object) -> BTreeSet<u32> {
+    let mut halting = BTreeSet::new();
+    loop {
+        let before = halting.len();
+        for (function_id, function) in &object.functions {
+            if !halting.contains(&function_id.0)
+                && statements_may_halt(&function.body.statements, &halting)
+            {
+                halting.insert(function_id.0);
+            }
+        }
+        if halting.len() == before {
+            return halting;
+        }
+    }
 }
 
 /// Maximum number of param/return narrowing iterations.

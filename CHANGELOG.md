@@ -2,11 +2,16 @@
 
 ## Unreleased
 
-Supported `polkadot-sdk` rev: `2609.0.0`
+Supported `polkadot-sdk` rev: `2610.0.0`
 
 ### Added
 
 - The keccak256 metadata hash is embedded in the PolkaVM blob metadata hash section, so the code hash on chain commits to the contract metadata. It is omitted with `--metadata-hash none` or the standard JSON `settings.metadata.bytecodeHash` set to `none`, which is now honored.
+
+### Changed
+
+- The latest supported `polkadot-sdk` version is now `2610.0.0`
+- Updated `polkavm` to `0.38.0`.
 
 ## v1.5.0
 

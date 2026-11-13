@@ -124,10 +124,6 @@ const SMALL_FUNCTION_ALWAYSINLINE_THRESHOLD: usize = 8;
 /// Solidity convention: the free memory pointer is stored at this heap offset.
 const FREE_MEMORY_POINTER_SLOT: u64 = 0x40;
 
-/// Default initial value of the free memory pointer — the start of the dynamic
-/// heap region above Solidity's scratch space and the FMP slot itself.
-const DYNAMIC_HEAP_BASE: u64 = 0x80;
-
 /// Length in bytes of an EVM ABI function selector.
 const ABI_SELECTOR_LENGTH: u64 = 4;
 
@@ -706,15 +702,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
     /// EVM `msize` is the highest accessed byte rounded *up* to a full word; a
     /// word-sized access touches `[off, off + WORD)`, so `off + WORD` is
     /// rounded up to the next word boundary (this matters for unaligned
-    /// offsets). A dynamic (non-constant) offset is treated as the heap base.
+    /// offsets). A dynamic (non-constant) offset leaves the watermark unchanged.
     fn advance_msize_watermark(
         &self,
         context: &PolkaVMContext<'ctx>,
         offset_value: IntValue<'ctx>,
     ) -> Result<()> {
         if self.has_msize {
-            let static_offset =
-                Self::try_extract_const_u64(offset_value).unwrap_or(DYNAMIC_HEAP_BASE);
+            let Some(static_offset) = Self::try_extract_const_u64(offset_value) else {
+                return Ok(());
+            };
             let word = revive_common::BYTE_LENGTH_WORD as u64;
             let rounded = static_offset.saturating_add(word).div_ceil(word) * word;
             let min_size = context.xlen_type().const_int(rounded, false);

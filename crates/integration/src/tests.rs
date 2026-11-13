@@ -6227,3 +6227,22 @@ fn store_const_offset_above_32_bits_traps() {
     }
     .run();
 }
+
+#[test]
+fn load_const_offset_above_32_bits_traps() {
+    let mut actions = instantiate_yul(
+        "contracts/LoadConstOffsetAbove32Bits.yul",
+        "LoadConstOffsetAbove32Bits",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: false,
+        ..Default::default()
+    }));
+    Specs {
+        actions,
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+}

@@ -790,17 +790,19 @@ impl HeapAnalysis {
                     self.fmp_word_escapes = true;
                 }
             }
-            (Some(s), None) => {
-                let word_start = word_align(s);
-                self.min_dynamic_escape_start = Some(
-                    self.min_dynamic_escape_start
-                        .map_or(word_start, |previous| previous.min(word_start)),
-                );
-            }
+            (Some(s), None) => self.lower_min_dynamic_escape_start(s),
             (None, _) => {
                 self.min_dynamic_escape_start = Some(0);
             }
         }
+    }
+
+    fn lower_min_dynamic_escape_start(&mut self, address: u64) {
+        let word_start = word_align(address);
+        self.min_dynamic_escape_start = Some(
+            self.min_dynamic_escape_start
+                .map_or(word_start, |previous| previous.min(word_start)),
+        );
     }
 
     fn mark_escaping_range(&mut self, offset: &Value, length: &Value) {
@@ -813,11 +815,13 @@ impl HeapAnalysis {
                 None => {
                     self.escaping_regions.insert(word_align(address));
                     self.has_dynamic_escapes = true;
+                    self.lower_min_dynamic_escape_start(address);
                 }
             },
             (Some(address), None) => {
                 self.escaping_regions.insert(word_align(address));
                 self.has_dynamic_escapes = true;
+                self.lower_min_dynamic_escape_start(address);
             }
             (None, _) => {
                 self.has_dynamic_escapes = true;
@@ -1500,6 +1504,7 @@ impl HeapAnalysis {
                     self.escaping_regions.insert(word_align(address));
                     self.tainted_regions.insert(word_align(address));
                     self.has_dynamic_escapes = true;
+                    self.lower_min_dynamic_escape_start(address);
                 }
             },
             (Some(address), None) => {
@@ -4431,5 +4436,68 @@ mod tests {
         assert_eq!(analysis.escaping_regions, top);
         assert_eq!(analysis.tainted_regions, top);
         assert!(!analysis.has_dynamic_escapes);
+    }
+
+    fn scratch_word_store_statements() -> Vec<Statement> {
+        vec![
+            literal_binding(0, 0x20),
+            literal_binding(1, 0x0102),
+            Statement::MStore {
+                offset: Value::int(ValueId(0)),
+                value: Value::int(ValueId(1)),
+                region: MemoryRegion::from_address(&BigUint::from(0x20u64)),
+            },
+        ]
+    }
+
+    #[test]
+    fn keccak256_wider_than_range_cap_escapes_scratch_words() {
+        let analyze = |start| {
+            let mut statements = scratch_word_store_statements();
+            statements.extend([
+                literal_binding(2, start),
+                literal_binding(3, (MAX_RANGE_WORDS + 1) * BYTE_LENGTH_WORD as u64),
+                Statement::Let {
+                    bindings: vec![ValueId(4)],
+                    value: Expression::Keccak256 {
+                        offset: Value::int(ValueId(2)),
+                        length: Value::int(ValueId(3)),
+                    },
+                },
+            ]);
+            object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE)
+        };
+        assert!(!analyze(0).can_use_native(0x20));
+        assert!(analyze(0x80).can_use_native(0x20));
+    }
+
+    #[test]
+    fn external_call_return_wider_than_range_cap_escapes_scratch_words() {
+        let mut setup = scratch_word_store_statements();
+        setup.push(literal_binding(10, 0));
+        let results =
+            object_with_external_call(setup, (MAX_RANGE_WORDS + 1) * BYTE_LENGTH_WORD as u64)
+                .analyze_heap(TEST_HEAP_SIZE);
+        assert!(!results.can_use_native(0x20));
+    }
+
+    #[test]
+    fn deploy_return_with_dynamic_length_escapes_scratch_words() {
+        let mut statements = scratch_word_store_statements();
+        statements.extend([
+            literal_binding(2, 0),
+            Statement::Let {
+                bindings: vec![ValueId(3)],
+                value: Expression::CallDataLoad {
+                    offset: Value::int(ValueId(2)),
+                },
+            },
+            Statement::Return {
+                offset: Value::int(ValueId(2)),
+                length: Value::int(ValueId(3)),
+            },
+        ]);
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(!results.can_use_native(0x20));
     }
 }

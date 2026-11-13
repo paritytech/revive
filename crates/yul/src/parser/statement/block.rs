@@ -224,6 +224,7 @@ impl PolkaVMWriteLLVM for Block {
         }
 
         context.pop_debug_scope();
+        context.pop_debug_scope();
         context.pop_function_scope();
 
         Ok(())

@@ -6208,3 +6208,14 @@ fn hex_string_separator() {
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }
+
+#[test]
+fn keccak_pair_msize() {
+    let mut actions = instantiate_yul("contracts/KeccakPairMsize.yul", "KeccakPairMsize");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        hex!("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20").to_vec(),
+    );
+    run_differential(actions);
+}

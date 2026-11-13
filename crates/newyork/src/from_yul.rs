@@ -417,11 +417,15 @@ impl YulTranslator {
                 return Ok((vec![], Expression::DataOffset { id }));
             }
             FunctionName::LoadImmutable => {
-                let key = self.extract_string_literal(&call.arguments)?;
+                let key = call
+                    .immutable_name()
+                    .map_err(|error| TranslationError::InvalidLiteral(error.to_string()))?;
                 return Ok((vec![], Expression::LoadImmutable { key }));
             }
             FunctionName::SetImmutable => {
-                let key = self.extract_string_literal_at(&call.arguments, 1)?;
+                let key = call
+                    .immutable_name()
+                    .map_err(|error| TranslationError::InvalidLiteral(error.to_string()))?;
                 let (mut statements, value_expression) =
                     self.translate_expression(&call.arguments[2])?;
                 let value = match value_expression {

@@ -6107,3 +6107,10 @@ fn hex_string_separator() {
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }
+
+#[test]
+fn immutable_escaped_name() {
+    let mut actions = instantiate_yul("contracts/ImmutableEscapedName.yul", "ImmutableEscapedName");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}

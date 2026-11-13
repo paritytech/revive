@@ -58,6 +58,7 @@ use revive_common::BYTE_LENGTH_WORD;
 use crate::ir::{
     for_each_statement, word_align, word_store_overlaps_free_pointer_slot, BitWidth, Block,
     Expression, FunctionId, MemoryRegion, Object, Region, Statement, Type, Value, ValueId,
+    DATA_COPY_WRITE_LENGTH,
 };
 use crate::simplify::fold_binary;
 
@@ -430,17 +431,19 @@ impl MemoryOptimizer {
                     ref length,
                     ..
                 }
-                | Statement::DataCopy {
-                    ref destination,
-                    ref length,
-                    ..
-                }
                 | Statement::CallDataCopy {
                     ref destination,
                     ref length,
                     ..
                 } => {
-                    self.invalidate_state_for_copy(destination, length);
+                    self.invalidate_state_for_copy(destination, self.try_get_static_offset(length));
+                    processed.push(statement);
+                }
+
+                Statement::DataCopy {
+                    ref destination, ..
+                } => {
+                    self.invalidate_state_for_copy(destination, Some(DATA_COPY_WRITE_LENGTH));
                     processed.push(statement);
                 }
 
@@ -572,11 +575,10 @@ impl MemoryOptimizer {
     ///    range, retain only entries that don't overlap.
     /// 3. anything else (dynamic destination with nonzero or unknown length, dynamic length with
     ///    known destination): conservatively clear all tracking.
-    fn invalidate_state_for_copy(&mut self, destination: &Value, length: &Value) {
-        let copy_length = self.try_get_static_offset(length);
+    fn invalidate_state_for_copy(&mut self, destination: &Value, length: Option<u64>) {
         let copy_destination = self.try_get_static_offset(destination);
-        if matches!(copy_length, Some(0)) {
-        } else if let (Some(start), Some(size)) = (copy_destination, copy_length) {
+        if matches!(length, Some(0)) {
+        } else if let (Some(start), Some(size)) = (copy_destination, length) {
             let end = start.saturating_add(size);
             self.memory_state.retain(|_, tracked| {
                 let tracked_end = tracked.offset.saturating_add(BYTE_LENGTH_WORD as u64);
@@ -1154,7 +1156,8 @@ impl FmpPropagation {
                     source,
                     length,
                 } => {
-                    if Self::write_may_cover_fmp(&constants, &destination, &length) {
+                    let resolved_length = Self::resolve_offset(&constants, &length);
+                    if Self::write_may_cover_fmp(&constants, &destination, resolved_length) {
                         fmp_value = None;
                     }
                     result.push(Statement::MCopy {
@@ -1183,13 +1186,22 @@ impl FmpPropagation {
                     ref destination,
                     ref length,
                     ..
-                }
-                | Statement::DataCopy {
-                    ref destination,
-                    ref length,
-                    ..
                 } => {
-                    if Self::write_may_cover_fmp(&constants, destination, length) {
+                    let resolved_length = Self::resolve_offset(&constants, length);
+                    if Self::write_may_cover_fmp(&constants, destination, resolved_length) {
+                        fmp_value = None;
+                    }
+                    result.push(statement);
+                }
+
+                Statement::DataCopy {
+                    ref destination, ..
+                } => {
+                    if Self::write_may_cover_fmp(
+                        &constants,
+                        destination,
+                        Some(DATA_COPY_WRITE_LENGTH),
+                    ) {
                         fmp_value = None;
                     }
                     result.push(statement);
@@ -1254,13 +1266,13 @@ impl FmpPropagation {
     fn write_may_cover_fmp(
         constants: &BTreeMap<u32, BigUint>,
         destination: &Value,
-        length: &Value,
+        length: Option<u64>,
     ) -> bool {
         const FMP_SLOT_START: u64 = 0x40;
         const FMP_SLOT_END: u64 = 0x60;
         match Self::resolve_offset(constants, destination) {
             Some(start) if start >= FMP_SLOT_END => false,
-            Some(start) => match Self::resolve_offset(constants, length) {
+            Some(start) => match length {
                 Some(size) => start.saturating_add(size) > FMP_SLOT_START,
                 None => true,
             },
@@ -1345,13 +1357,18 @@ impl FmpPropagation {
                 destination,
                 length,
                 ..
-            }
-            | Statement::DataCopy {
-                destination,
-                length,
-                ..
             } => {
-                if Self::write_may_cover_fmp(&local_constants, destination, length) {
+                let resolved_length = Self::resolve_offset(&local_constants, length);
+                if Self::write_may_cover_fmp(&local_constants, destination, resolved_length) {
+                    found = true;
+                }
+            }
+            Statement::DataCopy { destination, .. } => {
+                if Self::write_may_cover_fmp(
+                    &local_constants,
+                    destination,
+                    Some(DATA_COPY_WRITE_LENGTH),
+                ) {
                     found = true;
                 }
             }

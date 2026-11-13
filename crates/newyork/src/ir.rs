@@ -167,6 +167,9 @@ pub fn word_store_overlaps_free_pointer_slot(resolved_offset: Option<u64>) -> bo
     matches!(resolved_offset, Some(offset) if (0x21..0x60).contains(&offset) && offset != 0x40)
 }
 
+/// The number of bytes a `datacopy` writes at its destination.
+pub const DATA_COPY_WRITE_LENGTH: u64 = BYTE_LENGTH_WORD as u64;
+
 /// An SSA value reference (index into value table).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct ValueId(pub u32);

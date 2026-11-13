@@ -903,11 +903,11 @@ impl FmpPropagation {
     /// nested regions and `For::condition_statements`.
     fn collect_callees(statements: &[Statement], callback: &mut dyn FnMut(FunctionId)) {
         for_each_statement(statements, &mut |statement| {
-            if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
-                if let Expression::Call { function, .. } = value {
+            statement.for_each_expression(&mut |expression| {
+                if let Expression::Call { function, .. } = expression {
                     callback(*function);
                 }
-            }
+            });
         });
     }
 

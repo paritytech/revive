@@ -2910,6 +2910,26 @@ fn switch_callvalue_yield_only() {
     run_differential(actions);
 }
 
+#[test]
+fn switch_callvalue_revert_payload() {
+    let mut actions = instantiate(
+        "contracts/SwitchCallvalueRevertPayload.sol",
+        "SwitchCallvalueRevertPayload",
+    );
+    let mut data = U256::from(7).to_be_bytes::<32>().to_vec();
+    data.extend(U256::from(9).to_be_bytes::<32>());
+    data.extend(U256::from(2).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 1,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// A function returning a bare `let cv = callvalue()` binding through its return variable
 /// must keep the binding at codegen. The dead-callvalue analysis counted uses over the
 /// statement tree only, but a return variable is recorded in `Function::return_values`,

@@ -3644,6 +3644,7 @@ fn update_call_sites_with_extra_arguments(
                 }
                 Statement::For {
                     condition_statements,
+                    condition,
                     body,
                     post,
                     ..
@@ -3656,6 +3657,22 @@ fn update_call_sites_with_extra_arguments(
                         parameter_types,
                         next_id,
                     );
+                    if let Expression::Call {
+                        function,
+                        arguments,
+                    } = condition
+                    {
+                        if *function == old_id {
+                            condition_statements.extend(redirect_call_with_extra_arguments(
+                                function,
+                                arguments,
+                                new_id,
+                                extra_arguments,
+                                parameter_types,
+                                next_id,
+                            ));
+                        }
+                    }
                     rewrite(
                         &mut body.statements,
                         old_id,
@@ -3685,49 +3702,31 @@ fn update_call_sites_with_extra_arguments(
                 }
                 _ => {}
             }
-            let is_target = matches!(&statements[index],
-                Statement::Let { value: Expression::Call { function, .. }, .. }
-                | Statement::Expression(Expression::Call { function, .. })
-                if *function == old_id);
-            if is_target {
-                let mut extra_values = Vec::with_capacity(extra_arguments.len());
-                for (argument_value, parameter_type) in
-                    extra_arguments.iter().zip(parameter_types.iter())
-                {
-                    let value_id = next_id.fresh();
-                    statements.insert(
-                        index,
-                        Statement::Let {
-                            bindings: vec![value_id],
-                            value: Expression::Literal {
-                                value: argument_value.clone(),
-                                value_type: *parameter_type,
-                            },
-                        },
-                    );
-                    index += 1;
-                    extra_values.push(Value {
-                        id: value_id,
-                        value_type: *parameter_type,
-                    });
-                }
-                match &mut statements[index] {
-                    Statement::Let {
-                        value:
-                            Expression::Call {
-                                function,
-                                arguments,
-                            },
-                        ..
-                    }
-                    | Statement::Expression(Expression::Call {
+            if let Statement::Let {
+                value:
+                    Expression::Call {
                         function,
                         arguments,
-                    }) => {
-                        *function = new_id;
-                        arguments.extend(extra_values);
-                    }
-                    _ => unreachable!("is_target check above just matched a Call"),
+                    },
+                ..
+            }
+            | Statement::Expression(Expression::Call {
+                function,
+                arguments,
+            }) = &mut statements[index]
+            {
+                if *function == old_id {
+                    let bindings = redirect_call_with_extra_arguments(
+                        function,
+                        arguments,
+                        new_id,
+                        extra_arguments,
+                        parameter_types,
+                        next_id,
+                    );
+                    let binding_count = bindings.len();
+                    statements.splice(index..index, bindings);
+                    index += binding_count;
                 }
             }
             index += 1;
@@ -3741,6 +3740,35 @@ fn update_call_sites_with_extra_arguments(
         parameter_types,
         next_value_id,
     );
+}
+
+/// Redirects a call to `new_id` with `extra_arguments` appended and returns the `Let`
+/// bindings of those arguments, which must be placed before the call.
+fn redirect_call_with_extra_arguments(
+    function: &mut FunctionId,
+    arguments: &mut Vec<Value>,
+    new_id: FunctionId,
+    extra_arguments: &[BigUint],
+    parameter_types: &[Type],
+    next_id: &mut ValueId,
+) -> Vec<Statement> {
+    let mut bindings = Vec::with_capacity(extra_arguments.len());
+    for (argument_value, parameter_type) in extra_arguments.iter().zip(parameter_types) {
+        let value_id = next_id.fresh();
+        bindings.push(Statement::Let {
+            bindings: vec![value_id],
+            value: Expression::Literal {
+                value: argument_value.clone(),
+                value_type: *parameter_type,
+            },
+        });
+        arguments.push(Value {
+            id: value_id,
+            value_type: *parameter_type,
+        });
+    }
+    *function = new_id;
+    bindings
 }
 
 /// Redirects function calls in a block, replacing old function IDs with new ones.

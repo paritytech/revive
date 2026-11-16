@@ -6208,3 +6208,19 @@ fn hex_string_separator() {
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }
+
+#[test]
+fn same_name_sibling_functions() {
+    let mut actions = instantiate_yul(
+        "contracts/SameNameSiblingFunctions.yul",
+        "SameNameSiblingFunctions",
+    );
+    for input in [5u64, 3, 0] {
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            words(&[U256::from(input)]),
+        );
+    }
+    run_differential(actions);
+}

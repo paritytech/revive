@@ -33,7 +33,7 @@ SECTIONS {
 
     /// The setup routine prepares a temporary working directory.
     pub fn setup() -> anyhow::Result<Self> {
-        let temporary_directory = retry_when_access_is_denied(TempDir::new)?;
+        let temporary_directory = create_temporary_directory(TempDir::new)?;
         let object_path = temporary_directory.path().join("obj.o");
         let output_path = temporary_directory.path().join("out.o");
         let symbols_path = temporary_directory.path().join("sym.o");
@@ -120,7 +120,7 @@ fn lld(arguments: Vec<String>) -> bool {
 /// Windows reports a name clash with a directory that is still being deleted as access denied
 /// rather than as already existing, which `tempfile` does not retry. Each retry uses a new
 /// random name with a short growing delay.
-fn retry_when_access_is_denied<T>(mut create: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+fn create_temporary_directory<T>(mut create: impl FnMut() -> io::Result<T>) -> io::Result<T> {
     let mut retries = 0;
     loop {
         match create() {
@@ -140,12 +140,12 @@ fn retry_when_access_is_denied<T>(mut create: impl FnMut() -> io::Result<T>) -> 
 mod tests {
     use std::io;
 
-    use super::{retry_when_access_is_denied, TEMPORARY_DIRECTORY_RETRIES};
+    use super::{create_temporary_directory, TEMPORARY_DIRECTORY_RETRIES};
 
     #[test]
     fn retries_when_access_is_denied_once() {
         let mut calls = 0;
-        retry_when_access_is_denied(|| {
+        create_temporary_directory(|| {
             calls += 1;
             if calls == 1 {
                 Err(io::Error::from(io::ErrorKind::PermissionDenied))
@@ -160,7 +160,7 @@ mod tests {
     #[test]
     fn gives_up_when_access_stays_denied() {
         let mut calls = 0;
-        let error = retry_when_access_is_denied(|| -> io::Result<()> {
+        let error = create_temporary_directory(|| -> io::Result<()> {
             calls += 1;
             Err(io::Error::from(io::ErrorKind::PermissionDenied))
         })
@@ -172,7 +172,7 @@ mod tests {
     #[test]
     fn returns_non_permission_denied_errors_without_retrying() {
         let mut calls = 0;
-        let error = retry_when_access_is_denied(|| -> io::Result<()> {
+        let error = create_temporary_directory(|| -> io::Result<()> {
             calls += 1;
             Err(io::Error::from(io::ErrorKind::NotFound))
         })

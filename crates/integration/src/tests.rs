@@ -6208,3 +6208,13 @@ fn hex_string_separator() {
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }
+
+#[test]
+fn store_before_break_with_unreachable_store() {
+    let mut actions = instantiate_solc_unoptimized(
+        "contracts/UnreachableStoreAfterBreak.sol",
+        "UnreachableStoreAfterBreak",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}

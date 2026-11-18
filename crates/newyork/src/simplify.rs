@@ -14,9 +14,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::{BigUint, One, ToPrimitive, Zero};
 
 use crate::ir::{
-    for_each_statement_mut, BinaryOperation, BitWidth, Block, CallKind, Expression, Function,
-    FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value,
-    ValueId,
+    for_each_statement, for_each_statement_mut, BinaryOperation, BitWidth, Block, CallKind,
+    Expression, Function, FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type,
+    UnaryOperation, Value, ValueId,
 };
 
 /// Maximum value for 256-bit unsigned integer (2^256 - 1).
@@ -220,7 +220,7 @@ impl Simplifier {
         for id in &function.return_values_initial {
             defined_ids.insert(id.0);
         }
-        crate::ir::for_each_statement(&function.body.statements, &mut |statement| {
+        for_each_statement(&function.body.statements, &mut |statement| {
             statement.for_each_value_id_def(&mut |id| {
                 defined_ids.insert(id.0);
             });

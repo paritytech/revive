@@ -168,7 +168,7 @@ struct ForLoopBreakPhis<'ctx> {
 pub struct LlvmCodegen<'ctx> {
     /// Value table: maps IR ValueId to LLVM value.
     values: BTreeMap<u32, BasicValueEnum<'ctx>>,
-    /// Function table: maps IR FunctionId to function name.
+    /// Function table: maps IR FunctionId to its LLVM function name.
     function_names: BTreeMap<u32, String>,
     /// Function parameter types: maps IR FunctionId to parameter types.
     /// Used by call sites to match argument types to narrowed parameter types.
@@ -179,9 +179,6 @@ pub struct LlvmCodegen<'ctx> {
     /// Return types of the currently generating function.
     /// Set during `generate_function` and used by `Leave` codegen.
     current_return_types: Vec<Type>,
-    /// Set of function names that have already been generated.
-    /// This is used to avoid regenerating shared utility functions in multi-contract scenarios.
-    generated_functions: BTreeSet<String>,
     /// Heap optimization results for skipping byte-swapping on internal memory.
     heap_opt: HeapOptResults,
     /// Type inference results for using narrower types.
@@ -366,63 +363,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             function_parameter_types: BTreeMap::new(),
             function_return_types: BTreeMap::new(),
             current_return_types: Vec::new(),
-            generated_functions: BTreeSet::new(),
-            heap_opt,
-            type_info,
-            inline_decisions,
-            for_loop_post_phis: Vec::new(),
-            for_loop_break_phis: Vec::new(),
-            revert_blocks: BTreeMap::new(),
-            return_blocks: BTreeMap::new(),
-            panic_blocks: BTreeMap::new(),
-            use_outlined_callvalue: false,
-            use_outlined_calldataload: false,
-            use_outlined_caller: false,
-            use_outlined_store_low_word: false,
-            use_outlined_store_high_word: false,
-            callstored_word_ids: BTreeSet::new(),
-            dead_callvalue_ids: BTreeSet::new(),
-            storage_key_globals: BTreeMap::new(),
-            validator_masks: BTreeMap::new(),
-            keccak256_slot_wrappers: BTreeMap::new(),
-            has_msize: false,
-            error_string_revert_fns: BTreeMap::new(),
-            error_string_revert_counts: BTreeMap::new(),
-            custom_error_revert_fns: BTreeMap::new(),
-            custom_error_revert_counts: BTreeMap::new(),
-            store_bswap_fn: None,
-            store_bswap_checked_fn: None,
-            load_bswap_checked_fn: None,
-            exit_checked_fn: None,
-            callvalue_check_fn: None,
-            sload_word_fn: None,
-            sstore_word_fn: None,
-            store_zero_checked_fn: None,
-            store_low_word_checked_fn: None,
-            store_high_word_checked_fn: None,
-            return_word_fn: None,
-            mapping_sload_fn: None,
-            mapping_sstore_fn: None,
-            use_outlined_mapping_sload: false,
-            use_outlined_mapping_sstore: false,
-        }
-    }
-
-    /// Creates a new code generator that shares the generated_functions set with another.
-    /// This is used for subobjects to avoid regenerating shared utility functions.
-    pub fn new_with_shared_functions(
-        generated_functions: BTreeSet<String>,
-        heap_opt: HeapOptResults,
-        type_info: TypeInference,
-        inline_decisions: BTreeMap<u32, crate::InlineDecision>,
-    ) -> Self {
-        LlvmCodegen {
-            values: BTreeMap::new(),
-            function_names: BTreeMap::new(),
-            function_parameter_types: BTreeMap::new(),
-            function_return_types: BTreeMap::new(),
-            current_return_types: Vec::new(),
-            generated_functions,
             heap_opt,
             type_info,
             inline_decisions,
@@ -3403,8 +3343,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             context.set_code_type(revive_llvm_context::PolkaVMCodeType::Deploy);
         }
 
-        context.push_function_scope();
-
         self.validator_masks.clear();
         let noreturn = crate::guard_narrow::detect_noreturn_functions(object);
         for (func_id, function) in &object.functions {
@@ -3414,8 +3352,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
         }
 
         for (func_id, function) in &object.functions {
-            self.declare_function(function, context)?;
-            self.function_names.insert(func_id.0, function.name.clone());
+            let function_name = self.declare_function(function, context)?;
+            self.function_names.insert(func_id.0, function_name);
             self.function_parameter_types.insert(
                 func_id.0,
                 function
@@ -3479,7 +3417,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context.build_return(None);
 
         context.pop_debug_scope();
-        context.pop_function_scope();
 
         for (index, subobject) in object.subobjects.iter().enumerate() {
             let sub_type_info = self
@@ -3488,32 +3425,23 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 .get(index)
                 .cloned()
                 .unwrap_or_else(|| self.type_info.clone());
-            let mut subobject_codegen = LlvmCodegen::new_with_shared_functions(
-                self.generated_functions.clone(),
+            let mut subobject_codegen = LlvmCodegen::new(
                 self.heap_opt.clone(),
                 sub_type_info,
                 self.inline_decisions.clone(),
             );
             subobject_codegen.generate_object(subobject, context)?;
-            self.generated_functions
-                .extend(subobject_codegen.generated_functions);
         }
 
         Ok(())
     }
 
-    /// Declares a function (without generating body).
-    /// If the function already exists (e.g., shared utility functions in multi-contract scenarios),
-    /// this will skip re-declaring it.
+    /// Declares a function (without generating body) and returns its LLVM function name.
     pub fn declare_function(
         &mut self,
         function: &Function,
         context: &mut PolkaVMContext<'ctx>,
-    ) -> Result<()> {
-        if context.get_function(&function.name, true).is_some() {
-            return Ok(());
-        }
-
+    ) -> Result<String> {
         let argument_types: Vec<_> = function
             .parameters
             .iter()
@@ -3538,16 +3466,18 @@ impl<'ctx> LlvmCodegen<'ctx> {
             context.function_type(argument_types, function.returns.len())
         };
 
-        context.add_function(
+        context.push_function_scope();
+        let declaration = context.add_function(
             &function.name,
             function_type,
             function.returns.len(),
             Some(inkwell::module::Linkage::Internal),
             None,
             true,
-        )?;
+        );
+        context.pop_function_scope();
 
-        Ok(())
+        Ok(declaration?.borrow().name().to_owned())
     }
 
     /// Sets LLVM inline attributes on a declared function based on our custom
@@ -3574,7 +3504,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
             return;
         }
 
-        let declaration = match context.get_function(&function.name, true) {
+        let declaration = match self
+            .function_names
+            .get(&function.id.0)
+            .and_then(|function_name| context.get_function(function_name, false))
+        {
             Some(func_ref) => func_ref.borrow().declaration(),
             None => return,
         };
@@ -3621,27 +3555,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     /// Generates LLVM IR for a function body.
-    /// If the function body has already been generated (shared utility functions in multi-contract
-    /// scenarios), this will skip regenerating it.
     fn generate_function(
         &mut self,
         function: &Function,
         context: &mut PolkaVMContext<'ctx>,
     ) -> Result<()> {
-        let internal_name = format!(
-            "{}_{}",
-            function.name,
-            context
-                .code_type()
-                .map(|code_type| format!("{:?}", code_type))
-                .unwrap_or_default()
-        );
-
-        if self.generated_functions.contains(&internal_name) {
-            return Ok(());
-        }
-        self.generated_functions.insert(internal_name);
-
         let saved_revert_blocks = std::mem::take(&mut self.revert_blocks);
         let saved_return_blocks = std::mem::take(&mut self.return_blocks);
         let saved_panic_blocks = std::mem::take(&mut self.panic_blocks);
@@ -3651,7 +3569,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let saved_return_types =
             std::mem::replace(&mut self.current_return_types, function.returns.clone());
 
-        context.set_current_function(&function.name, None, true)?;
+        let function_name = self
+            .function_names
+            .get(&function.id.0)
+            .ok_or(CodegenError::UndefinedFunction(function.id))?;
+        context.set_current_function(function_name, None, false)?;
         context.set_basic_block(context.current_function().borrow().entry_block());
 
         for (index, (parameter_id, parameter_type)) in function.parameters.iter().enumerate() {
@@ -6534,7 +6456,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 context.set_debug_location(1, 0, None)?;
 
                 let llvm_function = context
-                    .get_function(&function_name, true)
+                    .get_function(&function_name, false)
                     .ok_or(CodegenError::UndefinedFunction(*function))?;
                 let result = context.build_call(
                     llvm_function.borrow().declaration(),

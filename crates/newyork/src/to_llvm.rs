@@ -4049,11 +4049,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 match self.native_memory_mode(context, offset_value) {
                     NativeMemoryMode::AllNative => {
-                        let offset_xlen = self.truncate_offset_to_xlen(
-                            context,
-                            offset_value,
-                            "mstore_offset_xlen",
-                        )?;
+                        let offset_xlen = context
+                            .safe_truncate_int_to_xlen(offset_value)
+                            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
                         context.build_store_native(offset_xlen, stored_word)?;
                     }
                     NativeMemoryMode::InlineNative => {
@@ -6273,11 +6271,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 let loaded = match self.native_memory_mode(context, offset_value) {
                     NativeMemoryMode::AllNative => {
-                        let offset_xlen = self.truncate_offset_to_xlen(
-                            context,
-                            offset_value,
-                            "mload_offset_xlen",
-                        )?;
+                        let offset_xlen = context
+                            .safe_truncate_int_to_xlen(offset_value)
+                            .map_err(|error| CodegenError::Llvm(error.to_string()))?;
                         context.build_load_native(offset_xlen)?
                     }
                     NativeMemoryMode::InlineNative => {

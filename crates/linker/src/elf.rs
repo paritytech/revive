@@ -1,6 +1,6 @@
 //! The revive ELF object linker library.
 
-use std::{ffi::CString, fs, path::PathBuf, sync::Mutex};
+use std::{ffi::CString, fs, io, path::PathBuf, sync::Mutex, thread, time::Duration};
 
 use lld_sys::LLDELFLink;
 use tempfile::TempDir;
@@ -8,6 +8,10 @@ use tempfile::TempDir;
 use revive_builtins::COMPILER_RT;
 
 static GUARD: Mutex<()> = Mutex::new(());
+
+/// Bounded so that a persistent permission problem still surfaces instead of retrying forever.
+const TEMPORARY_DIRECTORY_RETRIES: usize = 3;
+const TEMPORARY_DIRECTORY_RETRY_PAUSE: Duration = Duration::from_millis(1);
 
 /// The revive ELF object linker.
 pub struct ElfLinker {
@@ -29,7 +33,7 @@ SECTIONS {
 
     /// The setup routine prepares a temporary working directory.
     pub fn setup() -> anyhow::Result<Self> {
-        let temporary_directory = TempDir::new()?;
+        let temporary_directory = create_temporary_directory(TempDir::new)?;
         let object_path = temporary_directory.path().join("obj.o");
         let output_path = temporary_directory.path().join("out.o");
         let symbols_path = temporary_directory.path().join("sym.o");
@@ -111,4 +115,69 @@ fn lld(arguments: Vec<String>) -> bool {
 
     let _lock = GUARD.lock().expect("ICE: linker mutex should not poison");
     unsafe { LLDELFLink(args.as_ptr(), args.len()) == 0 }
+}
+
+/// Windows reports a name clash with a directory that is still being deleted as access denied
+/// rather than as already existing, which `tempfile` does not retry. Each retry uses a new
+/// random name with a short growing delay.
+fn create_temporary_directory<T>(mut create: impl FnMut() -> io::Result<T>) -> io::Result<T> {
+    let mut retries = 0;
+    loop {
+        match create() {
+            Err(error)
+                if error.kind() == io::ErrorKind::PermissionDenied
+                    && retries < TEMPORARY_DIRECTORY_RETRIES =>
+            {
+                retries += 1;
+                thread::sleep(TEMPORARY_DIRECTORY_RETRY_PAUSE * retries as u32);
+            }
+            result => return result,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use super::{create_temporary_directory, TEMPORARY_DIRECTORY_RETRIES};
+
+    #[test]
+    fn retries_when_access_is_denied_once() {
+        let mut calls = 0;
+        create_temporary_directory(|| {
+            calls += 1;
+            if calls == 1 {
+                Err(io::Error::from(io::ErrorKind::PermissionDenied))
+            } else {
+                Ok(())
+            }
+        })
+        .expect("an access permission denial should be retried");
+        assert_eq!(calls, 2);
+    }
+
+    #[test]
+    fn gives_up_when_access_stays_denied() {
+        let mut calls = 0;
+        let error = create_temporary_directory(|| -> io::Result<()> {
+            calls += 1;
+            Err(io::Error::from(io::ErrorKind::PermissionDenied))
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(calls, TEMPORARY_DIRECTORY_RETRIES + 1);
+    }
+
+    #[test]
+    fn returns_non_permission_denied_errors_without_retrying() {
+        let mut calls = 0;
+        let error = create_temporary_directory(|| -> io::Result<()> {
+            calls += 1;
+            Err(io::Error::from(io::ErrorKind::NotFound))
+        })
+        .unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::NotFound);
+        assert_eq!(calls, 1);
+    }
 }

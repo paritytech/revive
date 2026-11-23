@@ -14,9 +14,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::{BigUint, One, ToPrimitive, Zero};
 
 use crate::ir::{
-    for_each_statement_mut, BinaryOperation, BitWidth, Block, CallKind, Expression, Function,
-    FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value,
-    ValueId,
+    for_each_statement, for_each_statement_mut, BinaryOperation, BitWidth, Block, CallKind,
+    Expression, Function, FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type,
+    UnaryOperation, Value, ValueId,
 };
 
 /// Maximum value for 256-bit unsigned integer (2^256 - 1).
@@ -220,7 +220,7 @@ impl Simplifier {
         for id in &function.return_values_initial {
             defined_ids.insert(id.0);
         }
-        crate::ir::for_each_statement(&function.body.statements, &mut |statement| {
+        for_each_statement(&function.body.statements, &mut |statement| {
             statement.for_each_value_id_def(&mut |id| {
                 defined_ids.insert(id.0);
             });
@@ -2031,8 +2031,8 @@ fn has_callvalue_revert_prefix(statements: &[Statement]) -> bool {
 ///     callvalue revert it never performed (e.g. an all-nonpayable dispatch with a payable
 ///     fallback). A missing or non-checking default is exactly such a path.
 ///  2. every branch reverts with identical data, so the one hoisted revert serves all selectors;
-///     otherwise a matched selector would receive the wrong revert payload. Compared via the
-///     canonical (SSA-renamed, literal-preserving) prefix encoding.
+///     otherwise a matched selector would receive the wrong revert payload. Compared via
+///     `canonical_callvalue_prefix`.
 fn callvalue_check_fully_hoistable(cases: &[SwitchCase], default: &Option<Region>) -> bool {
     if cases.is_empty() {
         return false;
@@ -2065,14 +2065,36 @@ fn callvalue_binding_id(statements: &[Statement]) -> ValueId {
     }
 }
 
-/// Canonical encoding (SSA ids renamed to first-use order, literal values preserved) of the
-/// two-statement callvalue-revert prefix. Two prefixes with equal encodings revert with identical
-/// data, so hoisting one above a switch in place of all of them is observationally sound.
+/// Canonical encoding (ids defined in the prefix renamed to first-use order, ids bound outside it
+/// and literal values preserved) of the two-statement callvalue-revert prefix. Two prefixes with
+/// equal encodings revert with identical data, so hoisting one above a switch in place of all of
+/// them is observationally sound.
 ///
 /// The caller must have established [`has_callvalue_revert_prefix`] for `statements`.
 fn canonical_callvalue_prefix(statements: &[Statement]) -> Vec<u8> {
+    let prefix = &statements[..2];
+    let mut defined_values = BTreeSet::new();
+    crate::ir::for_each_statement(prefix, &mut |statement| {
+        statement.for_each_value_id_def(&mut |id| {
+            defined_values.insert(id);
+        });
+    });
+    let mut free_values = BTreeSet::new();
+    for statement in prefix {
+        statement.for_each_value_id(&mut |id| {
+            if !defined_values.contains(&id) {
+                free_values.insert(id);
+            }
+        });
+    }
+
     let mut canon = Canonicalizer::new();
     let mut buffer = Vec::new();
+    buffer.extend_from_slice(&free_values.len().to_le_bytes());
+    for free_value in free_values {
+        buffer.extend_from_slice(&free_value.0.to_le_bytes());
+        canon.get_or_insert(free_value);
+    }
     canon.encode_statement(&statements[0], &mut buffer);
     canon.encode_statement(&statements[1], &mut buffer);
     buffer
@@ -3644,6 +3666,7 @@ fn update_call_sites_with_extra_arguments(
                 }
                 Statement::For {
                     condition_statements,
+                    condition,
                     body,
                     post,
                     ..
@@ -3656,6 +3679,22 @@ fn update_call_sites_with_extra_arguments(
                         parameter_types,
                         next_id,
                     );
+                    if let Expression::Call {
+                        function,
+                        arguments,
+                    } = condition
+                    {
+                        if *function == old_id {
+                            condition_statements.extend(redirect_call_with_extra_arguments(
+                                function,
+                                arguments,
+                                new_id,
+                                extra_arguments,
+                                parameter_types,
+                                next_id,
+                            ));
+                        }
+                    }
                     rewrite(
                         &mut body.statements,
                         old_id,
@@ -3685,49 +3724,31 @@ fn update_call_sites_with_extra_arguments(
                 }
                 _ => {}
             }
-            let is_target = matches!(&statements[index],
-                Statement::Let { value: Expression::Call { function, .. }, .. }
-                | Statement::Expression(Expression::Call { function, .. })
-                if *function == old_id);
-            if is_target {
-                let mut extra_values = Vec::with_capacity(extra_arguments.len());
-                for (argument_value, parameter_type) in
-                    extra_arguments.iter().zip(parameter_types.iter())
-                {
-                    let value_id = next_id.fresh();
-                    statements.insert(
-                        index,
-                        Statement::Let {
-                            bindings: vec![value_id],
-                            value: Expression::Literal {
-                                value: argument_value.clone(),
-                                value_type: *parameter_type,
-                            },
-                        },
-                    );
-                    index += 1;
-                    extra_values.push(Value {
-                        id: value_id,
-                        value_type: *parameter_type,
-                    });
-                }
-                match &mut statements[index] {
-                    Statement::Let {
-                        value:
-                            Expression::Call {
-                                function,
-                                arguments,
-                            },
-                        ..
-                    }
-                    | Statement::Expression(Expression::Call {
+            if let Statement::Let {
+                value:
+                    Expression::Call {
                         function,
                         arguments,
-                    }) => {
-                        *function = new_id;
-                        arguments.extend(extra_values);
-                    }
-                    _ => unreachable!("is_target check above just matched a Call"),
+                    },
+                ..
+            }
+            | Statement::Expression(Expression::Call {
+                function,
+                arguments,
+            }) = &mut statements[index]
+            {
+                if *function == old_id {
+                    let bindings = redirect_call_with_extra_arguments(
+                        function,
+                        arguments,
+                        new_id,
+                        extra_arguments,
+                        parameter_types,
+                        next_id,
+                    );
+                    let binding_count = bindings.len();
+                    statements.splice(index..index, bindings);
+                    index += binding_count;
                 }
             }
             index += 1;
@@ -3741,6 +3762,35 @@ fn update_call_sites_with_extra_arguments(
         parameter_types,
         next_value_id,
     );
+}
+
+/// Redirects a call to `new_id` with `extra_arguments` appended and returns the `Let`
+/// bindings of those arguments, which must be placed before the call.
+fn redirect_call_with_extra_arguments(
+    function: &mut FunctionId,
+    arguments: &mut Vec<Value>,
+    new_id: FunctionId,
+    extra_arguments: &[BigUint],
+    parameter_types: &[Type],
+    next_id: &mut ValueId,
+) -> Vec<Statement> {
+    let mut bindings = Vec::with_capacity(extra_arguments.len());
+    for (argument_value, parameter_type) in extra_arguments.iter().zip(parameter_types) {
+        let value_id = next_id.fresh();
+        bindings.push(Statement::Let {
+            bindings: vec![value_id],
+            value: Expression::Literal {
+                value: argument_value.clone(),
+                value_type: *parameter_type,
+            },
+        });
+        arguments.push(Value {
+            id: value_id,
+            value_type: *parameter_type,
+        });
+    }
+    *function = new_id;
+    bindings
 }
 
 /// Redirects function calls in a block, replacing old function IDs with new ones.

@@ -201,7 +201,7 @@ fn compiles_newyork_folded_guard_inlined_loop() {
 #[test]
 fn compiles_debug_info_nested_function() {
     let path = absolute_path(SOLIDITY_DEBUG_INFO_NESTED_FUNCTION_PATH);
-    let arguments = &[&path, "--disable-solc-optimizer", "-O3", "-g", "--bin"];
+    let arguments = &[&path, "--disable-solc-optimizer", "-g", "--bin"];
 
     let result = execute_resolc(arguments);
     assert_pvm_blob(&result);

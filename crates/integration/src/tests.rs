@@ -6236,7 +6236,17 @@ fn store_const_offset_above_32_bits_traps() {
         "StoreConstOffsetAbove32Bits",
     );
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
-    assert_trapped(&run_differential_results(actions));
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: false,
+        ..Default::default()
+    }));
+    let results = Specs {
+        actions,
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+    assert_trapped(results.last().unwrap());
 }
 
 #[test]
@@ -6246,7 +6256,17 @@ fn load_const_offset_above_32_bits_traps() {
         "LoadConstOffsetAbove32Bits",
     );
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
-    assert_trapped(&run_differential_results(actions));
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: false,
+        ..Default::default()
+    }));
+    let results = Specs {
+        actions,
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+    assert_trapped(results.last().unwrap());
 }
 
 #[test]

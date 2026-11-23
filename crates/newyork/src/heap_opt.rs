@@ -646,7 +646,7 @@ impl HeapAnalysis {
             }
 
             Statement::MappingSStore { .. } => {
-                self.escaping_regions.extend([0, BYTE_LENGTH_WORD as u64]);
+                self.taint_range(Some(0), Some(2 * BYTE_LENGTH_WORD as u64));
             }
 
             Statement::SStore { .. }
@@ -1720,10 +1720,10 @@ impl HeapAnalysis {
                 self.note_fmp_coverage(offset, length);
             }
             Expression::Keccak256Pair { .. } | Expression::MappingSLoad { .. } => {
-                self.escaping_regions.extend([0, BYTE_LENGTH_WORD as u64]);
+                self.taint_range(Some(0), Some(2 * BYTE_LENGTH_WORD as u64));
             }
             Expression::Keccak256Single { .. } => {
-                self.escaping_regions.insert(0);
+                self.taint_range(Some(0), Some(BYTE_LENGTH_WORD as u64));
             }
             _ => {}
         }

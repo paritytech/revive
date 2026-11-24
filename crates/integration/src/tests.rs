@@ -2910,6 +2910,26 @@ fn switch_callvalue_yield_only() {
     run_differential(actions);
 }
 
+#[test]
+fn switch_callvalue_revert_payload() {
+    let mut actions = instantiate(
+        "contracts/SwitchCallvalueRevertPayload.sol",
+        "SwitchCallvalueRevertPayload",
+    );
+    let mut data = U256::from(7).to_be_bytes::<32>().to_vec();
+    data.extend(U256::from(9).to_be_bytes::<32>());
+    data.extend(U256::from(2).to_be_bytes::<32>());
+    actions.push(Call {
+        origin: TestAddress::Alice,
+        dest: TestAddress::Instantiated(0),
+        value: 1,
+        gas_limit: Some(GAS_LIMIT),
+        storage_deposit_limit: None,
+        data,
+    });
+    run_differential(actions);
+}
+
 /// A function returning a bare `let cv = callvalue()` binding through its return variable
 /// must keep the binding at codegen. The dead-callvalue analysis counted uses over the
 /// statement tree only, but a return variable is recorded in `Function::return_values`,
@@ -6207,6 +6227,105 @@ fn hex_string_separator() {
     let mut actions = instantiate_yul("contracts/HexStringSeparator.yul", "HexStringSeparator");
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
+}
+
+#[test]
+fn store_const_offset_above_32_bits_all_native_traps() {
+    let mut actions = instantiate_yul(
+        "contracts/StoreConstOffsetAbove32BitsAllNative.yul",
+        "StoreConstOffsetAbove32BitsAllNative",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: false,
+        ..Default::default()
+    }));
+    let results = Specs {
+        actions,
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+    assert_trapped(results.last().unwrap());
+}
+
+#[test]
+fn load_const_offset_above_32_bits_all_native_traps() {
+    let mut actions = instantiate_yul(
+        "contracts/LoadConstOffsetAbove32BitsAllNative.yul",
+        "LoadConstOffsetAbove32BitsAllNative",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    actions.push(VerifyCall(VerifyCallExpectation {
+        success: false,
+        ..Default::default()
+    }));
+    let results = Specs {
+        actions,
+        differential: false,
+        ..Default::default()
+    }
+    .run();
+    assert_trapped(results.last().unwrap());
+}
+
+#[test]
+fn store_const_offset_above_32_bits_byte_swap_traps() {
+    let mut actions = instantiate_yul(
+        "contracts/StoreConstOffsetAbove32BitsByteSwap.yul",
+        "StoreConstOffsetAbove32BitsByteSwap",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    assert_trapped(&run_differential_results(actions));
+}
+
+#[test]
+fn load_const_offset_above_32_bits_byte_swap_traps() {
+    let mut actions = instantiate_yul(
+        "contracts/LoadConstOffsetAbove32BitsByteSwap.yul",
+        "LoadConstOffsetAbove32BitsByteSwap",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    assert_trapped(&run_differential_results(actions));
+}
+
+#[test]
+fn same_name_sibling_functions() {
+    let mut actions = instantiate_yul(
+        "contracts/SameNameSiblingFunctions.yul",
+        "SameNameSiblingFunctions",
+    );
+    for input in [5u64, 3, 0] {
+        push_call(
+            &mut actions,
+            TestAddress::Instantiated(0),
+            words(&[U256::from(input)]),
+        );
+    }
+    run_differential(actions);
+}
+
+#[test]
+fn keccak_scratch_byte_order() {
+    let scratch_word = U256::from_be_bytes(hex!(
+        "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+    ));
+    for contract in [
+        "KeccakPairScratchByteOrder",
+        "KeccakSingleScratchByteOrder",
+        "MappingSLoadScratchByteOrder",
+        "MappingSStoreScratchByteOrder",
+    ] {
+        let mut actions = instantiate("contracts/KeccakScratchByteOrder.sol", contract);
+        for (iterations, branch) in [(0u64, 0u64), (3, 0), (0, 1)] {
+            push_call(
+                &mut actions,
+                TestAddress::Instantiated(0),
+                words(&[scratch_word, U256::from(iterations), U256::from(branch)]),
+            );
+        }
+        run_differential(actions);
+    }
 }
 
 #[test]

@@ -6230,10 +6230,10 @@ fn hex_string_separator() {
 }
 
 #[test]
-fn store_const_offset_above_32_bits_traps() {
+fn store_const_offset_above_32_bits_all_native_traps() {
     let mut actions = instantiate_yul(
-        "contracts/StoreConstOffsetAbove32Bits.yul",
-        "StoreConstOffsetAbove32Bits",
+        "contracts/StoreConstOffsetAbove32BitsAllNative.yul",
+        "StoreConstOffsetAbove32BitsAllNative",
     );
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     actions.push(VerifyCall(VerifyCallExpectation {
@@ -6250,10 +6250,10 @@ fn store_const_offset_above_32_bits_traps() {
 }
 
 #[test]
-fn load_const_offset_above_32_bits_traps() {
+fn load_const_offset_above_32_bits_all_native_traps() {
     let mut actions = instantiate_yul(
-        "contracts/LoadConstOffsetAbove32Bits.yul",
-        "LoadConstOffsetAbove32Bits",
+        "contracts/LoadConstOffsetAbove32BitsAllNative.yul",
+        "LoadConstOffsetAbove32BitsAllNative",
     );
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     actions.push(VerifyCall(VerifyCallExpectation {
@@ -6267,6 +6267,26 @@ fn load_const_offset_above_32_bits_traps() {
     }
     .run();
     assert_trapped(results.last().unwrap());
+}
+
+#[test]
+fn store_const_offset_above_32_bits_byte_swap_traps() {
+    let mut actions = instantiate_yul(
+        "contracts/StoreConstOffsetAbove32BitsByteSwap.yul",
+        "StoreConstOffsetAbove32BitsByteSwap",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    assert_trapped(&run_differential_results(actions));
+}
+
+#[test]
+fn load_const_offset_above_32_bits_byte_swap_traps() {
+    let mut actions = instantiate_yul(
+        "contracts/LoadConstOffsetAbove32BitsByteSwap.yul",
+        "LoadConstOffsetAbove32BitsByteSwap",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    assert_trapped(&run_differential_results(actions));
 }
 
 #[test]

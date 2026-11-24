@@ -593,6 +593,38 @@ fn panic_pattern_intervening_mstore_preserved() {
     run_differential(actions);
 }
 
+#[test]
+fn custom_error_revert_memory_load() {
+    let mut actions = instantiate(
+        "contracts/CustomErrorRevertMemoryLoad.sol",
+        "CustomErrorRevertMemoryLoad",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// A `keccak256` between the selector store and the argument store hashes the selector word.
+#[test]
+fn custom_error_revert_keccak256() {
+    let mut actions = instantiate(
+        "contracts/CustomErrorRevertKeccak256.sol",
+        "CustomErrorRevertKeccak256",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// A selector store after the first argument store overwrites the argument's upper 28 bytes.
+#[test]
+fn custom_error_revert_selector_after_argument() {
+    let mut actions = instantiate(
+        "contracts/CustomErrorRevertSelectorAfterArgument.sol",
+        "CustomErrorRevertSelectorAfterArgument",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![]);
+    run_differential(actions);
+}
+
 /// Regression: `heap_opt::fmp_native_safe()` does not check
 /// `tainted_regions` or `escaping_regions`. A static `revert(0, 96)`
 /// marks the FMP word (0x40) as escaping via `mark_escaping_range`,

@@ -108,6 +108,7 @@ impl FunctionCall {
     }
 
     /// Returns the decoded immutable name of a `loadimmutable` or `setimmutable` call.
+    /// Each byte maps to one character, since solc allows names that are not valid UTF-8.
     pub fn immutable_name(&self) -> anyhow::Result<String> {
         let argument = match self.name {
             Name::LoadImmutable => self.arguments.first(),
@@ -118,18 +119,10 @@ impl FunctionCall {
             Some(Expression::Literal(Literal {
                 inner: LexicalLiteral::String(name),
                 ..
-            })) => {
-                let bytes = name
-                    .to_bytes()
-                    .map_err(|error| anyhow::anyhow!("{} {error}", self.location))?;
-                String::from_utf8(bytes).map_err(|error| {
-                    anyhow::anyhow!(
-                        "{} Invalid UTF-8 in immutable name `{}`: {error}",
-                        self.location,
-                        name.inner
-                    )
-                })
-            }
+            })) => name
+                .to_bytes()
+                .map(|bytes| bytes.into_iter().map(char::from).collect())
+                .map_err(|error| anyhow::anyhow!("{} {error}", self.location)),
             _ => anyhow::bail!("{} Immutable name literal is missing", self.location),
         }
     }

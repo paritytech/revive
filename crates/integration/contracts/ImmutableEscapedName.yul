@@ -6,7 +6,7 @@ object "ImmutableEscapedName" {
     }
     object "ImmutableEscapedName_deployed" {
         code {
-            mstore(0, loadimmutable("a"))
+            mstore(0, loadimmutable(hex"61"))
             return(0, 32)
         }
     }

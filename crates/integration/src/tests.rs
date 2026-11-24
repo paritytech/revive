@@ -6334,3 +6334,11 @@ fn immutable_escaped_name() {
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }
+
+/// solc accepts an immutable name that is not valid UTF-8.
+#[test]
+fn immutable_non_utf8_name() {
+    let mut actions = instantiate_yul("contracts/ImmutableNonUtf8Name.yul", "ImmutableNonUtf8Name");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}

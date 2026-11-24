@@ -306,6 +306,7 @@ pub(crate) fn is_memory_free_expression(expression: &Expression) -> bool {
             | Expression::SignExtendTo { .. }
             | Expression::DataOffset { .. }
             | Expression::DataSize { .. }
+            | Expression::LoadImmutable { .. }
             | Expression::LinkerSymbol { .. }
     )
 }

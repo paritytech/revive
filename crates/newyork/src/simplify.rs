@@ -1332,6 +1332,9 @@ fn outline_custom_error_patterns(
 /// exactly once in the collapsed window. A repeated store means a later write overwrites an earlier
 /// one — so the value the backward scan matched is not what the EVM revert emits — and the sequence
 /// must not be collapsed into a `CustomErrorRevert`.
+///
+/// The selector store covers `[0, 32)` and overlaps the first argument at `[4, 36)`, so it must
+/// come before the store at offset 4.
 fn find_custom_error_pattern_backwards(
     statements: &[Statement],
     constants: &BTreeMap<u32, BigUint>,
@@ -1345,6 +1348,8 @@ fn find_custom_error_pattern_backwards(
     let mut found_selector: Option<BigUint> = None;
     let mut arguments: Vec<Option<Value>> = vec![None; num_arguments];
     let mut earliest_index = len;
+    let mut selector_index = len;
+    let mut first_argument_index = len;
 
     let zero = BigUint::ZERO;
     let four = BigUint::from(4u32);
@@ -1357,10 +1362,12 @@ fn find_custom_error_pattern_backwards(
                     if *offset_value == zero {
                         if let Some(selector_constant) = constants.get(&value.id.0) {
                             found_selector = Some(selector_constant.clone());
+                            selector_index = statement_index;
                             earliest_index = earliest_index.min(statement_index);
                         }
                     } else if *offset_value == four && num_arguments >= 1 {
                         arguments[0] = Some(*value);
+                        first_argument_index = statement_index;
                         earliest_index = earliest_index.min(statement_index);
                     } else if let Some(offset_u64) = offset_value.to_u64() {
                         if offset_u64 >= 0x24 && (offset_u64 - 4) % 0x20 == 0 {
@@ -1422,6 +1429,10 @@ fn find_custom_error_pattern_backwards(
         if writes != 1 {
             return None;
         }
+    }
+
+    if first_argument_index < selector_index {
+        return None;
     }
 
     Some((earliest_index, selector, arguments))

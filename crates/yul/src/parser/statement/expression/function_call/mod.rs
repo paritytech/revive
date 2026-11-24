@@ -107,6 +107,26 @@ impl FunctionCall {
         }
     }
 
+    /// Returns the decoded immutable name of a `loadimmutable` or `setimmutable` call.
+    /// Each byte maps to one character, since solc allows names that are not valid UTF-8.
+    pub fn immutable_name(&self) -> anyhow::Result<String> {
+        let argument = match self.name {
+            Name::LoadImmutable => self.arguments.first(),
+            Name::SetImmutable => self.arguments.get(1),
+            _ => None,
+        };
+        match argument {
+            Some(Expression::Literal(Literal {
+                inner: LexicalLiteral::String(name),
+                ..
+            })) => name
+                .to_bytes()
+                .map(|bytes| bytes.into_iter().map(char::from).collect())
+                .map_err(|error| anyhow::anyhow!("{} {error}", self.location)),
+            _ => anyhow::bail!("{} Immutable name literal is missing", self.location),
+        }
+    }
+
     /// Get the list of missing deployable libraries.
     pub fn get_missing_libraries(&self) -> BTreeSet<String> {
         let mut libraries = BTreeSet::new();
@@ -505,10 +525,7 @@ impl FunctionCall {
                 .map(|_| None)
             }
             Name::LoadImmutable => {
-                let mut arguments = self.pop_arguments::<1>(context)?;
-                let key = arguments[0].original.take().ok_or_else(|| {
-                    anyhow::anyhow!("{} `load_immutable` literal is missing", location)
-                })?;
+                let key = self.immutable_name()?;
                 let offset = context
                     .solidity_mut()
                     .get_or_allocate_immutable(key.as_str())
@@ -517,10 +534,8 @@ impl FunctionCall {
                 revive_llvm_context::polkavm_evm_immutable::load(context, index).map(Some)
             }
             Name::SetImmutable => {
-                let mut arguments = self.pop_arguments::<3>(context)?;
-                let key = arguments[1].original.take().ok_or_else(|| {
-                    anyhow::anyhow!("{} `load_immutable` literal is missing", location)
-                })?;
+                let key = self.immutable_name()?;
+                let arguments = self.pop_arguments::<3>(context)?;
                 let offset = context.solidity_mut().allocate_immutable(key.as_str())
                     / revive_common::BYTE_LENGTH_WORD;
                 let index = context.xlen_type().const_int(offset as u64, false);

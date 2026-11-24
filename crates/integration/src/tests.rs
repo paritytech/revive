@@ -6264,3 +6264,14 @@ fn same_name_sibling_functions() {
     }
     run_differential(actions);
 }
+
+/// A variable assigned in a nested block keeps the assigned value after the block.
+#[test]
+fn nested_block_assignment() {
+    let mut actions = instantiate_yul(
+        "contracts/NestedBlockAssignment.yul",
+        "NestedBlockAssignment",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}

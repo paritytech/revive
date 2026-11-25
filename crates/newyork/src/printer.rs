@@ -915,7 +915,7 @@ impl<'a> Printer<'a> {
 
             Statement::SetImmutable { key, value } => {
                 self.write_indent();
-                let _ = write!(self.output, "setimmutable(\"{}\", ", key);
+                let _ = write!(self.output, "setimmutable({key:?}, ");
                 self.write_value(value);
                 self.output.push(')');
                 self.write_newline();
@@ -1143,7 +1143,7 @@ impl<'a> Printer<'a> {
             }
 
             Expression::LoadImmutable { key } => {
-                let _ = write!(self.output, "loadimmutable(\"{}\")", key);
+                let _ = write!(self.output, "loadimmutable({key:?})");
             }
 
             Expression::LinkerSymbol { path } => {

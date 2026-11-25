@@ -593,6 +593,38 @@ fn panic_pattern_intervening_mstore_preserved() {
     run_differential(actions);
 }
 
+#[test]
+fn custom_error_revert_memory_load() {
+    let mut actions = instantiate(
+        "contracts/CustomErrorRevertMemoryLoad.sol",
+        "CustomErrorRevertMemoryLoad",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// A `keccak256` between the selector store and the argument store hashes the selector word.
+#[test]
+fn custom_error_revert_keccak256() {
+    let mut actions = instantiate(
+        "contracts/CustomErrorRevertKeccak256.sol",
+        "CustomErrorRevertKeccak256",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// A selector store after the first argument store overwrites the argument's upper 28 bytes.
+#[test]
+fn custom_error_revert_selector_after_argument() {
+    let mut actions = instantiate(
+        "contracts/CustomErrorRevertSelectorAfterArgument.sol",
+        "CustomErrorRevertSelectorAfterArgument",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![]);
+    run_differential(actions);
+}
+
 /// Regression: `heap_opt::fmp_native_safe()` does not check
 /// `tainted_regions` or `escaping_regions`. A static `revert(0, 96)`
 /// marks the FMP word (0x40) as escaping via `mark_escaping_range`,
@@ -6302,6 +6334,44 @@ fn same_name_sibling_functions() {
             words(&[U256::from(input)]),
         );
     }
+    run_differential(actions);
+}
+
+#[test]
+fn keccak_scratch_byte_order() {
+    let scratch_word = U256::from_be_bytes(hex!(
+        "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20"
+    ));
+    for contract in [
+        "KeccakPairScratchByteOrder",
+        "KeccakSingleScratchByteOrder",
+        "MappingSLoadScratchByteOrder",
+        "MappingSStoreScratchByteOrder",
+    ] {
+        let mut actions = instantiate("contracts/KeccakScratchByteOrder.sol", contract);
+        for (iterations, branch) in [(0u64, 0u64), (3, 0), (0, 1)] {
+            push_call(
+                &mut actions,
+                TestAddress::Instantiated(0),
+                words(&[scratch_word, U256::from(iterations), U256::from(branch)]),
+            );
+        }
+        run_differential(actions);
+    }
+}
+
+#[test]
+fn immutable_escaped_name() {
+    let mut actions = instantiate_yul("contracts/ImmutableEscapedName.yul", "ImmutableEscapedName");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// solc accepts an immutable name that is not valid UTF-8.
+#[test]
+fn immutable_non_utf8_name() {
+    let mut actions = instantiate_yul("contracts/ImmutableNonUtf8Name.yul", "ImmutableNonUtf8Name");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }
 

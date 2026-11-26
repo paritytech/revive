@@ -1025,6 +1025,8 @@ impl Simplifier {
 /// collapsed window may define such a value; truncating it would leave the yield dangling and fail
 /// SSA validation, so each is re-bound to zero before the [`Statement::PanicRevert`] (the binding is
 /// dead — the panic diverges — but dominates the yield, mirroring `eliminate_dead_code_in_statements`).
+/// The same applies to a binding that the unreachable statements after the revert still use. Dead
+/// code elimination skips `For` regions, so those statements can survive there.
 fn outline_panic_patterns(
     statements: Vec<Statement>,
     scope_constants: &BTreeMap<u32, BigUint>,
@@ -1052,7 +1054,8 @@ fn outline_panic_patterns(
 
     let mut result = Vec::with_capacity(statements.len());
 
-    for statement in statements {
+    let mut remaining = statements.into_iter();
+    while let Some(statement) = remaining.next() {
         if let Statement::Revert {
             ref offset,
             ref length,
@@ -1064,10 +1067,16 @@ fn outline_panic_patterns(
                 if let Some((panic_start, error_code)) =
                     find_panic_pattern_backwards(&result, &constants)
                 {
+                    let mut still_used = extra_used.clone();
+                    for following in remaining.as_slice() {
+                        following.for_each_value_id(&mut |id| {
+                            still_used.insert(id.0);
+                        });
+                    }
                     let mut rescued: Vec<ValueId> = Vec::new();
                     for statement in &result[panic_start..] {
                         statement.for_each_value_id_def(&mut |id| {
-                            if extra_used.contains(&id.0) {
+                            if still_used.contains(&id.0) {
                                 rescued.push(id);
                             }
                         });

@@ -6396,3 +6396,19 @@ fn keccak_single_msize() {
     );
     run_differential(actions);
 }
+
+/// A binding inside the panic sequence is still used by unreachable code after the revert.
+#[test]
+fn unreachable_use_after_panic() {
+    let mut actions = instantiate_yul(
+        "contracts/UnreachableUseAfterPanic.yul",
+        "UnreachableUseAfterPanic",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        hex!("0000000000000000000000000000000000000000000000000000000000000001").to_vec(),
+    );
+    run_differential(actions);
+}

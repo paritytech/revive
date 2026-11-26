@@ -110,6 +110,8 @@ pub struct MemoryOptimizer {
     /// [`Self::invalidate_state_overlapping_store`] and by [`Self::eliminate_dead_store_at`],
     /// which reconstruct each store's 32-byte write range as `[key, key + 32)`.
     pending_stores: BTreeMap<u64, usize>,
+    /// Whether the object reads `msize`.
+    /// The fused keccak256 helpers write the scratch space without updating the msize watermark.
     has_msize: bool,
 }
 

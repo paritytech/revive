@@ -1,0 +1,19 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "OptimizerRuns.sol": {
+      "urls": ["src/tests/data/solidity/optimizer_runs.sol"]
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": true,
+      "runs": 1
+    },
+    "outputSelection": {
+      "*": {
+        "*": ["metadata", "irOptimized"]
+      }
+    }
+  }
+}

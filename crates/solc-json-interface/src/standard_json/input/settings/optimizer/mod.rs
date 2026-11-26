@@ -15,6 +15,9 @@ pub struct Optimizer {
     /// Whether the optimizer is enabled.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub enabled: Option<bool>,
+    /// The number of contract runs `solc` optimizes for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub runs: Option<u64>,
     /// The optimization mode string.
     #[serde(default = "Optimizer::default_mode", skip_serializing)]
     pub mode: char,
@@ -28,6 +31,7 @@ impl Optimizer {
     pub fn new(enabled: bool, mode: char, details: Details) -> Self {
         Self {
             enabled: Some(enabled),
+            runs: None,
             mode,
             details,
         }

@@ -259,6 +259,12 @@ pub const STANDARD_JSON_NO_OPTIMIZER_PATH: &str = "src/tests/data/standard_json/
 /// A standard JSON fixture with an empty `settings.optimizer` object.
 pub const STANDARD_JSON_EMPTY_OPTIMIZER_PATH: &str =
     "src/tests/data/standard_json/empty_optimizer.json";
+/// A standard JSON fixture with `settings.optimizer.runs` set to `1`.
+pub const STANDARD_JSON_OPTIMIZER_RUNS_LOW_PATH: &str =
+    "src/tests/data/standard_json/optimizer_runs_low.json";
+/// A standard JSON fixture with `settings.optimizer.runs` set to `1000000`.
+pub const STANDARD_JSON_OPTIMIZER_RUNS_HIGH_PATH: &str =
+    "src/tests/data/standard_json/optimizer_runs_high.json";
 /// A standard JSON fixture requesting the `transientStorageLayout` output.
 pub const STANDARD_JSON_TRANSIENT_STORAGE_LAYOUT_PATH: &str =
     "src/tests/data/standard_json/transient_storage_layout.json";

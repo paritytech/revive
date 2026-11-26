@@ -241,9 +241,6 @@ impl Simplifier {
     }
 
     /// Simplifies a list of statements, returning the simplified list.
-    ///
-    /// Object code has no yields; a function body's return values are repaired separately by
-    /// `reconcile_dangling_return_values`, so no rescue set is needed here.
     fn simplify_statements(&mut self, statements: Vec<Statement>) -> Vec<Statement> {
         let outer_constants = self.constants.clone();
         let outer_copies = self.copies.clone();
@@ -255,7 +252,7 @@ impl Simplifier {
             result.extend(simplified);
         }
 
-        result = outline_panic_patterns(result, &self.constants, &BTreeSet::new());
+        result = outline_panic_patterns(result, &self.constants);
 
         result = outline_custom_error_patterns(result, &self.constants);
 
@@ -622,9 +619,6 @@ impl Simplifier {
     }
 
     /// Simplifies a region in place.
-    ///
-    /// Yields are resolved before outlining so a panic-pattern truncation can rescue any pure
-    /// binding they still reference (otherwise the yield would dangle).
     fn simplify_region(&mut self, region: Region) -> Region {
         let outer_constants = self.constants.clone();
         let outer_copies = self.copies.clone();
@@ -641,9 +635,8 @@ impl Simplifier {
             .into_iter()
             .map(|yielded_value| self.resolve_value(yielded_value))
             .collect();
-        let yielded = yields_as_used(&yields);
 
-        statements = outline_panic_patterns(statements, &self.constants, &yielded);
+        statements = outline_panic_patterns(statements, &self.constants);
 
         statements = outline_custom_error_patterns(statements, &self.constants);
 
@@ -1014,23 +1007,16 @@ impl Simplifier {
 ///   let bindings for constants, mstore(0, 0x4e487b71...), more let bindings,
 ///   mstore(4, error_code), more let bindings, revert(0, 0x24)
 ///
-/// Each match is replaced with `PanicRevert { code }`, and the preceding
-/// Let bindings used only by the panic are left for DCE to remove.
+/// Each match is replaced with `PanicRevert { code }`. Only the match's stores are removed:
+/// its other statements stay in front of it, since a region's yields, a loop condition or
+/// code after the revert may still use their bindings.
 ///
 /// This function merges the caller's constant map with local Let-literal bindings
 /// to correctly resolve constants defined either in the current scope or in outer scopes
 /// (after copy propagation may have replaced local definitions with outer references).
-/// `extra_used` holds value ids that must stay defined even though they are not referenced by the
-/// statements themselves — an enclosing region's resolved `yields`. A pure binding inside the
-/// collapsed window may define such a value; truncating it would leave the yield dangling and fail
-/// SSA validation, so each is re-bound to zero before the [`Statement::PanicRevert`] (the binding is
-/// dead — the panic diverges — but dominates the yield, mirroring `eliminate_dead_code_in_statements`).
-/// The same applies to a binding that the unreachable statements after the revert still use. Dead
-/// code elimination skips `For` regions, so those statements can survive there.
 fn outline_panic_patterns(
     statements: Vec<Statement>,
     scope_constants: &BTreeMap<u32, BigUint>,
-    extra_used: &BTreeSet<u32>,
 ) -> Vec<Statement> {
     let has_revert = statements
         .iter()
@@ -1054,8 +1040,7 @@ fn outline_panic_patterns(
 
     let mut result = Vec::with_capacity(statements.len());
 
-    let mut remaining = statements.into_iter();
-    while let Some(statement) = remaining.next() {
+    for statement in statements {
         if let Statement::Revert {
             ref offset,
             ref length,
@@ -1067,30 +1052,12 @@ fn outline_panic_patterns(
                 if let Some((panic_start, error_code)) =
                     find_panic_pattern_backwards(&result, &constants)
                 {
-                    let mut still_used = extra_used.clone();
-                    for following in remaining.as_slice() {
-                        following.for_each_value_id(&mut |id| {
-                            still_used.insert(id.0);
-                        });
-                    }
-                    let mut rescued: Vec<ValueId> = Vec::new();
-                    for statement in &result[panic_start..] {
-                        statement.for_each_value_id_def(&mut |id| {
-                            if still_used.contains(&id.0) {
-                                rescued.push(id);
-                            }
-                        });
-                    }
-                    result.truncate(panic_start);
-                    for id in rescued {
-                        result.push(Statement::Let {
-                            bindings: vec![id],
-                            value: Expression::Literal {
-                                value: BigUint::zero(),
-                                value_type: Type::Int(BitWidth::I256),
-                            },
-                        });
-                    }
+                    let window = result.split_off(panic_start);
+                    result.extend(
+                        window
+                            .into_iter()
+                            .filter(|statement| !matches!(statement, Statement::MStore { .. })),
+                    );
                     result.push(Statement::PanicRevert { code: error_code });
                     continue;
                 }
@@ -1193,8 +1160,8 @@ fn find_panic_pattern_backwards(
 /// - A `Let`/`Expression` is droppable only if its value is pure. A side-effecting value — an
 ///   internal call that can revert differently / never return / write scratch, or a memory/storage
 ///   read — is observable, so dropping it would change behavior. This matches `eliminate_dead_code`,
-///   which never removes effectful statements. A dropped pure binding that an enclosing yield still
-///   needs is zero-rebound by [`outline_panic_patterns`].
+///   which never removes effectful statements. [`outline_panic_patterns`] removes only the window's
+///   stores, since code outside the window may use its bindings.
 fn panic_window_droppable(statement: &Statement, constants: &BTreeMap<u32, BigUint>) -> bool {
     match statement {
         Statement::MStore { offset, .. } => {

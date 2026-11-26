@@ -6,8 +6,8 @@ object "PanicOutlineYield" {
       let r := 0
       // `r` is reassigned inside the branch, between the panic selector store and the revert, and is
       // read after the branch — so the branch region yields that in-window definition of `r`.
-      // Collapsing the window into a PanicRevert drops the definition; without a zero-binding rescue
-      // the surviving yield references an undefined value and the SSA validator panics.
+      // Replacing the panic with a PanicRevert must keep that definition, or the surviving yield
+      // references an undefined value and the SSA validator panics.
       if cond {
         mstore(0, 0x4e487b7100000000000000000000000000000000000000000000000000000000)
         r := 7

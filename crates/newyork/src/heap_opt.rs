@@ -337,6 +337,26 @@ impl IterationRange {
         }
     }
 
+    /// The range of a value that is in `self` on some evaluations and in `other` on the rest.
+    fn either(self, other: Self) -> Self {
+        match (self, other) {
+            (
+                Self::AtLeast {
+                    minimum: lhs_minimum,
+                    bit_ceiling: lhs_ceiling,
+                },
+                Self::AtLeast {
+                    minimum: rhs_minimum,
+                    bit_ceiling: rhs_ceiling,
+                },
+            ) => Self::AtLeast {
+                minimum: lhs_minimum.min(rhs_minimum),
+                bit_ceiling: lhs_ceiling.max(rhs_ceiling),
+            },
+            _ => Self::Unknown,
+        }
+    }
+
     /// The range of a loop counter seeded in `self` that only steps up by static steps.
     ///
     /// A loop runs fewer than 2^64 steps (gas keeps it far below that), each below 2^64 because
@@ -459,17 +479,98 @@ impl HeapAnalysis {
         self.compute_tainted_regions();
     }
 
-    /// Analyzes a block for memory access patterns. Recursion through nested
-    /// regions is handled by `for_each_statement`; `analyze_statement` only handles
-    /// the per-statement analysis (no longer recursing internally).
+    /// Analyzes a block for memory access patterns.
     fn analyze_block(&mut self, block: &Block, in_function: bool, is_root: bool) {
-        for_each_statement(&block.statements, &mut |statement| {
+        self.analyze_statements(&block.statements, in_function, is_root);
+    }
+
+    /// Analyzes `statements` in program order, each one before its nested regions. The outputs
+    /// of an `if` or `switch` are resolved after its regions, which bind the values they yield.
+    fn analyze_statements(&mut self, statements: &[Statement], in_function: bool, is_root: bool) {
+        for statement in statements {
             self.analyze_statement(statement, in_function, is_root);
-        });
+            match statement {
+                Statement::If {
+                    inputs,
+                    then_region,
+                    else_region,
+                    outputs,
+                    ..
+                } => {
+                    self.analyze_statements(&then_region.statements, in_function, is_root);
+                    if let Some(region) = else_region {
+                        self.analyze_statements(&region.statements, in_function, is_root);
+                    }
+                    let else_values = else_region.as_ref().map_or(inputs, |region| &region.yields);
+                    self.record_merge_ranges(outputs, &[&then_region.yields, else_values]);
+                }
+                Statement::Switch {
+                    inputs,
+                    cases,
+                    default,
+                    outputs,
+                    ..
+                } => {
+                    for case in cases {
+                        self.analyze_statements(&case.body.statements, in_function, is_root);
+                    }
+                    if let Some(region) = default {
+                        self.analyze_statements(&region.statements, in_function, is_root);
+                    }
+                    let default_values = default.as_ref().map_or(inputs, |region| &region.yields);
+                    let incoming: Vec<&[Value]> = cases
+                        .iter()
+                        .map(|case| case.body.yields.as_slice())
+                        .chain([default_values.as_slice()])
+                        .collect();
+                    self.record_merge_ranges(outputs, &incoming);
+                }
+                Statement::For {
+                    condition_statements,
+                    body,
+                    post,
+                    ..
+                } => {
+                    self.analyze_statements(condition_statements, in_function, is_root);
+                    self.analyze_statements(&body.statements, in_function, is_root);
+                    self.analyze_statements(&post.statements, in_function, is_root);
+                }
+                Statement::Block(region) => {
+                    self.analyze_statements(&region.statements, in_function, is_root);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Records the iteration range of every `if` or `switch` output for which each region in
+    /// `incoming` yields a value that has one, as the range covering all of them.
+    fn record_merge_ranges(&mut self, outputs: &[ValueId], incoming: &[&[Value]]) {
+        for (index, output) in outputs.iter().enumerate() {
+            let range = incoming
+                .iter()
+                .map(|values| {
+                    values
+                        .get(index)
+                        .and_then(|value| self.offset_values.get(&value.id.0))
+                        .and_then(|info| info.iteration_range)
+                })
+                .reduce(|merged, range| Some(merged?.either(range?)))
+                .flatten();
+            if let Some(range) = range {
+                self.offset_values.insert(
+                    output.0,
+                    OffsetInfo {
+                        iteration_range: Some(range),
+                        ..OffsetInfo::default()
+                    },
+                );
+            }
+        }
     }
 
     /// Analyzes a single statement for memory access patterns. The caller is
-    /// responsible for walking nested regions (use `for_each_statement`).
+    /// responsible for walking nested regions.
     fn analyze_statement(&mut self, statement: &Statement, in_function: bool, is_root: bool) {
         match statement {
             Statement::Let { bindings, value } => {
@@ -3566,6 +3667,118 @@ mod tests {
             results.fmp_could_be_unbounded(),
             "the continue's 0x20 steps onto the FMP word"
         );
+    }
+
+    /// Builds `let output := if condition { then_statements; yield then_value }` with `input` as
+    /// its only input, which the missing `else` yields, and the value bound to id 2 as condition.
+    fn branch_output(
+        output: u32,
+        input: u32,
+        then_statements: Vec<Statement>,
+        then_value: u32,
+    ) -> Statement {
+        use crate::ir::{Region, ValueId};
+        Statement::If {
+            condition: Value::int(ValueId(2)),
+            inputs: vec![Value::int(ValueId(input))],
+            then_region: Region {
+                statements: then_statements,
+                yields: vec![Value::int(ValueId(then_value))],
+            },
+            else_region: None,
+            outputs: vec![ValueId(output)],
+        }
+    }
+
+    /// A store through the output of an `if` that hands `post` `sub(p, 0x60)` by `continue`
+    /// lands on the FMP word once `post` steps `0x20` up.
+    #[test]
+    fn branch_output_of_changed_counter_store_is_unbounded() {
+        use crate::ir::{BinaryOperation, ValueId};
+        let mut statements = counter_store_loop(0x80, BinaryOperation::Add, BigUint::from(0x20u32));
+        let Some(Statement::For { body, .. }) = statements.last_mut() else {
+            unreachable!()
+        };
+        body.statements = vec![
+            branch_output(
+                9,
+                1,
+                vec![
+                    literal_binding(7, 0x60),
+                    binary_binding(8, BinaryOperation::Sub, 1, 7),
+                    Statement::Continue {
+                        values: vec![Value::int(ValueId(8))],
+                    },
+                ],
+                8,
+            ),
+            word_store(9),
+        ];
+        body.yields = vec![Value::int(ValueId(9))];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "the store through the if output reaches the FMP word"
+        );
+    }
+
+    /// An `if` output that is `0x40` on one path stores on the FMP word.
+    #[test]
+    fn branch_output_with_literal_on_fmp_word_store_is_unbounded() {
+        let statements = vec![
+            literal_binding(0, 0x80),
+            literal_binding(2, 0x1234),
+            branch_output(9, 0, vec![literal_binding(7, 0x40)], 7),
+            word_store(9),
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            results.fmp_could_be_unbounded(),
+            "the then path stores at 0x40"
+        );
+    }
+
+    /// An `if` output that is `0x80` or `0xa0` never reaches the FMP word, so the range proof
+    /// stays.
+    #[test]
+    fn branch_output_of_literals_above_fmp_word_stays_bounded() {
+        let statements = vec![
+            literal_binding(0, 0x80),
+            literal_binding(2, 0x1234),
+            branch_output(9, 0, vec![literal_binding(7, 0xa0)], 7),
+            word_store(9),
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(
+            !results.fmp_could_be_unbounded(),
+            "stores at 0x80 and 0xa0 cannot reach the FMP word"
+        );
+    }
+
+    /// A `switch` output that is `0x40` in one case stores on the FMP word.
+    #[test]
+    fn switch_output_with_literal_on_fmp_word_store_is_unbounded() {
+        use crate::ir::{Region, SwitchCase, ValueId};
+        let statements = vec![
+            literal_binding(0, 0x80),
+            literal_binding(2, 0x1234),
+            Statement::Switch {
+                scrutinee: Value::int(ValueId(2)),
+                inputs: vec![Value::int(ValueId(0))],
+                cases: vec![SwitchCase {
+                    value: BigUint::from(1u32),
+                    body: Region {
+                        statements: vec![literal_binding(7, 0x40)],
+                        yields: vec![Value::int(ValueId(7))],
+                    },
+                }],
+                default: None,
+                outputs: vec![ValueId(9)],
+            },
+            word_store(9),
+        ];
+        let results = object_with_code(statements, vec![]).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded(), "case 1 stores at 0x40");
     }
 
     /// `add(0x80, k)` with `k` descending from `0` wraps below `0x80` onto the FMP word, so a

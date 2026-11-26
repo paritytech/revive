@@ -71,8 +71,8 @@ pub struct Printer<'a> {
     output: String,
     /// Current indentation level.
     indent: usize,
-    /// Function name lookup for printing calls.
-    function_names: BTreeMap<FunctionId, &'a str>,
+    /// Printed function names of the current object, see [`object_function_names`].
+    function_names: BTreeMap<FunctionId, String>,
     /// Optional type-inference results. When present, value ids are annotated
     /// with their post-narrow inferred width instead of the statically
     /// assigned i256 default stored in the IR.
@@ -164,10 +164,8 @@ impl<'a> Printer<'a> {
     /// of the walk so subobject value ids aren't looked up in the parent
     /// map — where they'd be absent and default to i1. Restore on exit.
     fn write_object(&mut self, object: &'a Object) {
-        let saved_function_names = std::mem::take(&mut self.function_names);
-        for (id, function) in &object.functions {
-            self.function_names.insert(*id, &function.name);
-        }
+        let saved_function_names =
+            std::mem::replace(&mut self.function_names, object_function_names(object));
 
         self.write_indent();
         let _ = write!(self.output, "object \"{}\" {{", object.name);
@@ -223,7 +221,11 @@ impl<'a> Printer<'a> {
 
     fn write_function(&mut self, function: &Function) {
         self.write_indent();
-        let _ = write!(self.output, "function {}(", function.name);
+        let name = self
+            .function_names
+            .get(&function.id)
+            .map_or(function.name.as_str(), String::as_str);
+        let _ = write!(self.output, "function {}(", name);
 
         for (index, (id, value_type)) in function.parameters.iter().enumerate() {
             if index > 0 {
@@ -913,7 +915,7 @@ impl<'a> Printer<'a> {
 
             Statement::SetImmutable { key, value } => {
                 self.write_indent();
-                let _ = write!(self.output, "setimmutable(\"{}\", ", key);
+                let _ = write!(self.output, "setimmutable({key:?}, ");
                 self.write_value(value);
                 self.output.push(')');
                 self.write_newline();
@@ -1141,7 +1143,7 @@ impl<'a> Printer<'a> {
             }
 
             Expression::LoadImmutable { key } => {
-                let _ = write!(self.output, "loadimmutable(\"{}\")", key);
+                let _ = write!(self.output, "loadimmutable({key:?})");
             }
 
             Expression::LinkerSymbol { path } => {
@@ -1272,6 +1274,28 @@ impl Default for Printer<'_> {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Maps each function of `object` to its printed name: the source name, with a
+/// `_func_<id>` suffix when several functions in the object share that name.
+fn object_function_names(object: &Object) -> BTreeMap<FunctionId, String> {
+    let mut name_counts = BTreeMap::<&str, usize>::new();
+    for function in object.functions.values() {
+        *name_counts.entry(function.name.as_str()).or_default() += 1;
+    }
+
+    object
+        .functions
+        .iter()
+        .map(|(id, function)| {
+            let name = if name_counts[function.name.as_str()] > 1 {
+                format!("{}_func_{}", function.name, id.0)
+            } else {
+                function.name.clone()
+            };
+            (*id, name)
+        })
+        .collect()
 }
 
 /// Convenience function to print an object to a string.
@@ -1642,6 +1666,40 @@ mod tests {
             !sub_section.contains("func_7"),
             "missing-id fallback must not appear:\n{sub_section}",
         );
+    }
+
+    /// Same-named functions in one object print with a `_func_<id>` suffix.
+    #[test]
+    fn same_named_functions_print_with_id_suffix() {
+        let call = |id| {
+            Statement::Expression(Expression::Call {
+                function: FunctionId(id),
+                arguments: vec![],
+            })
+        };
+
+        let mut object = Object::new("Test".to_string());
+        object.code.statements = vec![call(0), call(1), call(2)];
+        for (id, name) in [(0, "f"), (1, "f"), (2, "g")] {
+            object.functions.insert(
+                FunctionId(id),
+                Function::new(FunctionId(id), name.to_string()),
+            );
+        }
+
+        let output = print_object(&object);
+
+        for expected in [
+            "function f_func_0(",
+            "function f_func_1(",
+            "function g(",
+            "f_func_0()",
+            "f_func_1()",
+            "g()",
+        ] {
+            assert!(output.contains(expected), "missing {expected}:\n{output}");
+        }
+        assert!(!output.contains("function f("), "got:\n{output}");
     }
 
     #[test]

@@ -645,9 +645,12 @@ impl HeapAnalysis {
                 self.taint_copy_destination(destination, length);
             }
 
+            Statement::MappingSStore { .. } => {
+                self.taint_range(Some(0), Some(2 * BYTE_LENGTH_WORD as u64));
+            }
+
             Statement::SStore { .. }
             | Statement::TStore { .. }
-            | Statement::MappingSStore { .. }
             | Statement::SelfDestruct { .. }
             | Statement::Break { .. }
             | Statement::Continue { .. }
@@ -1716,8 +1719,12 @@ impl HeapAnalysis {
                 self.mark_escaping_range(offset, length);
                 self.note_fmp_coverage(offset, length);
             }
-            Expression::Keccak256Pair { .. } | Expression::Keccak256Single { .. } => {}
-            Expression::MappingSLoad { .. } => {}
+            Expression::Keccak256Pair { .. } | Expression::MappingSLoad { .. } => {
+                self.taint_range(Some(0), Some(2 * BYTE_LENGTH_WORD as u64));
+            }
+            Expression::Keccak256Single { .. } => {
+                self.taint_range(Some(0), Some(BYTE_LENGTH_WORD as u64));
+            }
             _ => {}
         }
     }

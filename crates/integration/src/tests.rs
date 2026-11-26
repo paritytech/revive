@@ -6396,3 +6396,13 @@ fn keccak_single_msize() {
     );
     run_differential(actions);
 }
+
+#[test]
+fn mload_dynamic_offset_msize() {
+    let mut actions = instantiate_yul(
+        "contracts/MloadDynamicOffsetMsize.yul",
+        "MloadDynamicOffsetMsize",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}

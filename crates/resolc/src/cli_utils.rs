@@ -22,6 +22,9 @@ pub const SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH: &str =
 /// inlined for-loop that crashed the newyork pipeline under `--disable-solc-optimizer`.
 pub const SOLIDITY_FOLDED_GUARD_INLINED_LOOP_PATH: &str =
     "src/tests/data/solidity/folded_guard_inlined_loop.sol";
+/// A Yul function defined in an inline assembly block nested inside a Solidity function.
+pub const SOLIDITY_DEBUG_INFO_NESTED_FUNCTION_PATH: &str =
+    "src/tests/data/solidity/debug_info_nested_function.sol";
 /// The Solidity contract importing the simple contract through a remapping.
 pub const SOLIDITY_REMAPPED_IMPORT_PATH: &str = "src/tests/data/solidity/remapped_import.sol";
 /// The Solidity contract importing the simple contract through an include path.

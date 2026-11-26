@@ -6240,3 +6240,11 @@ fn data_copy_in_branch_below_free_pointer() {
         "DataCopyInBranchBelowFreePointer",
     ));
 }
+
+#[test]
+fn data_copy_over_bounded_free_pointer() {
+    run_differential(instantiate_yul(
+        "contracts/DataCopyOverBoundedFreePointer.yul",
+        "DataCopyOverBoundedFreePointer",
+    ));
+}

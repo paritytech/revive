@@ -23,7 +23,7 @@ use num::BigUint;
 
 use crate::ir::{
     for_each_statement, word_align, Block, Expression, FunctionId, MemoryRegion, Object, Statement,
-    Value, ValueId, DATA_COPY_WRITE_LENGTH,
+    Value, ValueId,
 };
 use revive_common::{BIT_LENGTH_WORD, BYTE_LENGTH_WORD};
 
@@ -541,7 +541,7 @@ impl HeapAnalysis {
                 let destination_start = self.extract_static_offset(destination);
                 let source_start = self.extract_static_offset(source);
                 let len = self.extract_static_offset(length);
-                self.flag_write_covering_fmp(destination, len);
+                self.flag_write_covering_fmp(destination, length);
                 self.taint_range(destination_start, len);
                 self.taint_range(source_start, len);
             }
@@ -555,7 +555,7 @@ impl HeapAnalysis {
             } => {
                 self.mark_escaping_range(args_offset, args_length);
                 self.note_fmp_coverage(args_offset, args_length);
-                self.flag_write_covering_fmp(ret_offset, self.extract_static_offset(ret_length));
+                self.flag_write_covering_fmp(ret_offset, ret_length);
                 self.mark_escaping_and_tainted_range(ret_offset, ret_length);
                 self.note_fmp_coverage(ret_offset, ret_length);
             }
@@ -627,6 +627,11 @@ impl HeapAnalysis {
                 length,
                 ..
             }
+            | Statement::DataCopy {
+                destination,
+                length,
+                ..
+            }
             | Statement::CallDataCopy {
                 destination,
                 length,
@@ -638,17 +643,6 @@ impl HeapAnalysis {
                         .or_insert(AccessPattern::AlignedStatic(address));
                 }
                 self.taint_copy_destination(destination, length);
-            }
-
-            Statement::DataCopy { destination, .. } => {
-                let destination_start = self.extract_static_offset(destination);
-                if let Some(address) = destination_start {
-                    self.memory_accesses
-                        .entry(address)
-                        .or_insert(AccessPattern::AlignedStatic(address));
-                }
-                self.flag_write_covering_fmp(destination, Some(DATA_COPY_WRITE_LENGTH));
-                self.taint_range(destination_start, Some(DATA_COPY_WRITE_LENGTH));
             }
 
             Statement::SStore { .. }
@@ -836,10 +830,11 @@ impl HeapAnalysis {
     /// and neither does a dynamic destination that is free pointer relative, or a
     /// loop-varying destination that never drops below `0x60`. A static destination below
     /// `0x60` with a dynamic length is flagged.
-    fn flag_write_covering_fmp(&mut self, destination: &Value, length: Option<u64>) {
+    fn flag_write_covering_fmp(&mut self, destination: &Value, length: &Value) {
         let destination_start = self.extract_static_offset(destination);
+        let len = self.extract_static_offset(length);
 
-        let covers_fmp = match (destination_start, length) {
+        let covers_fmp = match (destination_start, len) {
             (_, Some(0)) => false,
             (Some(address), Some(size)) => address < 0x60 && address.saturating_add(size) > 0x40,
             (Some(address), None) => address < 0x60,
@@ -989,7 +984,7 @@ impl HeapAnalysis {
         let len = self.extract_static_offset(length);
 
         let loop_length = self.loop_varying(length);
-        self.flag_write_covering_fmp(destination, len);
+        self.flag_write_covering_fmp(destination, length);
 
         match (destination_start, len) {
             (Some(address), Some(size)) => {
@@ -2962,6 +2957,34 @@ mod tests {
             },
         }];
         let results = object_with_external_call(setup, 0).analyze_heap(TEST_HEAP_SIZE);
+        assert!(!results.fmp_could_be_unbounded());
+    }
+
+    /// Builds an object whose runtime code runs a `datacopy` to the literal `destination`.
+    fn object_with_data_copy(destination: u64) -> Object {
+        use crate::ir::{ValueId, DATA_COPY_WRITE_LENGTH};
+        let statements = vec![
+            literal_binding(10, destination),
+            literal_binding(11, 0),
+            literal_binding(12, DATA_COPY_WRITE_LENGTH),
+            Statement::DataCopy {
+                destination: Value::int(ValueId(10)),
+                offset: Value::int(ValueId(11)),
+                length: Value::int(ValueId(12)),
+            },
+        ];
+        object_with_code(statements, vec![])
+    }
+
+    #[test]
+    fn data_copy_onto_fmp_word_flags_unbounded() {
+        let results = object_with_data_copy(0x30).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn data_copy_below_fmp_word_stays_bounded() {
+        let results = object_with_data_copy(0x20).analyze_heap(TEST_HEAP_SIZE);
         assert!(!results.fmp_could_be_unbounded());
     }
 

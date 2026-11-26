@@ -167,7 +167,8 @@ pub fn word_store_overlaps_free_pointer_slot(resolved_offset: Option<u64>) -> bo
     matches!(resolved_offset, Some(offset) if (0x21..0x60).contains(&offset) && offset != 0x40)
 }
 
-/// The number of bytes a `datacopy` writes at its destination.
+/// The number of bytes a `datacopy` writes at its destination. It stores the code hash word, so
+/// the Yul length argument does not size the write.
 pub const DATA_COPY_WRITE_LENGTH: u64 = BYTE_LENGTH_WORD as u64;
 
 /// An SSA value reference (index into value table).
@@ -705,6 +706,9 @@ pub enum Statement {
         length: Value,
     },
     /// Copy from the object's data section into memory.
+    ///
+    /// `length` is the number of bytes written. Translation binds it to
+    /// [`DATA_COPY_WRITE_LENGTH`] in place of the Yul length argument.
     DataCopy {
         destination: Value,
         offset: Value,

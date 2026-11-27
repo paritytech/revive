@@ -645,9 +645,12 @@ impl HeapAnalysis {
                 self.taint_copy_destination(destination, length);
             }
 
+            Statement::MappingSStore { .. } => {
+                self.taint_range(Some(0), Some(2 * BYTE_LENGTH_WORD as u64));
+            }
+
             Statement::SStore { .. }
             | Statement::TStore { .. }
-            | Statement::MappingSStore { .. }
             | Statement::SelfDestruct { .. }
             | Statement::Break { .. }
             | Statement::Continue { .. }
@@ -1721,8 +1724,12 @@ impl HeapAnalysis {
                 self.mark_escaping_range(offset, length);
                 self.note_fmp_coverage(offset, length);
             }
-            Expression::Keccak256Pair { .. } | Expression::Keccak256Single { .. } => {}
-            Expression::MappingSLoad { .. } => {}
+            Expression::Keccak256Pair { .. } | Expression::MappingSLoad { .. } => {
+                self.taint_range(Some(0), Some(2 * BYTE_LENGTH_WORD as u64));
+            }
+            Expression::Keccak256Single { .. } => {
+                self.taint_range(Some(0), Some(BYTE_LENGTH_WORD as u64));
+            }
             _ => {}
         }
     }
@@ -2962,6 +2969,34 @@ mod tests {
             },
         }];
         let results = object_with_external_call(setup, 0).analyze_heap(TEST_HEAP_SIZE);
+        assert!(!results.fmp_could_be_unbounded());
+    }
+
+    /// Builds an object whose runtime code runs a `datacopy` to the literal `destination`.
+    fn object_with_data_copy(destination: u64) -> Object {
+        use crate::ir::{ValueId, DATA_COPY_WRITE_LENGTH};
+        let statements = vec![
+            literal_binding(10, destination),
+            literal_binding(11, 0),
+            literal_binding(12, DATA_COPY_WRITE_LENGTH),
+            Statement::DataCopy {
+                destination: Value::int(ValueId(10)),
+                offset: Value::int(ValueId(11)),
+                length: Value::int(ValueId(12)),
+            },
+        ];
+        object_with_code(statements, vec![])
+    }
+
+    #[test]
+    fn data_copy_onto_fmp_word_flags_unbounded() {
+        let results = object_with_data_copy(0x30).analyze_heap(TEST_HEAP_SIZE);
+        assert!(results.fmp_could_be_unbounded());
+    }
+
+    #[test]
+    fn data_copy_below_fmp_word_stays_bounded() {
+        let results = object_with_data_copy(0x20).analyze_heap(TEST_HEAP_SIZE);
         assert!(!results.fmp_could_be_unbounded());
     }
 

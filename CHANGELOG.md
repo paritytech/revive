@@ -6,6 +6,7 @@ Supported `polkadot-sdk` rev: `2610.0.0`
 
 ### Added
 
+- Support for solc v0.8.39.
 - The keccak256 metadata hash is embedded in the PolkaVM blob metadata hash section, so the code hash on chain commits to the contract metadata. It is omitted with `--metadata-hash none` or the standard JSON `settings.metadata.bytecodeHash` set to `none`, which is now honored.
 
 ### Changed

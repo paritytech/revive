@@ -3,7 +3,6 @@ resolver = "2"
 members = ["crates/*"]
 
 [workspace.package]
-version = "1.0.0"
 authors = [
     "Cyrill Leutwiler <cyrill@parity.io>",
     "Parity Technologies <admin@parity.io>",
@@ -16,7 +15,6 @@ rust-version = "1.91.0"
 [workspace.dependencies]
 lld-sys = { version = "1.3.0", path = "crates/lld-sys" }
 resolc = { version = "1.5.0", path = "crates/resolc", default-features = false }
-revive-benchmarks = { version = "1.2.0", path = "crates/benchmarks" }
 revive-build-utils = { version = "1.3.0", path = "crates/build-utils" }
 revive-builtins = { version = "1.2.0", path = "crates/builtins" }
 revive-common = { version = "1.3.0", path = "crates/common" }
@@ -52,7 +50,6 @@ clap = { version = "4", default-features = false, features = ["derive"] }
 polkavm-common = "0.38.0"
 polkavm-linker = "0.38.0"
 polkavm-disassembler = "0.38.0"
-polkavm = "0.38.0"
 alloy-primitives = { version = "1.4", features = ["serde"] }
 alloy-sol-types = "1.4"
 alloy-genesis = "2.5.0"
@@ -67,7 +64,6 @@ flate2 = "1.1"
 fs_extra = "1.3"
 num_cpus = "1"
 tar = "0.4"
-toml = "1"
 assert_cmd = "2"
 assert_fs = "1.1"
 normpath = "1.5"

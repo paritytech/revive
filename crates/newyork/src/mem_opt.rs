@@ -462,15 +462,8 @@ impl MemoryOptimizer {
                     });
                 }
 
-                Statement::Return { .. } | Statement::Revert { .. } => {
-                    self.pending_stores.clear();
-                    processed.push(statement);
-                }
-
-                Statement::SStore { .. }
-                | Statement::TStore { .. }
-                | Statement::MappingSStore { .. }
-                | Statement::SetImmutable { .. }
+                Statement::Return { .. }
+                | Statement::Revert { .. }
                 | Statement::SelfDestruct { .. }
                 | Statement::Stop
                 | Statement::Invalid
@@ -480,6 +473,14 @@ impl MemoryOptimizer {
                 | Statement::Break { .. }
                 | Statement::Continue { .. }
                 | Statement::Leave { .. } => {
+                    self.pending_stores.clear();
+                    processed.push(statement);
+                }
+
+                Statement::SStore { .. }
+                | Statement::TStore { .. }
+                | Statement::MappingSStore { .. }
+                | Statement::SetImmutable { .. } => {
                     processed.push(statement);
                 }
             }

@@ -69,6 +69,11 @@ impl Libraries {
     pub fn as_inner_mut(&mut self) -> &mut BTreeMap<String, BTreeMap<String, String>> {
         &mut self.inner
     }
+
+    /// Whether the character separates the libraries listed in one command line argument.
+    fn is_list_separator(character: char) -> bool {
+        character == ',' || character.is_whitespace()
+    }
 }
 
 impl From<BTreeMap<String, BTreeMap<String, String>>> for Libraries {
@@ -82,26 +87,22 @@ impl TryFrom<&[String]> for Libraries {
 
     fn try_from(arguments: &[String]) -> Result<Self, Self::Error> {
         let mut libraries = BTreeMap::new();
-        for (index, library) in arguments.iter().enumerate() {
-            let mut path_and_address = library.split('=');
-            let path = path_and_address
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("Library #{index} path is missing."))?;
-            let mut file_and_contract = path.split(':');
-            let file = file_and_contract
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("Library `{path}` file name is missing."))?;
-            let contract = file_and_contract
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("Library `{path}` contract name is missing."))?;
-            let address = path_and_address
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("Library `{path}` address is missing."))?;
-            if path_and_address.next().is_some() {
+        for library in arguments
+            .iter()
+            .flat_map(|argument| argument.split(Self::is_list_separator))
+            .filter(|library| !library.is_empty())
+        {
+            let (path, address) = library
+                .split_once('=')
+                .ok_or_else(|| anyhow::anyhow!("Library `{library}` address is missing."))?;
+            if address.contains('=') {
                 anyhow::bail!(
                     "Only one equal sign `=` is allowed in the library string `{library}`."
                 );
             }
+            let (file, contract) = path
+                .rsplit_once(':')
+                .ok_or_else(|| anyhow::anyhow!("Library `{path}` contract name is missing."))?;
             libraries
                 .entry(file.to_owned())
                 .or_insert_with(BTreeMap::new)

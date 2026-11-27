@@ -66,6 +66,8 @@ pub const SOLIDITY_DUPLICATE_SECOND_PATH: &str =
     "src/tests/data/solidity/duplicate/second/Duplicate.sol";
 /// Two contracts named `First` and `Second` returning `1` and `2`.
 pub const SOLIDITY_TWO_CONTRACTS_PATH: &str = "src/tests/data/solidity/two_contracts.sol";
+/// A contract calling the two external libraries `AddOne` and `AddTwo`.
+pub const SOLIDITY_TWO_LIBRARIES_PATH: &str = "src/tests/data/solidity/two_libraries.sol";
 /// The verbatim reproducer from paritytech/revive#632: two contracts calling the same library.
 pub const SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH: &str =
     "src/tests/data/solidity/link_independent_objects.sol";

@@ -4,10 +4,26 @@ use crate::tests::cli::metadata::blob_metadata_hash;
 
 use crate::cli_utils::{
     assert_command_failure, assert_command_success, execute_resolc, execute_resolc_in_directory,
-    execute_resolc_with_stdin_input, SOLIDITY_DEPENDENCY_CONTRACT_PATH,
+    execute_resolc_with_stdin_input, CommandResult, SOLIDITY_DEPENDENCY_CONTRACT_PATH,
     SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH, SOLIDITY_LIBRARY_CALL_CONTRACT_PATH,
-    SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH,
+    SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH, SOLIDITY_TWO_LIBRARIES_PATH,
 };
+
+const ADD_ONE_LIBRARY_ADDRESS: &str = "1111111111111111111111111111111111111111";
+const ADD_TWO_LIBRARY_ADDRESS: &str = "2222222222222222222222222222222222222222";
+const LIBRARY_LIST_SEPARATORS: [&str; 2] = [",", " "];
+const SOURCE_NAME_WITH_COLON: &str = "x:y.sol";
+
+/// Asserts that the `--bin` output holds the addresses of both libraries.
+fn assert_two_libraries_linked(output: &CommandResult, message: &str) {
+    assert_command_success(output, message);
+    assert!(
+        output.stdout.contains(ADD_ONE_LIBRARY_ADDRESS)
+            && output.stdout.contains(ADD_TWO_LIBRARY_ADDRESS),
+        "{message}: the libraries are not linked: {}",
+        output.stderr
+    );
+}
 
 /// Test deploy time linking a contract with unresolved factory dependencies.
 #[test]
@@ -128,6 +144,47 @@ fn libraries_multiple_equal_signs_fails() {
     assert!(output
         .stderr
         .contains("Only one equal sign `=` is allowed in the library string"));
+}
+
+/// One `--libraries` argument takes a comma or whitespace separated list.
+#[test]
+fn libraries_list_in_one_argument_links() {
+    for separator in LIBRARY_LIST_SEPARATORS {
+        let libraries = format!(
+            "{SOLIDITY_TWO_LIBRARIES_PATH}:AddOne=0x{ADD_ONE_LIBRARY_ADDRESS}{separator}{SOLIDITY_TWO_LIBRARIES_PATH}:AddTwo=0x{ADD_TWO_LIBRARY_ADDRESS}"
+        );
+        let output = execute_resolc(&[
+            SOLIDITY_TWO_LIBRARIES_PATH,
+            "--bin",
+            "--libraries",
+            &libraries,
+        ]);
+        assert_two_libraries_linked(&output, &format!("A list separated by {separator:?}"));
+    }
+}
+
+/// A library links when the path of its source file contains `:`.
+#[test]
+fn libraries_source_path_with_colon_links() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    std::fs::copy(
+        SOLIDITY_TWO_LIBRARIES_PATH,
+        temp_dir.path().join(SOURCE_NAME_WITH_COLON),
+    )
+    .unwrap();
+
+    let output = execute_resolc_in_directory(
+        &[
+            SOURCE_NAME_WITH_COLON,
+            "--bin",
+            "--libraries",
+            &format!("{SOURCE_NAME_WITH_COLON}:AddOne=0x{ADD_ONE_LIBRARY_ADDRESS}"),
+            "--libraries",
+            &format!("{SOURCE_NAME_WITH_COLON}:AddTwo=0x{ADD_TWO_LIBRARY_ADDRESS}"),
+        ],
+        temp_dir.path(),
+    );
+    assert_two_libraries_linked(&output, "A source path with a colon");
 }
 
 /// Test that linking an object does not depend on the other objects being linked.

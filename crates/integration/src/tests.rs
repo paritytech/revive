@@ -6456,3 +6456,24 @@ fn store_before_break_with_unreachable_store() {
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }
+
+#[test]
+fn store_before_continue_with_unreachable_store() {
+    let mut actions = instantiate_solc_unoptimized(
+        "contracts/UnreachableStoreAfterContinue.sol",
+        "UnreachableStoreAfterContinue",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// The `return` sits in a loop because the simplifier drops code after a `leave` outside of one.
+#[test]
+fn store_before_leave_with_unreachable_store() {
+    let mut actions = instantiate_solc_unoptimized(
+        "contracts/UnreachableStoreAfterLeave.sol",
+        "UnreachableStoreAfterLeave",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}

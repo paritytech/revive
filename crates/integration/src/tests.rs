@@ -6505,3 +6505,22 @@ fn panic_outline_condition_env_read() {
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }
+
+/// Reproducer from paritytech/security_findings#203. The allocation ends exactly at the end of
+/// the default heap, which leaves the free memory pointer equal to the heap size.
+#[test]
+fn free_pointer_at_heap_end() {
+    const INITIAL_FREE_POINTER: u32 = 0x80;
+    const LENGTH_WORD_SIZE: u32 = 0x20;
+    let length = revive_solc_json_interface::PolkaVMDefaultHeapMemorySize
+        - INITIAL_FREE_POINTER
+        - LENGTH_WORD_SIZE;
+
+    let mut actions = instantiate("contracts/FreePointerAtHeapEnd.sol", "FreePointerAtHeapEnd");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        words(&[U256::from(length)]),
+    );
+    run_differential(actions);
+}

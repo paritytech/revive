@@ -203,7 +203,7 @@ fn run_late_inline_loop(
 ///
 /// `heap_opt` runs after the type-narrowing fixed point, so the first inference assumed the sound-
 /// only-when-bounded I32 FMP width. When the FMP could be unbounded, codegen loads the full FMP word
-/// (no `FMP < heap_size` range proof); the I32 forward width would then let a downstream comparison
+/// (no free pointer range proof); the I32 forward width would then let a downstream comparison
 /// or offset bare-truncate the live value. Re-inferring with the flag set keeps the load — and every
 /// value derived from it — full width. Signature narrowing never un-narrows, and the signatures
 /// narrowed so far relied on the I32 FMP width (e.g. a function returning an FMP load had its return

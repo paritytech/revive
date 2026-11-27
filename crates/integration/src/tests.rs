@@ -6505,3 +6505,51 @@ fn panic_outline_condition_env_read() {
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }
+
+/// A variable assigned in a bare block keeps the assigned value after the block.
+#[test]
+fn bare_block_assignment() {
+    let mut actions = instantiate_yul("contracts/BareBlockAssignment.yul", "BareBlockAssignment");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// A variable assigned in a bare block inside a loop body keeps the assigned value after the loop.
+#[test]
+fn bare_block_in_loop() {
+    let mut actions = instantiate_yul("contracts/BareBlockInLoop.yul", "BareBlockInLoop");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// The store after the bare block never runs, so the store before the `break` must be kept.
+#[test]
+fn bare_block_break() {
+    let mut actions = instantiate_yul("contracts/BareBlockBreak.yul", "BareBlockBreak");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// The store after the bare block never runs, so the store before the `continue` must be kept.
+#[test]
+fn bare_block_continue() {
+    let mut actions = instantiate_yul("contracts/BareBlockContinue.yul", "BareBlockContinue");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// The store after the bare block never runs, so the store before the `leave` must be kept.
+#[test]
+fn bare_block_leave() {
+    let mut actions = instantiate_yul("contracts/BareBlockLeave.yul", "BareBlockLeave");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// The code after the bare block never runs but reads `value`, so its definition must be kept.
+#[test]
+fn bare_block_revert() {
+    let mut actions = instantiate_yul("contracts/BareBlockRevert.yul", "BareBlockRevert");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}

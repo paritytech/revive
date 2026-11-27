@@ -5379,6 +5379,13 @@ fn loop_store_shifted_counter_on_fmp_word() {
     run_fmp_word_fixture("LoopStoreFmpShiftedCounter");
 }
 
+/// An `if` moves the loop counter from `0x80` to `0x20` and continues, so `post` steps it onto
+/// the free memory pointer before the store.
+#[test]
+fn loop_store_counter_changed_in_branch_on_fmp_word() {
+    run_fmp_word_fixture("LoopStoreFmpCounterChangedInBranch");
+}
+
 /// A copy whose length is a loop counter from `0x40` overwrites the first byte of the
 /// free memory pointer in its second iteration.
 #[test]

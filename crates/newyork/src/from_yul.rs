@@ -27,6 +27,7 @@ use revive_yul::parser::statement::Statement as YulStatement;
 use crate::ir::{
     BinaryOperation, BitWidth, Block, CallKind, CreateKind, Expression, Function, FunctionId,
     MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value,
+    DATA_COPY_WRITE_LENGTH,
 };
 use crate::ssa::SsaBuilder;
 
@@ -417,11 +418,15 @@ impl YulTranslator {
                 return Ok((vec![], Expression::DataOffset { id }));
             }
             FunctionName::LoadImmutable => {
-                let key = self.extract_string_literal(&call.arguments)?;
+                let key = call
+                    .immutable_name()
+                    .map_err(|error| TranslationError::InvalidLiteral(error.to_string()))?;
                 return Ok((vec![], Expression::LoadImmutable { key }));
             }
             FunctionName::SetImmutable => {
-                let key = self.extract_string_literal_at(&call.arguments, 1)?;
+                let key = call
+                    .immutable_name()
+                    .map_err(|error| TranslationError::InvalidLiteral(error.to_string()))?;
                 let (mut statements, value_expression) =
                     self.translate_expression(&call.arguments[2])?;
                 let value = match value_expression {
@@ -900,10 +905,18 @@ impl YulTranslator {
                 })
             }
             FunctionName::DataCopy => {
+                let length_id = self.ssa.fresh_id();
+                statements.push(Statement::Let {
+                    bindings: vec![length_id],
+                    value: Expression::Literal {
+                        value: BigUint::from(DATA_COPY_WRITE_LENGTH),
+                        value_type: Type::Int(BitWidth::I256),
+                    },
+                });
                 statements.push(Statement::DataCopy {
                     destination: arguments[0],
                     offset: arguments[1],
-                    length: arguments[2],
+                    length: Value::new(length_id, Type::Int(BitWidth::I256)),
                 });
                 Ok(Expression::Literal {
                     value: BigUint::from(0u32),
@@ -1729,6 +1742,49 @@ object "C" {
         assert!(
             !called.is_empty(),
             "setimmutable's offset argument `f()` must be evaluated for its side effects"
+        );
+    }
+
+    /// `datacopy` stores one word whatever its Yul length argument says, so the IR length is
+    /// bound to `DATA_COPY_WRITE_LENGTH`.
+    #[test]
+    fn datacopy_length_is_the_written_word() {
+        let source = r#"
+object "Test" {
+    code {
+        datacopy(0x30, dataoffset("Test_deployed"), 0x10)
+    }
+    object "Test_deployed" {
+        code {
+            stop()
+        }
+    }
+}
+"#;
+        let mut lexer = Lexer::new(source.to_owned());
+        let yul_object = YulObject::parse(&mut lexer, None).expect("the Yul object should parse");
+
+        let object = YulTranslator::new()
+            .translate_object(&yul_object)
+            .expect("translation should succeed");
+
+        let mut literals = BTreeMap::new();
+        let mut lengths = Vec::new();
+        crate::ir::for_each_statement(&object.code.statements, &mut |statement| match statement {
+            Statement::Let {
+                bindings,
+                value: Expression::Literal { value, .. },
+            } => {
+                literals.insert(bindings[0], value.clone());
+            }
+            Statement::DataCopy { length, .. } => lengths.push(length.id),
+            _ => {}
+        });
+
+        assert_eq!(lengths.len(), 1, "the deploy code has one datacopy");
+        assert_eq!(
+            literals.get(&lengths[0]),
+            Some(&BigUint::from(DATA_COPY_WRITE_LENGTH))
         );
     }
 

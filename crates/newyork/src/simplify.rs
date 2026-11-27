@@ -14,10 +14,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use num::{BigUint, One, ToPrimitive, Zero};
 
 use crate::ir::{
-    for_each_statement_mut, BinaryOperation, BitWidth, Block, CallKind, Expression, Function,
-    FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type, UnaryOperation, Value,
-    ValueId,
+    for_each_statement, for_each_statement_mut, BinaryOperation, BitWidth, Block, CallKind,
+    Expression, Function, FunctionId, MemoryRegion, Object, Region, Statement, SwitchCase, Type,
+    UnaryOperation, Value, ValueId,
 };
+use crate::mapping_access_outlining::is_memory_free_expression;
 
 /// Maximum value for 256-bit unsigned integer (2^256 - 1).
 fn max_u256() -> BigUint {
@@ -220,7 +221,7 @@ impl Simplifier {
         for id in &function.return_values_initial {
             defined_ids.insert(id.0);
         }
-        crate::ir::for_each_statement(&function.body.statements, &mut |statement| {
+        for_each_statement(&function.body.statements, &mut |statement| {
             statement.for_each_value_id_def(&mut |id| {
                 defined_ids.insert(id.0);
             });
@@ -1331,6 +1332,9 @@ fn outline_custom_error_patterns(
 /// exactly once in the collapsed window. A repeated store means a later write overwrites an earlier
 /// one — so the value the backward scan matched is not what the EVM revert emits — and the sequence
 /// must not be collapsed into a `CustomErrorRevert`.
+///
+/// The selector store covers `[0, 32)` and overlaps the first argument at `[4, 36)`, so it must
+/// come before the store at offset 4.
 fn find_custom_error_pattern_backwards(
     statements: &[Statement],
     constants: &BTreeMap<u32, BigUint>,
@@ -1344,6 +1348,8 @@ fn find_custom_error_pattern_backwards(
     let mut found_selector: Option<BigUint> = None;
     let mut arguments: Vec<Option<Value>> = vec![None; num_arguments];
     let mut earliest_index = len;
+    let mut selector_index = len;
+    let mut first_argument_index = len;
 
     let zero = BigUint::ZERO;
     let four = BigUint::from(4u32);
@@ -1356,10 +1362,12 @@ fn find_custom_error_pattern_backwards(
                     if *offset_value == zero {
                         if let Some(selector_constant) = constants.get(&value.id.0) {
                             found_selector = Some(selector_constant.clone());
+                            selector_index = statement_index;
                             earliest_index = earliest_index.min(statement_index);
                         }
                     } else if *offset_value == four && num_arguments >= 1 {
                         arguments[0] = Some(*value);
+                        first_argument_index = statement_index;
                         earliest_index = earliest_index.min(statement_index);
                     } else if let Some(offset_u64) = offset_value.to_u64() {
                         if offset_u64 >= 0x24 && (offset_u64 - 4) % 0x20 == 0 {
@@ -1399,7 +1407,9 @@ fn find_custom_error_pattern_backwards(
                     }
                 })
             }
-            Statement::Let { .. } | Statement::Expression(..) => true,
+            Statement::Let { value, .. } | Statement::Expression(value) => {
+                is_memory_free_expression(value)
+            }
             _ => false,
         });
     if !all_safe {
@@ -1419,6 +1429,10 @@ fn find_custom_error_pattern_backwards(
         if writes != 1 {
             return None;
         }
+    }
+
+    if first_argument_index < selector_index {
+        return None;
     }
 
     Some((earliest_index, selector, arguments))
@@ -2031,8 +2045,8 @@ fn has_callvalue_revert_prefix(statements: &[Statement]) -> bool {
 ///     callvalue revert it never performed (e.g. an all-nonpayable dispatch with a payable
 ///     fallback). A missing or non-checking default is exactly such a path.
 ///  2. every branch reverts with identical data, so the one hoisted revert serves all selectors;
-///     otherwise a matched selector would receive the wrong revert payload. Compared via the
-///     canonical (SSA-renamed, literal-preserving) prefix encoding.
+///     otherwise a matched selector would receive the wrong revert payload. Compared via
+///     `canonical_callvalue_prefix`.
 fn callvalue_check_fully_hoistable(cases: &[SwitchCase], default: &Option<Region>) -> bool {
     if cases.is_empty() {
         return false;
@@ -2065,14 +2079,36 @@ fn callvalue_binding_id(statements: &[Statement]) -> ValueId {
     }
 }
 
-/// Canonical encoding (SSA ids renamed to first-use order, literal values preserved) of the
-/// two-statement callvalue-revert prefix. Two prefixes with equal encodings revert with identical
-/// data, so hoisting one above a switch in place of all of them is observationally sound.
+/// Canonical encoding (ids defined in the prefix renamed to first-use order, ids bound outside it
+/// and literal values preserved) of the two-statement callvalue-revert prefix. Two prefixes with
+/// equal encodings revert with identical data, so hoisting one above a switch in place of all of
+/// them is observationally sound.
 ///
 /// The caller must have established [`has_callvalue_revert_prefix`] for `statements`.
 fn canonical_callvalue_prefix(statements: &[Statement]) -> Vec<u8> {
+    let prefix = &statements[..2];
+    let mut defined_values = BTreeSet::new();
+    crate::ir::for_each_statement(prefix, &mut |statement| {
+        statement.for_each_value_id_def(&mut |id| {
+            defined_values.insert(id);
+        });
+    });
+    let mut free_values = BTreeSet::new();
+    for statement in prefix {
+        statement.for_each_value_id(&mut |id| {
+            if !defined_values.contains(&id) {
+                free_values.insert(id);
+            }
+        });
+    }
+
     let mut canon = Canonicalizer::new();
     let mut buffer = Vec::new();
+    buffer.extend_from_slice(&free_values.len().to_le_bytes());
+    for free_value in free_values {
+        buffer.extend_from_slice(&free_value.0.to_le_bytes());
+        canon.get_or_insert(free_value);
+    }
     canon.encode_statement(&statements[0], &mut buffer);
     canon.encode_statement(&statements[1], &mut buffer);
     buffer

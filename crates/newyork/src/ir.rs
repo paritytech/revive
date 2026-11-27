@@ -721,9 +721,6 @@ pub enum Statement {
         length: Value,
     },
 
-    /// Nested block scope.
-    Block(Region),
-
     /// Expression evaluated for side effects only (result discarded).
     Expression(Expression),
 
@@ -1078,7 +1075,6 @@ impl Statement {
                 walk_region_uses(body, visit);
                 walk_region_uses(post, visit);
             }
-            Statement::Block(region) => walk_region_uses(region, visit),
             Statement::Revert { offset, length } | Statement::Return { offset, length } => {
                 visit(offset.id);
                 visit(length.id);
@@ -1269,7 +1265,6 @@ impl Statement {
                 walk_region_uses_mut(body, visit);
                 walk_region_uses_mut(post, visit);
             }
-            Statement::Block(region) => walk_region_uses_mut(region, visit),
             Statement::Revert { offset, length } | Statement::Return { offset, length } => {
                 visit(&mut offset.id);
                 visit(&mut length.id);
@@ -1653,14 +1648,13 @@ pub fn for_each_statement_mut(statements: &mut [Statement], visit: &mut dyn FnMu
                 for_each_statement_mut(&mut body.statements, visit);
                 for_each_statement_mut(&mut post.statements, visit);
             }
-            Statement::Block(region) => for_each_statement_mut(&mut region.statements, visit),
             _ => {}
         }
     }
 }
 
 /// Visits every statement in a slice recursively, calling `visit` on each one.
-/// Handles structural recursion into If/Switch/For/Block regions.
+/// Handles structural recursion into If/Switch/For regions.
 pub fn for_each_statement(statements: &[Statement], visit: &mut dyn FnMut(&Statement)) {
     for statement in statements {
         visit(statement);
@@ -1693,7 +1687,6 @@ pub fn for_each_statement(statements: &[Statement], visit: &mut dyn FnMut(&State
                 for_each_statement(&body.statements, visit);
                 for_each_statement(&post.statements, visit);
             }
-            Statement::Block(region) => for_each_statement(&region.statements, visit),
             _ => {}
         }
     }

@@ -582,7 +582,7 @@ impl HeapAnalysis {
                 self.note_fmp_coverage(offset, length);
             }
 
-            Statement::If { .. } | Statement::Switch { .. } | Statement::Block(_) => {}
+            Statement::If { .. } | Statement::Switch { .. } => {}
 
             Statement::For {
                 initial_values,
@@ -1343,15 +1343,6 @@ impl HeapAnalysis {
                         &mut exit,
                     );
                 }
-                Statement::Block(block) => {
-                    let block_exit = self.scan_fmp_corruption(&block.statements, corrupt);
-                    exit.absorb_jump_exits(block_exit);
-                    corrupt = !block_exit.terminates && block_exit.fallthrough_corrupt;
-                    if block_exit.terminates {
-                        exit.terminates = true;
-                        return exit;
-                    }
-                }
                 Statement::ErrorStringRevert { .. } => {
                     if corrupt {
                         self.fmp_could_be_unbounded = true;
@@ -1993,7 +1984,6 @@ impl NoOpMaskCollector<'_> {
                     self.collect(&body.statements, &guarded);
                     self.collect(&post.statements, &guarded);
                 }
-                Statement::Block(region) => self.collect(&region.statements, &guarded),
                 _ => {}
             }
         }
@@ -2319,7 +2309,7 @@ impl HeapOptResults {
 }
 
 /// Collects the single-binding `Let` expressions of a loop's body or `post` `statements`, including
-/// those in nested `if`, `switch` and block regions, where a loop computes the values it hands on.
+/// those in nested `if` and `switch` regions, where a loop computes the values it hands on.
 /// Nested loops are skipped: their bindings are out of scope for this loop's hand-overs.
 fn collect_loop_definitions<'a>(
     statements: &'a [Statement],
@@ -2350,7 +2340,6 @@ fn collect_loop_definitions<'a>(
                     collect_loop_definitions(&default.statements, definitions);
                 }
             }
-            Statement::Block(region) => collect_loop_definitions(&region.statements, definitions),
             _ => {}
         }
     }
@@ -2460,7 +2449,6 @@ fn collect_merge_inputs(
                 nested.push((&body.statements, this_loop));
                 nested.push((&post.statements, this_loop));
             }
-            Statement::Block(region) => nested.push((&region.statements, innermost_loop)),
             Statement::Continue { values } => {
                 if let Some((post_inputs, _)) = innermost_loop {
                     record(post_inputs, &mut values.iter().map(|value| value.id.0));

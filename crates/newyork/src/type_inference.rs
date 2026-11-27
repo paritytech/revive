@@ -1040,8 +1040,7 @@ impl TypeInference {
 
     /// Recurses the use-collection walk into a statement's nested regions. Branches of
     /// `if`/`switch` and loop bodies execute conditionally, so uses collected inside them
-    /// must not mark a value [`Self::unconditionally_narrowed`]; a plain [`Statement::Block`]
-    /// always executes and keeps the parent context.
+    /// must not mark a value [`Self::unconditionally_narrowed`].
     fn collect_uses_region(&mut self, statement: &Statement) {
         match statement {
             Statement::If {
@@ -1082,9 +1081,6 @@ impl TypeInference {
                 self.collect_uses_statements(&body.statements);
                 self.collect_uses_statements(&post.statements);
                 self.in_unconditional_context = saved;
-            }
-            Statement::Block(region) => {
-                self.collect_uses_statements(&region.statements);
             }
             _ => {}
         }
@@ -1262,8 +1258,6 @@ impl TypeInference {
                 self.record_use(length.id, UseContext::MemoryOffset);
                 self.narrow_from_use(length.id, BitWidth::I64);
             }
-
-            Statement::Block(_) => {}
 
             Statement::Let { value, .. } => {
                 self.collect_uses_expression(value);
@@ -1693,10 +1687,6 @@ impl TypeInference {
                 self.widen(length.id, BitWidth::I64);
             }
 
-            Statement::Block(region) => {
-                self.infer_region_forward(region);
-            }
-
             Statement::Expression(expression) => {
                 let _ = self.infer_expression_width(expression);
             }
@@ -1986,9 +1976,6 @@ pub(crate) fn collect_loop_control_values<'a>(
             } => {
                 collect_loop_control_values(condition_statements, breaks, continues);
                 collect_loop_control_values(&post.statements, breaks, continues);
-            }
-            Statement::Block(region) => {
-                collect_loop_control_values(&region.statements, breaks, continues)
             }
             _ => {}
         }

@@ -893,20 +893,6 @@ impl<'a> Printer<'a> {
                 self.write_newline();
             }
 
-            Statement::Block(region) => {
-                self.write_indent();
-                self.output.push('{');
-                self.write_newline();
-
-                self.indent += 1;
-                self.write_region(region);
-                self.indent -= 1;
-
-                self.write_indent();
-                self.output.push('}');
-                self.write_newline();
-            }
-
             Statement::Expression(expression) => {
                 self.write_indent();
                 self.write_expression(expression);

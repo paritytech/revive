@@ -3211,12 +3211,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                         sloads += nested_sloads;
                         sstores += nested_sstores;
                     }
-                    Statement::Block(region) => {
-                        let (nested_sloads, nested_sstores) =
-                            count_in_statements(&region.statements);
-                        sloads += nested_sloads;
-                        sstores += nested_sstores;
-                    }
                     _ => {}
                 }
             }
@@ -3926,7 +3920,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             Statement::ExtCodeCopy { .. } => "ExtCodeCopy",
             Statement::ReturnDataCopy { .. } => "ReturnDataCopy",
             Statement::CallDataCopy { .. } => "CallDataCopy",
-            Statement::Block(_) => "Block",
             Statement::Expression(_) => "Expression",
             Statement::SetImmutable { .. } => "SetImmutable",
             Statement::Continue { .. } => "Continue",
@@ -5703,10 +5696,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     offset_value,
                     length_value,
                 )?;
-            }
-
-            Statement::Block(region) => {
-                self.generate_region(region, context)?;
             }
 
             Statement::Expression(expression) => {

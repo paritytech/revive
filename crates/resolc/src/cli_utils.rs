@@ -29,6 +29,12 @@ pub const SOLIDITY_DEBUG_INFO_NESTED_FUNCTION_PATH: &str =
 pub const SOLIDITY_REMAPPED_IMPORT_PATH: &str = "src/tests/data/solidity/remapped_import.sol";
 /// The Solidity contract importing the simple contract through an include path.
 pub const SOLIDITY_INCLUDED_IMPORT_PATH: &str = "src/tests/data/solidity/included_import.sol";
+/// The Solidity contract calling a library imported through an include path.
+pub const SOLIDITY_INCLUDED_LIBRARY_MAIN_PATH: &str =
+    "src/tests/data/solidity/included_library/main.sol";
+/// The include path holding the library with the source unit name `dependency/increment.sol`.
+pub const SOLIDITY_INCLUDED_LIBRARY_INCLUDE_PATH: &str =
+    "src/tests/data/solidity/included_library/include";
 /// The Solidity contract importing `target/Target.sol`, to be remapped to one of two directories.
 pub const SOLIDITY_REMAPPINGS_ORDER_MAIN_PATH: &str =
     "src/tests/data/solidity/remappings_order/main.sol";

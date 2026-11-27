@@ -83,15 +83,8 @@ impl Input {
         llvm_arguments: Vec<String>,
         detect_missing_libraries: bool,
     ) -> anyhow::Result<Self> {
-        let mut paths: BTreeSet<PathBuf> = paths.iter().cloned().collect();
-        let reads_stdin = paths.contains(Path::new(self::source::STDIN_PATH));
+        let paths: BTreeSet<PathBuf> = paths.iter().cloned().collect();
         let libraries = SolcStandardJsonInputSettingsLibraries::try_from(libraries)?;
-        for library_file in libraries.as_inner().keys() {
-            if reads_stdin && library_file == self::source::STDIN_SOURCE_NAME {
-                continue;
-            }
-            paths.insert(PathBuf::from(library_file));
-        }
 
         #[cfg(feature = "parallel")]
         let iter = paths.into_par_iter(); // Parallel iterator

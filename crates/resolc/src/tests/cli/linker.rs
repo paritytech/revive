@@ -4,10 +4,14 @@ use crate::tests::cli::metadata::blob_metadata_hash;
 
 use crate::cli_utils::{
     assert_command_failure, assert_command_success, execute_resolc, execute_resolc_in_directory,
-    execute_resolc_with_stdin_input, SOLIDITY_DEPENDENCY_CONTRACT_PATH,
+    execute_resolc_with_stdin_input, CommandResult, SOLIDITY_DEPENDENCY_CONTRACT_PATH,
+    SOLIDITY_INCLUDED_LIBRARY_INCLUDE_PATH, SOLIDITY_INCLUDED_LIBRARY_MAIN_PATH,
     SOLIDITY_LIBRARY_ADDRESS_CONTRACT_PATH, SOLIDITY_LIBRARY_CALL_CONTRACT_PATH,
     SOLIDITY_LINK_INDEPENDENT_OBJECTS_PATH,
 };
+
+const INCLUDED_LIBRARY_SOURCE_NAME: &str = "dependency/increment.sol";
+const INCLUDED_LIBRARY_ADDRESS: &str = "1111111111111111111111111111111111111111";
 
 /// Test deploy time linking a contract with unresolved factory dependencies.
 #[test]
@@ -110,6 +114,52 @@ fn emits_unlinked_binary_warning() {
     let output = execute_resolc(&[SOLIDITY_DEPENDENCY_CONTRACT_PATH, "--bin"]);
     assert_command_success(&output, "Missing libraries should compile fine");
     assert!(output.stderr.contains("is unlinked"));
+}
+
+/// Compiles the contract importing its library through an include path with `--libraries`.
+fn execute_resolc_with_included_library(library_source: &str) -> CommandResult {
+    execute_resolc(&[
+        SOLIDITY_INCLUDED_LIBRARY_MAIN_PATH,
+        "--bin",
+        "--base-path",
+        ".",
+        "--include-path",
+        SOLIDITY_INCLUDED_LIBRARY_INCLUDE_PATH,
+        "--libraries",
+        &format!("{library_source}:Increment=0x{INCLUDED_LIBRARY_ADDRESS}"),
+    ])
+}
+
+/// A library found through an include path links by its source unit name.
+#[test]
+fn links_library_found_through_include_path() {
+    let output = execute_resolc_with_included_library(INCLUDED_LIBRARY_SOURCE_NAME);
+    assert_command_success(&output, "Linking a library found through an include path");
+    assert!(
+        output.stdout.contains(INCLUDED_LIBRARY_ADDRESS),
+        "the library is not linked: {}",
+        output.stderr
+    );
+    assert!(
+        !output.stderr.contains("is unlinked"),
+        "unexpected unlinked warning: {}",
+        output.stderr
+    );
+}
+
+/// The file system path of a library is not its source unit name and adds no source.
+#[test]
+fn library_file_system_path_adds_no_source() {
+    let library_path =
+        format!("{SOLIDITY_INCLUDED_LIBRARY_INCLUDE_PATH}/{INCLUDED_LIBRARY_SOURCE_NAME}");
+    let output = execute_resolc_with_included_library(&library_path);
+    assert_command_success(&output, "A library key that names no source unit");
+    assert!(output.stderr.contains("is unlinked"));
+    assert!(
+        !output.stdout.contains(&library_path),
+        "the library file is compiled as an input: {}",
+        output.stdout
+    );
 }
 
 /// Test that a library argument with more than one `=` is rejected.

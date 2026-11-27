@@ -581,8 +581,6 @@ impl Simplifier {
                 }]
             }
 
-            Statement::Block(region) => vec![Statement::Block(self.simplify_region(region))],
-
             Statement::Expression(expression) => {
                 vec![Statement::Expression(self.simplify_expression(expression))]
             }
@@ -1866,7 +1864,7 @@ fn eliminate_dead_code_in_statements(
     }
 
     for statement in statements.iter_mut() {
-        total_removed += eliminate_dead_code_in_nested(statement, extra_used);
+        total_removed += eliminate_dead_code_in_nested(statement);
     }
 
     loop {
@@ -1904,13 +1902,7 @@ fn eliminate_dead_code_in_statements(
 }
 
 /// Recursively DCE inside nested regions of a statement.
-/// `parent_extra_used` contains ValueIds from the parent scope that must be preserved
-/// (e.g., function return values). These are propagated into Block regions because
-/// Blocks in Yul can define values that are referenced by the parent scope.
-fn eliminate_dead_code_in_nested(
-    statement: &mut Statement,
-    parent_extra_used: &BTreeSet<u32>,
-) -> usize {
+fn eliminate_dead_code_in_nested(statement: &mut Statement) -> usize {
     match statement {
         Statement::If {
             then_region,
@@ -1939,11 +1931,6 @@ fn eliminate_dead_code_in_nested(
                     eliminate_dead_code_in_statements(&mut default_region.statements, &extra);
             }
             removed
-        }
-        Statement::Block(region) => {
-            let mut extra = yields_as_used(&region.yields);
-            extra.extend(parent_extra_used);
-            eliminate_dead_code_in_statements(&mut region.statements, &extra)
         }
         _ => 0,
     }
@@ -2614,10 +2601,6 @@ impl Canonicalizer {
                 for output in outputs {
                     self.encode_value_id(*output, buffer);
                 }
-            }
-            Statement::Block(region) => {
-                buffer.push(0x89);
-                self.encode_region(region, buffer);
             }
             Statement::Revert { offset, length } => {
                 buffer.push(0x90);
@@ -3391,10 +3374,6 @@ fn fuzzy_encode_statement(
                 canon.encode_value_id(*output, buffer);
             }
         }
-        Statement::Block(region) => {
-            buffer.push(0x88);
-            fuzzy_encode_region(canon, region, buffer, literal_counter);
-        }
         Statement::Expression(expression) => {
             buffer.push(0x89);
             fuzzy_encode_expression(canon, expression, buffer, literal_counter);
@@ -3482,7 +3461,6 @@ fn collect_literals_ordered(function: &crate::ir::Function) -> Vec<BigUint> {
                     walk(&body.statements, literals);
                     walk(&post.statements, literals);
                 }
-                Statement::Block(region) => walk(&region.statements, literals),
                 _ => {}
             }
         }
@@ -3575,7 +3553,6 @@ fn replace_literals_with_parameters(
                     walk(&mut body.statements, positions, counter);
                     walk(&mut post.statements, positions, counter);
                 }
-                Statement::Block(region) => walk(&mut region.statements, positions, counter),
                 _ => {}
             }
         }
@@ -3695,16 +3672,6 @@ fn update_call_sites_with_extra_arguments(
                     );
                     rewrite(
                         &mut post.statements,
-                        old_id,
-                        new_id,
-                        extra_arguments,
-                        parameter_types,
-                        next_id,
-                    );
-                }
-                Statement::Block(region) => {
-                    rewrite(
-                        &mut region.statements,
                         old_id,
                         new_id,
                         extra_arguments,
@@ -3906,9 +3873,6 @@ fn fold_keccak_in_statements(statements: &mut [Statement], constants: &mut BTree
                 fold_keccak_in_statements(condition_statements, constants);
                 fold_keccak_in_statements(&mut body.statements, &mut constants.clone());
                 fold_keccak_in_statements(&mut post.statements, &mut constants.clone());
-            }
-            Statement::Block(region) => {
-                fold_keccak_in_statements(&mut region.statements, &mut constants.clone());
             }
             _ => {}
         }

@@ -399,7 +399,6 @@ fn can_inline(function: &Function) -> bool {
                     || default.as_ref().is_some_and(region_has_break_continue)
             }
             Statement::For { .. } => false,
-            Statement::Block(region) => region_has_break_continue(region),
             _ => false,
         }
     }
@@ -695,9 +694,6 @@ fn region_defines_value(region: &Region, target: ValueId) -> bool {
                 if region_defines_value(post, target) {
                     return true;
                 }
-            }
-            Statement::Block(region) if region_defines_value(region, target) => {
-                return true;
             }
             Statement::ExternalCall { result, .. } | Statement::Create { result, .. }
                 if *result == target =>
@@ -1074,8 +1070,6 @@ fn transform_leave_statement(
             }
         }
 
-        Statement::Block(region) => eliminate_leaves(&region.statements, accum_ids, next_id),
-
         _ => LeaveElimResult {
             statements: vec![statement.clone()],
             accum_ids: accum_ids.to_vec(),
@@ -1325,16 +1319,6 @@ fn inline_in_statements(
                 });
             }
 
-            Statement::Block(region) => {
-                result.push(Statement::Block(inline_in_region(
-                    region,
-                    inlineable,
-                    functions,
-                    next_value_id,
-                    inlined_count,
-                )));
-            }
-
             other => result.push(other.clone()),
         }
     }
@@ -1517,7 +1501,6 @@ fn estimate_statement_size(statement: &Statement) -> usize {
         Statement::For { body, post, .. } => {
             1 + estimate_region_size(body) + estimate_region_size(post)
         }
-        Statement::Block(region) => estimate_region_size(region),
         Statement::Expression(_) => 1,
         _ => 1,
     }
@@ -1982,11 +1965,6 @@ pub(crate) fn visit_calls_inner<F>(
                 visit_calls_inner(&post.statements, literals, record);
                 *literals = saved;
             }
-            Statement::Block(region) => {
-                let saved = literals.clone();
-                visit_calls_inner(&region.statements, literals, record);
-                *literals = saved;
-            }
             _ => {}
         }
     }
@@ -2062,9 +2040,6 @@ pub(crate) fn trim_call_arguments(
                 }
                 trim_call_arguments(&mut body.statements, drops);
                 trim_call_arguments(&mut post.statements, drops);
-            }
-            Statement::Block(region) => {
-                trim_call_arguments(&mut region.statements, drops);
             }
             _ => {}
         }

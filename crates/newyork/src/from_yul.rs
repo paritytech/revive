@@ -1564,7 +1564,6 @@ fn estimate_statement_size(statement: &Statement) -> usize {
         Statement::For { body, post, .. } => {
             1 + estimate_region_size(body) + estimate_region_size(post)
         }
-        Statement::Block(region) => estimate_region_size(region),
         Statement::Expression(_) => 1,
         _ => 1,
     }
@@ -1793,9 +1792,6 @@ object "Test" {
         called: &mut std::collections::BTreeSet<u32>,
     ) {
         for statement in statements {
-            if let Statement::Block(region) = statement {
-                collect_called_function_ids(&region.statements, called);
-            }
             if let Statement::Let { value, .. } | Statement::Expression(value) = statement {
                 collect_called_in_expression(value, called);
             }

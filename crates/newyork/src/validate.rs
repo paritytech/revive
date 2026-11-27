@@ -196,16 +196,10 @@ impl Validator {
         }
     }
 
-    /// Scope-isolation and yield-count checks mirror the codegen's control-flow shape:
-    ///
-    /// - For a `Statement::Switch` with no explicit default, the unmatched-scrutinee path
-    ///   implicitly yields `inputs` unchanged (mirroring a `Statement::If` without an else
-    ///   region), so the outputs must line up with the inputs.
-    /// - A standalone `Statement::Block` is straight-line code in the codegen (no LLVM-level
-    ///   scoping, no phi merge — `generate_region` just lowers the statements). SSA values
-    ///   defined inside flow through to the surrounding scope, matching
-    ///   `Statement::For`/`If`/`Switch` which DO scope-isolate because their regions form
-    ///   control-flow splits.
+    /// Scope-isolation and yield-count checks mirror the codegen's control-flow shape: for a
+    /// `Statement::Switch` with no explicit default, the unmatched-scrutinee path implicitly
+    /// yields `inputs` unchanged (mirroring a `Statement::If` without an else region), so the
+    /// outputs must line up with the inputs.
     fn validate_statement(&mut self, statement: &Statement, context: &str) {
         match statement {
             Statement::Let { bindings, value } => {
@@ -573,10 +567,6 @@ impl Validator {
                 self.use_value(destination, context);
                 self.use_value(offset, context);
                 self.use_value(length, context);
-            }
-
-            Statement::Block(region) => {
-                self.validate_region(region, context);
             }
 
             Statement::Expression(expression) => {

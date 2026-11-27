@@ -39,7 +39,7 @@
 //! # Safety
 //!
 //! The pass is conservative at control flow joins - we clear all state when entering
-//! or exiting control flow constructs (if, switch, for, block). This ensures correctness
+//! or exiting control flow constructs (if, switch, for). This ensures correctness
 //! but limits optimization opportunities. Future work can implement proper state merging
 //! for branches.
 //!
@@ -387,12 +387,6 @@ impl MemoryOptimizer {
                         post,
                         outputs,
                     });
-                }
-
-                Statement::Block(mut region) => {
-                    self.pending_stores.clear();
-                    self.optimize_region(&mut region);
-                    processed.push(Statement::Block(region));
                 }
 
                 Statement::Expression(expression) => {
@@ -1206,14 +1200,6 @@ impl FmpPropagation {
                     result.push(statement);
                 }
 
-                Statement::Block(mut region) => {
-                    self.propagate_region(&mut region, fmp_value.clone(), &constants);
-                    if self.region_modifies_fmp(&region.statements, &constants) {
-                        fmp_value = None;
-                    }
-                    result.push(Statement::Block(region));
-                }
-
                 Statement::Expression(ref expression) => {
                     if let Expression::Call { function, .. } = expression {
                         if self.fmp_writers.contains(function) {
@@ -1385,7 +1371,7 @@ impl FmpPropagation {
     /// `for_each_statement` does not visit it. `constants` is the caller's constant-resolution scope
     /// at the region's entry, so offsets bound outside the region (and resolvable there) invalidate
     /// exactly as they would in straight-line code. Two uses:
-    /// - **Post-region invalidation** for `If`/`Switch`/`Block`: those regions run at most once, so
+    /// - **Post-region invalidation** for `If`/`Switch`: those regions run at most once, so
     ///   a tracked FMP constant survives them only if the region didn't move FMP.
     /// - **For-body gating**: a `For` body re-executes, so a loop that moves FMP must not have the
     ///   pre-loop constant propagated *into* it, or a loop-top `mload(0x40)` would be rewritten to

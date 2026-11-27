@@ -906,9 +906,6 @@ fn narrow_stmt_regions(
             narrow_region(body, next_id, statistics, validators, noreturn);
             narrow_region(post, next_id, statistics, validators, noreturn);
         }
-        Statement::Block(region) => {
-            narrow_region(region, next_id, statistics, validators, noreturn);
-        }
         _ => {}
     }
 }

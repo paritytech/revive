@@ -23,6 +23,7 @@ use crate::cli_utils::{
     STANDARD_JSON_NEWYORK_DISABLED_PATH, STANDARD_JSON_NEWYORK_ENABLED_PATH,
     STANDARD_JSON_NO_EVM_CODEGEN_COMPLEX_PATH, STANDARD_JSON_NO_EVM_CODEGEN_PATH,
     STANDARD_JSON_NO_OPTIMIZER_PATH, STANDARD_JSON_NO_PVM_CODEGEN_PER_FILE_PATH,
+    STANDARD_JSON_OPTIMIZER_RUNS_HIGH_PATH, STANDARD_JSON_OPTIMIZER_RUNS_LOW_PATH,
     STANDARD_JSON_PVM_CODEGEN_ALL_WILDCARD_PATH, STANDARD_JSON_PVM_CODEGEN_ONE_FILE_PATH,
     STANDARD_JSON_PVM_CODEGEN_PER_FILE_PATH, STANDARD_JSON_REMAPPINGS_ORDER_PATH,
     STANDARD_JSON_REVERT_STRINGS_DEFAULT_PATH, STANDARD_JSON_REVERT_STRINGS_STRIP_PATH,
@@ -43,6 +44,10 @@ const SOURCE_LOCATION_ANNOTATION: &str = "@src";
 const TRANSIENT_COUNTER_SOURCE_PATH: &str = "TransientCounter.sol";
 const TRANSIENT_COUNTER_CONTRACT_NAME: &str = "TransientCounter";
 const SOURCE_HASH_MISMATCH_ERROR: &str = "Mismatch between content and supplied hash";
+const OPTIMIZER_RUNS_SOURCE_PATH: &str = "OptimizerRuns.sol";
+const OPTIMIZER_RUNS_CONTRACT_NAME: &str = "OptimizerRuns";
+const OPTIMIZER_RUNS_LOW: u64 = 1;
+const OPTIMIZER_RUNS_HIGH: u64 = 1_000_000;
 
 /// A subset of contracts and sources expected to exist in the JSON output.
 struct ExpectedOutput {
@@ -1189,6 +1194,65 @@ fn optimizer_input_setting_omitted() {
         )
         .starts_with(PVM_BLOB_START));
     }
+}
+
+/// Extracts the `settings.optimizer.runs` solc recorded in the metadata of `path`/`name`.
+fn solc_metadata_optimizer_runs(output: &SolcStandardJsonOutput, path: &str, name: &str) -> u64 {
+    let solc_metadata = output
+        .contracts
+        .get(path)
+        .and_then(|file| file.get(name))
+        .and_then(|contract| contract.metadata.get("solc_metadata"))
+        .and_then(|solc_metadata| solc_metadata.as_str())
+        .unwrap_or_else(|| panic!("the solc metadata of `{name}` in `{path}` should exist"));
+    serde_json::from_str::<serde_json::Value>(solc_metadata).unwrap()["settings"]["optimizer"]
+        ["runs"]
+        .as_u64()
+        .expect("the solc metadata should record the optimizer runs")
+}
+
+/// `settings.optimizer.runs` reaches solc, which optimizes the Yul IR for it.
+#[test]
+fn optimizer_runs_input_setting() {
+    let low =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_OPTIMIZER_RUNS_LOW_PATH);
+    assert_command_success(&low, "the low optimizer runs standard JSON input");
+    let low_output = to_solc_standard_json_output(&low.stdout);
+    assert_no_errors(&low_output);
+
+    let high =
+        execute_resolc_with_stdin_input(&[JSON_OPTION], STANDARD_JSON_OPTIMIZER_RUNS_HIGH_PATH);
+    assert_command_success(&high, "the high optimizer runs standard JSON input");
+    let high_output = to_solc_standard_json_output(&high.stdout);
+    assert_no_errors(&high_output);
+
+    for (output, runs) in [
+        (&low_output, OPTIMIZER_RUNS_LOW),
+        (&high_output, OPTIMIZER_RUNS_HIGH),
+    ] {
+        assert_eq!(
+            solc_metadata_optimizer_runs(
+                output,
+                OPTIMIZER_RUNS_SOURCE_PATH,
+                OPTIMIZER_RUNS_CONTRACT_NAME
+            ),
+            runs,
+            "the solc metadata should record settings.optimizer.runs"
+        );
+    }
+    assert_ne!(
+        ir_optimized(
+            &low_output,
+            OPTIMIZER_RUNS_SOURCE_PATH,
+            OPTIMIZER_RUNS_CONTRACT_NAME
+        ),
+        ir_optimized(
+            &high_output,
+            OPTIMIZER_RUNS_SOURCE_PATH,
+            OPTIMIZER_RUNS_CONTRACT_NAME
+        ),
+        "settings.optimizer.runs should change the optimized Yul IR"
+    );
 }
 
 /// The transient storage layout output is passed through from solc.

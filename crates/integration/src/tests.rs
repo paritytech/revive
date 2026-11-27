@@ -3027,12 +3027,12 @@ fn panic_outline_preserves_call() {
     run_differential(actions);
 }
 
-/// When the panic-pattern outliner truncates a branch's window, a pure
-/// binding it drops may still be referenced by the branch region's yield. The truncate must
-/// zero-rebind such values (mirroring eliminate_dead_code) or compilation fails the SSA validator.
+/// When the panic-pattern outliner replaces a panic in a branch, a pure binding between the
+/// panic's stores may still be referenced by the branch region's yield. The binding must stay
+/// defined or compilation fails the SSA validator.
 /// Compiling at all exercises the fix. See PanicOutlineYield.yul.
 #[test]
-fn panic_outline_yield_rescue() {
+fn panic_outline_yield() {
     let mut actions = instantiate_yul("contracts/PanicOutlineYield.yul", "PanicOutlineYield");
     for cond in [0u64, 1] {
         actions.push(Call {
@@ -6371,6 +6371,137 @@ fn immutable_escaped_name() {
 #[test]
 fn immutable_non_utf8_name() {
     let mut actions = instantiate_yul("contracts/ImmutableNonUtf8Name.yul", "ImmutableNonUtf8Name");
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+#[test]
+fn keccak_pair_msize() {
+    let mut actions = instantiate_yul("contracts/KeccakPairMsize.yul", "KeccakPairMsize");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        hex!("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20").to_vec(),
+    );
+    run_differential(actions);
+}
+
+#[test]
+fn keccak_single_msize() {
+    let mut actions = instantiate_yul("contracts/KeccakSingleMsize.yul", "KeccakSingleMsize");
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        hex!("0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20").to_vec(),
+    );
+    run_differential(actions);
+}
+
+#[test]
+fn mload_dynamic_offset_msize() {
+    let mut actions = instantiate_yul(
+        "contracts/MloadDynamicOffsetMsize.yul",
+        "MloadDynamicOffsetMsize",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+#[test]
+fn data_copy_below_free_pointer() {
+    run_differential(instantiate_yul(
+        "contracts/DataCopyBelowFreePointer.yul",
+        "DataCopyBelowFreePointer",
+    ));
+}
+
+#[test]
+fn data_copy_zero_length() {
+    run_differential(instantiate_yul(
+        "contracts/DataCopyZeroLength.yul",
+        "DataCopyZeroLength",
+    ));
+}
+
+#[test]
+fn data_copy_overlapping_store() {
+    run_differential(instantiate_yul(
+        "contracts/DataCopyOverlappingStore.yul",
+        "DataCopyOverlappingStore",
+    ));
+}
+
+#[test]
+fn data_copy_in_branch_below_free_pointer() {
+    run_differential(instantiate_yul(
+        "contracts/DataCopyInBranchBelowFreePointer.yul",
+        "DataCopyInBranchBelowFreePointer",
+    ));
+}
+
+#[test]
+fn data_copy_over_bounded_free_pointer() {
+    run_differential(instantiate_yul(
+        "contracts/DataCopyOverBoundedFreePointer.yul",
+        "DataCopyOverBoundedFreePointer",
+    ));
+}
+
+#[test]
+fn store_before_break_with_unreachable_store() {
+    let mut actions = instantiate_solc_unoptimized(
+        "contracts/UnreachableStoreAfterBreak.sol",
+        "UnreachableStoreAfterBreak",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+#[test]
+fn store_before_continue_with_unreachable_store() {
+    let mut actions = instantiate_solc_unoptimized(
+        "contracts/UnreachableStoreAfterContinue.sol",
+        "UnreachableStoreAfterContinue",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// The `return` sits in a loop because the simplifier drops code after a `leave` outside of one.
+#[test]
+fn store_before_leave_with_unreachable_store() {
+    let mut actions = instantiate_solc_unoptimized(
+        "contracts/UnreachableStoreAfterLeave.sol",
+        "UnreachableStoreAfterLeave",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    run_differential(actions);
+}
+
+/// A binding inside the panic sequence is still used by unreachable code after the revert.
+#[test]
+fn unreachable_use_after_panic() {
+    let mut actions = instantiate_yul(
+        "contracts/UnreachableUseAfterPanic.yul",
+        "UnreachableUseAfterPanic",
+    );
+    push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
+    push_call(
+        &mut actions,
+        TestAddress::Instantiated(0),
+        hex!("0000000000000000000000000000000000000000000000000000000000000001").to_vec(),
+    );
+    run_differential(actions);
+}
+
+/// The loop body reuses an environment read from the panic sequence in the loop condition, so the
+/// outliner must keep that binding defined.
+#[test]
+fn panic_outline_condition_env_read() {
+    let mut actions = instantiate_yul(
+        "contracts/PanicOutlineConditionEnvRead.yul",
+        "PanicOutlineConditionEnvRead",
+    );
     push_call(&mut actions, TestAddress::Instantiated(0), vec![0; 32]);
     run_differential(actions);
 }

@@ -110,6 +110,9 @@ pub struct MemoryOptimizer {
     /// [`Self::invalidate_state_overlapping_store`] and by [`Self::eliminate_dead_store_at`],
     /// which reconstruct each store's 32-byte write range as `[key, key + 32)`.
     pending_stores: BTreeMap<u64, usize>,
+    /// Whether the object reads `msize`.
+    /// The fused keccak256 helpers write the scratch space without updating the msize watermark.
+    has_msize: bool,
 }
 
 /// A tracked value in memory.
@@ -133,12 +136,14 @@ impl MemoryOptimizer {
             statistics: MemOptResults::default(),
             dead_store_indices: BTreeSet::new(),
             pending_stores: BTreeMap::new(),
+            has_msize: false,
         }
     }
 
     /// Optimizes an object in place.
     pub fn optimize_object(&mut self, object: &mut Object) -> MemOptResults {
         self.next_value_id = object.find_max_value_id() + 1;
+        self.has_msize = object.has_msize();
 
         self.optimize_block(&mut object.code);
 
@@ -457,15 +462,8 @@ impl MemoryOptimizer {
                     });
                 }
 
-                Statement::Return { .. } | Statement::Revert { .. } => {
-                    self.pending_stores.clear();
-                    processed.push(statement);
-                }
-
-                Statement::SStore { .. }
-                | Statement::TStore { .. }
-                | Statement::MappingSStore { .. }
-                | Statement::SetImmutable { .. }
+                Statement::Return { .. }
+                | Statement::Revert { .. }
                 | Statement::SelfDestruct { .. }
                 | Statement::Stop
                 | Statement::Invalid
@@ -475,6 +473,14 @@ impl MemoryOptimizer {
                 | Statement::Break { .. }
                 | Statement::Continue { .. }
                 | Statement::Leave { .. } => {
+                    self.pending_stores.clear();
+                    processed.push(statement);
+                }
+
+                Statement::SStore { .. }
+                | Statement::TStore { .. }
+                | Statement::MappingSStore { .. }
+                | Statement::SetImmutable { .. } => {
                     processed.push(statement);
                 }
             }
@@ -691,6 +697,11 @@ impl MemoryOptimizer {
     /// helper disappears). That is a deliberate, solc-unreachable gap — see the `fold_constant_keccak`
     /// doc comment in `simplify`.
     fn try_fuse_keccak256(&mut self, offset: Value, length: Value) -> Expression {
+        if self.has_msize {
+            self.pending_stores.clear();
+            return Expression::Keccak256 { offset, length };
+        }
+
         let static_offset = self.try_get_static_offset(&offset);
         let static_length = self.try_get_static_offset(&length);
 

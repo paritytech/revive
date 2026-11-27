@@ -227,7 +227,7 @@ impl YulTranslator {
                     }
                 }
 
-                Ok(vec![Statement::Block(region)])
+                Ok(region.statements)
             }
             YulStatement::IfConditional(if_conditional) => self.translate_if(if_conditional),
             YulStatement::Switch(switch) => self.translate_switch(switch),

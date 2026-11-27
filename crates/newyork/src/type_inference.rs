@@ -194,7 +194,7 @@ pub struct TypeInference {
     halting_functions: BTreeSet<u32>,
     /// When set, a `FreePointerSlot` `mload` (the FMP at 0x40) forward-infers to I256 instead
     /// of I32. The I32 width is only sound when the FMP holds a Solidity-allocator pointer
-    /// (`< heap_size`); when `heap_opt` finds an FMP write that isn't provably sbrk-bounded,
+    /// (bounded); when `heap_opt` finds an FMP write that isn't provably sbrk-bounded,
     /// codegen loads the full FMP word (no range proof), so inference must keep the load — and
     /// every value derived from it — full width or a comparison/offset would truncate it.
     /// `heap_opt` runs after inference, so the pipeline re-infers with this flag set when it holds.

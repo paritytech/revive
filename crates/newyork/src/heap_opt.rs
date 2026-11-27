@@ -146,10 +146,10 @@ pub struct HeapAnalysis {
     /// Whether the FMP slot at 0x40 is written from a value that is not
     /// provably sbrk-bounded. Solidity's allocator only ever writes
     /// either a literal initial value (`0x80` from `memoryguard`) or
-    /// `add(mload(0x40), bounded_size)` — both keep the FMP < heap_size
+    /// `add(mload(0x40), bounded_size)`. Both keep the FMP bounded
     /// in practice. Inline asm such as `mstore(0x40, calldataload(0))`
     /// can put any 256-bit value at 0x40. When true, downstream
-    /// optimizations that assume `FMP < heap_size` (e.g. the post-MLoad
+    /// optimizations that assume a bounded FMP (e.g. the post-MLoad
     /// range proof) must skip the optimization to preserve EVM
     /// semantics. Conservatively starts false; set by inspecting every
     /// `MStore` whose target is the FMP slot.
@@ -1075,7 +1075,7 @@ impl HeapAnalysis {
     /// (`add(mload(0x40), k)`), which is `>= 0x80` because the bounded FMP is `>= 0x80` — so it
     /// cannot hit the slot. A destination that is *not* recognizably FMP-relative (e.g.
     /// `and(calldataload(p), 0xff)`, which ranges over `[0, 0xff]`) can, and must flag
-    /// `fmp_could_be_unbounded` so the corrupted `mload(0x40)` skips the `FMP < heap_size` range
+    /// `fmp_could_be_unbounded` so the corrupted `mload(0x40)` skips the free pointer range
     /// proof. Recognized as at-or-above the free pointer: `mload(0x40)`, a literal base `>= 0x60`
     /// that fits in 64 bits (`mem_opt` constant-forwards `mload(0x40)` to its `0x80` literal), an
     /// `add` with such an operand, an `and` of such an operand with a mask that clears only bits
@@ -1201,7 +1201,7 @@ impl HeapAnalysis {
     ///
     /// An unaligned full-word store at `o ∈ [0x21, 0x5f] \ {0x40}` overwrites part of the FMP with
     /// arbitrary bytes ([`crate::ir::word_store_overlaps_free_pointer_slot`]). If a later
-    /// `mload(0x40)` reads the corrupted pointer, codegen's `FMP < heap_size` range proof (gated on
+    /// `mload(0x40)` reads the corrupted pointer, codegen's free pointer range proof (gated on
     /// `fmp_could_be_unbounded`, see the field docs) would truncate the arbitrary value into range,
     /// so a store through it silently succeeds where EVM runs out of gas.
     ///
@@ -1477,7 +1477,7 @@ impl HeapAnalysis {
         }
     }
 
-    /// Whether evaluating `expression` reads the free-memory pointer in a way the `FMP < heap_size`
+    /// Whether evaluating `expression` reads the free-memory pointer in a way the free pointer
     /// range proof would mis-handle if the pointer is corrupted: a direct `mload(0x40)`, or a user
     /// function call whose body could read `mload(0x40)`.
     fn expression_observes_fmp(&self, expression: &Expression) -> bool {
@@ -1792,7 +1792,7 @@ impl HeapAnalysis {
 
     /// Walks the (possibly transitive) `Let` chain for `value_id` and
     /// returns true iff its source expression matches a Solidity-allocator
-    /// pattern that keeps the FMP < heap_size at runtime. Recognized
+    /// pattern that keeps the FMP bounded at runtime. Recognized
     /// patterns:
     ///   - Literal in `[0x80, heap_size)` (`memoryguard(0x80)` collapses to this).
     ///     A lower pointer breaks [`Self::is_free_pointer_relative`], which
@@ -2223,9 +2223,9 @@ impl HeapOptResults {
         }
     }
 
-    /// Returns whether any FMP write writes a value not provably bounded
-    /// by heap_size. When true, codegen optimizations that rely on
-    /// `FMP < heap_size` (the post-MLoad range proof, InlineNative
+    /// Returns whether any FMP write writes a value not provably
+    /// bounded. When true, codegen optimizations that rely on
+    /// a bounded FMP (the post-MLoad range proof, InlineNative
     /// truncations on the FMP slot) must be skipped — those
     /// assumptions hold only for the Solidity allocator pattern.
     pub fn fmp_could_be_unbounded(&self) -> bool {
@@ -2634,7 +2634,7 @@ mod tests {
     }
 
     /// An overlap store observed by a later `mload(0x40)` must flag the FMP as
-    /// possibly unbounded so codegen skips the `FMP < heap_size` range proof.
+    /// possibly unbounded so codegen skips the free pointer range proof.
     #[test]
     fn overlap_store_observed_by_fmp_load_flags_unbounded() {
         let results =

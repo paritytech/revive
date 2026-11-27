@@ -124,6 +124,13 @@ const SMALL_FUNCTION_ALWAYSINLINE_THRESHOLD: usize = 8;
 /// Solidity convention: the free memory pointer is stored at this heap offset.
 const FREE_MEMORY_POINTER_SLOT: u64 = 0x40;
 
+/// Bit width the free memory pointer range proof narrows a loaded pointer to.
+///
+/// The width does not follow the heap size. An allocation that ends at the heap end leaves the
+/// pointer equal to the heap size, and an allocation reaching past it is stored before the first
+/// access to it traps, so a pointer at or above the heap size must be loaded unchanged.
+const FREE_MEMORY_POINTER_RANGE_BITS: u32 = 31;
+
 /// Length in bytes of an EVM ABI function selector.
 const ABI_SELECTOR_LENGTH: u64 = 4;
 
@@ -541,8 +548,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     /// Applies the free-memory-pointer range proof to a loaded value.
     ///
-    /// The post-MLoad range proof asserts `FMP < heap_size`. The codesize win
-    /// from dropping the byte-order gate on this proof relies on the assertion
+    /// The post-MLoad range proof asserts `FMP < 2^FREE_MEMORY_POINTER_RANGE_BITS`. The
+    /// codesize win from dropping the byte-order gate on this proof relies on the assertion
     /// holding when Solidity's allocator updates the FMP via sbrk-style
     /// `mstore(0x40, add(mload(0x40), bounded))` or a literal initial value.
     /// Hand-written Yul / inline asm that writes a non-bounded value to 0x40
@@ -554,14 +561,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         context: &PolkaVMContext<'ctx>,
         loaded: BasicValueEnum<'ctx>,
     ) -> Result<BasicValueEnum<'ctx>> {
-        let heap_size = context
-            .heap_size()
-            .get_zero_extended_constant()
-            .unwrap_or(131072);
-        let max_fmp = heap_size.saturating_sub(1).max(1);
-        let raw_bits = 64 - max_fmp.leading_zeros();
-        let range_bits = raw_bits.clamp(8, 31);
-        Self::apply_range_proof(context, loaded, range_bits, "fmp")
+        Self::apply_range_proof(context, loaded, FREE_MEMORY_POINTER_RANGE_BITS, "fmp")
     }
 
     /// Determines native memory mode for a specific memory access.

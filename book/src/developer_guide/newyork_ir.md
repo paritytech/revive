@@ -190,7 +190,6 @@ let v2: i8 := and(v0, v1: i8)
 - [`break`](#break)
 - [`continue`](#continue)
 - [`leave`](#leave)
-- [nested block](#nested-block)
 
 #### External interaction
 
@@ -3208,7 +3207,7 @@ setimmutable("MyContract.owner", v0)
 
 ## Structured control flow
 
-The IR's control flow is structured: `if`, `switch`, and `for` are statements with explicit nested regions, each carrying input values and yielding output values. The jump-like statements (`break`, `continue`, `leave`) are scoped to their nearest enclosing construct. Nested blocks create lexical scope without otherwise changing control flow.
+The IR's control flow is structured: `if`, `switch`, and `for` are statements with explicit nested regions, each carrying input values and yielding output values. The jump-like statements (`break`, `continue`, `leave`) are scoped to their nearest enclosing construct.
 
 ### `if`
 
@@ -3483,45 +3482,6 @@ leave                       // returns nothing (void function)
 | Result | Purity |
 |---|---|
 | None | Effectful (control flow) |
-
-#### Annotations
-
-None.
-
-### Nested block
-
-(`Statement::Block`)
-
-#### Description
-
-A lexical scope without conditional or iterative behavior. The body is a region; control falls through after the region's statements complete. Used to bound the visibility of inner bindings.
-
-#### Syntax
-
-```text
-{
-    …
-}
-```
-
-#### Example
-
-```text
-{
-    let v0 := add(v1, v2)
-    sstore(v3, v0)
-}                           // v0 is no longer in scope here
-```
-
-#### Operands
-
-None — the body is a region, not an operand.
-
-#### Result and purity
-
-| Result | Purity |
-|---|---|
-| None | Effectful (per the body's contents) |
 
 #### Annotations
 
